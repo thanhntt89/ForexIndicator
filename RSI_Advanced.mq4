@@ -369,37 +369,42 @@ int OnCalculate(const int rates_total,
          BufferBuySignal[i] = (double)buySignal;
          CreateSignalArrow(time[i], low[i], true, buySignal);
 
-         // Elder (1993) + Connors (1995): Confirmation Entry
-         // BUY entry = High of signal bar + small buffer
-         // This confirms momentum is in signal direction
-         // If price never reaches this level → signal was weak
-         double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
-         double confirmBuffer = atrNow * 0.1;  // 10% of ATR buffer
+         // Elder (1993) Confirmation Entry:
+         // Use open of next bar as base entry
+         // Add micro-confirmation: if open > close of signal bar → stronger
+         double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          
-         double entryPrice = 0;
-         if(i < rates_total - 1)
-         {
-            // Historical: use actual open of next bar
-            // (represents what trader would have gotten)
-            double idealEntry = high[i] + confirmBuffer;
-            double actualOpen = open[i + 1];
-            
-            // If next bar opened above signal high → strong confirmation
-            // If opened below → use open anyway (trader would market buy)
-            entryPrice = MathMax(actualOpen, idealEntry);
-            
-            // But cap at reasonable level (not more than 50% ATR above close)
-            double maxEntry = close[i] + atrNow * 0.5;
-            entryPrice = MathMin(entryPrice, maxEntry);
-         }
-         else
-         {
-            entryPrice = close[i];
-         }
+         // Connors (1995): Small buffer above signal bar close
+         // But CAPPED to prevent pushing entry too far
+         double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
+         double maxSlippage = atrNow * 0.15;  // Max 15% ATR above open
+         double entryPrice = MathMin(baseEntry + maxSlippage, close[i] + atrNow * 0.3);
+         entryPrice = MathMax(entryPrice, baseEntry);  // At least open price
 
          double sl, tp1, tp2, tp3, atrVal;
          CalculateSLTP(true, i, entryPrice, high, low, rates_total,
                        sl, tp1, tp2, tp3, atrVal);
+
+         // VALIDATE: Force minimum R:R = 1:1.0
+         // If swing SL too far → cap SL at ATR × SL_Ratio from entry
+         double slDist  = MathAbs(entryPrice - sl);
+         double tp1Dist = MathAbs(tp1 - entryPrice);
+         double maxSLDist = atrVal * InpSLRatio;
+         
+         if(slDist > maxSLDist * 1.5)
+         {
+            // SL too far from entry → cap at ATR-based SL
+            sl = entryPrice - maxSLDist;
+         }
+         
+         // Recalculate after cap
+         slDist = MathAbs(entryPrice - sl);
+         if(slDist > 0 && tp1Dist / slDist < 1.0)
+         {
+            // Still bad R:R → force SL = TP1 distance (R:R = 1:1)
+            sl = entryPrice - tp1Dist;
+         }
+
          StoreSignal(time[i], i, buySignal, true, entryPrice,
                      sl, tp1, tp2, tp3, atrVal);
       }
@@ -409,30 +414,35 @@ int OnCalculate(const int rates_total,
          BufferSellSignal[i] = (double)sellSignal;
          CreateSignalArrow(time[i], high[i], false, sellSignal);
 
+         double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
-         double confirmBuffer = atrNow * 0.1;
-         
-         double entryPrice = 0;
-         if(i < rates_total - 1)
-         {
-            double idealEntry = low[i] - confirmBuffer;
-            double actualOpen = open[i + 1];
-            entryPrice = MathMin(actualOpen, idealEntry);
-            double minEntry = close[i] - atrNow * 0.5;
-            entryPrice = MathMax(entryPrice, minEntry);
-         }
-         else
-         {
-            entryPrice = close[i];
-         }
+         double maxSlippage = atrNow * 0.15;
+         double entryPrice = MathMax(baseEntry - maxSlippage, close[i] - atrNow * 0.3);
+         entryPrice = MathMin(entryPrice, baseEntry);
 
          double sl, tp1, tp2, tp3, atrVal;
          CalculateSLTP(false, i, entryPrice, high, low, rates_total,
                        sl, tp1, tp2, tp3, atrVal);
+
+         double slDist  = MathAbs(sl - entryPrice);
+         double tp1Dist = MathAbs(entryPrice - tp1);
+         double maxSLDist = atrVal * InpSLRatio;
+         
+         if(slDist > maxSLDist * 1.5)
+         {
+            sl = entryPrice + maxSLDist;
+         }
+         
+         slDist = MathAbs(sl - entryPrice);
+         if(slDist > 0 && tp1Dist / slDist < 1.0)
+         {
+            sl = entryPrice + tp1Dist;
+         }
+
          StoreSignal(time[i], i, sellSignal, false, entryPrice,
                      sl, tp1, tp2, tp3, atrVal);
       }
-      
+
       //--- Alert on newly closed bar
       if(i == rates_total - 2 && (buySignal > 0 || sellSignal > 0))
       {

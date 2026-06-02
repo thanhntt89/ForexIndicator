@@ -16,6 +16,31 @@
 #define PREFIX_LINE   "RSIAdv_Line_"
 #define PREFIX_PROB   "RSIAdv_Prob_"
 
+//--- SL/TP Config
+input string inp_grp_sltp       = "========== SL/TP Config =========="; // ---
+enum ENUM_SLTP_METHOD
+{
+   SLTP_ATR        = 0,  // ATR-based (Wilder + Van Tharp)
+   SLTP_FIBONACCI  = 1,  // Fibonacci (Gaucan + Osler)
+   SLTP_HYBRID     = 2   // ATR + Fibonacci (Hybrid)
+};
+input ENUM_SLTP_METHOD InpSLTPMethod = SLTP_HYBRID;  // SL/TP Method
+input bool   InpShowSLTPLines   = true;
+input bool   InpShowEntryLine   = true;
+input int    InpATRPeriod       = 14;
+input double InpSLRatio         = 2.0;
+input double InpTPRatio         = 4.0;
+input double InpTP2Multiplier   = 1.5;
+input double InpTP3Multiplier   = 2.0;
+input int    InpSLSwingLookback = 20;
+input color  InpEntryLineColor  = clrWhite;
+input color  InpSLLineColor     = clrRed;
+input color  InpTP1LineColor    = clrLime;
+input color  InpTP2LineColor    = clrDodgerBlue;
+input color  InpTP3LineColor    = clrGold;
+input int    InpSLTPLineStyle   = STYLE_DASH;
+input int    InpSLTPLineWidth   = 1;
+
 //+------------------------------------------------------------------+
 //| INPUT GROUP: RSI Core Settings                                     |
 //+------------------------------------------------------------------+

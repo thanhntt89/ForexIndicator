@@ -416,11 +416,12 @@ TradeRecommendation GetTradeRecommendation(
    else{score-=15;reasons+="Poor win prob ("+DoubleToString(probTP1,1)+"%)|";}
 
    // Factor 2: R:R (±15)
-   double rr=(slDist>0)?tp1Dist/slDist:0;
-   if(rr>=2.0){score+=15;reasons+="Good R:R 1:"+DoubleToString(rr,1)+"|";}
-   else if(rr>=1.5){score+=8;reasons+="OK R:R 1:"+DoubleToString(rr,1)+"|";}
-   else if(rr>=1.0) score+=0;
-   else{score-=15;reasons+="Poor R:R 1:"+DoubleToString(rr,1)+"|";}
+   double rr = (slDist > 0) ? tp1Dist / slDist : 0;
+   if(rr >= 2.0)      { score += 15; reasons += "Good R:R 1:" + DoubleToString(rr,1) + "|"; }
+   else if(rr >= 1.5)  { score += 8;  reasons += "OK R:R 1:" + DoubleToString(rr,1) + "|"; }
+   else if(rr >= 1.0)  { score += 0; }
+   else if(rr > 0)     { score -= 15; reasons += "Poor R:R 1:" + DoubleToString(rr,1) + "|"; }
+   else                { score -= 25; reasons += "Invalid R:R|"; }
 
    // Factor 3: MTF (±20)
    bool aligned=(isBuy&&mtfAgreement>0)||(!isBuy&&mtfAgreement<0);

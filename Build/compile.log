@@ -489,3 +489,90 @@ D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : inform
 D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
 Result: 0 errors, 0 warnings, 68 msec elapsed
 
+
+==========================================
+[Build: RSI_Advanced_v9.00_20260602_145603.ex4] @ 06/02/2026 14:56:08
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 71 msec elapsed
+
+[06/02/2026 20:04:10] FAILED: RSI_Advanced_v9.00_20260602_200404.ex4
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(102,14) : error 125: 'inp_grp_sltp' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'inp_grp_sltp'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(103,14) : error 125: 'InpShowSLTPLines' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpShowSLTPLines'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(104,14) : error 125: 'InpShowEntryLine' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpShowEntryLine'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(105,14) : error 125: 'InpATRPeriod' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpATRPeriod'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(106,14) : error 125: 'InpSLRatio' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpSLRatio'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(107,14) : error 125: 'InpTPRatio' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpTPRatio'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(108,14) : error 125: 'InpTP2Multiplier' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpTP2Multiplier'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(109,14) : error 125: 'InpTP3Multiplier' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpTP3Multiplier'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(110,14) : error 125: 'InpSLSwingLookback' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpSLSwingLookback'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(111,14) : error 125: 'InpEntryLineColor' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpEntryLineColor'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(112,14) : error 125: 'InpSLLineColor' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpSLLineColor'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(113,14) : error 125: 'InpTP1LineColor' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpTP1LineColor'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(114,14) : error 125: 'InpTP2LineColor' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpTP2LineColor'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(115,14) : error 125: 'InpTP3LineColor' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpTP3LineColor'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(116,14) : error 125: 'InpSLTPLineStyle' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpSLTPLineStyle'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(117,14) : error 125: 'InpSLTPLineWidth' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpSLTPLineWidth'
+Result: 16 errors, 0 warnings
+
