@@ -1,0 +1,17 @@
+# Build artifacts
+Build/*.ex4
+Build/temp_compile.log
+
+# MetaEditor auto-generated
+*.ex4
+*.ex5
+
+# Logs (keep compile.log for history if needed, but ignore temp)
+Build/Debug/
+
+# VS Code
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
