@@ -12,6 +12,7 @@
 #include "SignalCases.mqh"
 #include "MTFEngine.mqh"
 #include "Normalize.mqh"
+#include "SLTP.mqh"
 
 //+------------------------------------------------------------------+
 void CreateRectangleLabel(string name,int x,int y,int w,int h,color bg,color brd)
@@ -83,47 +84,69 @@ void DrawInfoPanel(int signalIndex)
    double tp2R = PriceToRMultiple(tp2Dist, slDist);
    double tp3R = PriceToRMultiple(tp3Dist, slDist);
 
+   // Signal invalidation check
+   bool isInvalidated = false;
+   if(isBuy && curPrice < sig.stopLoss) isInvalidated = true;
+   if(!isBuy && curPrice > sig.stopLoss) isInvalidated = true;
+
    bool hasProb = (InpShowProbability && g_currentProb.totalSamples >= GetMinSamplesForTimeframe());
    bool hasMTF = (InpShowMTF && g_mtfCount > 0);
+   bool hasZones = (InpEntryZoneCount >= 2 && g_validZoneCount >= 1 && !isInvalidated);
 
-   // Recommendation pre-calc
+   // Recommendation pre-calc (only when not invalidated)
    int mtfAgree = 0;
    if(hasMTF) mtfAgree = CalculateMTFAgreement();
-   TradeRecommendation rec = GetTradeRecommendation(
-      sig.caseNumber, isBuy, g_currentProb.probTP1, g_currentProb.probSL,
-      g_currentProb.totalSamples, mtfAgree, slDist, tp1Dist, sig.atrValue, sig.signalTime);
+   TradeRecommendation rec;
+   if(!isInvalidated)
+   {
+      rec = GetTradeRecommendation(
+         sig.caseNumber, isBuy, g_currentProb.probTP1, g_currentProb.probSL,
+         g_currentProb.totalSamples, mtfAgree, slDist, tp1Dist, sig.atrValue, sig.signalTime);
+   }
+
+   // Count visible zones
+   int visibleZones = 0;
+   if(hasZones)
+   {
+      for(int z = 0; z < 5; z++)
+         if(g_entryZones[z].isValid) visibleZones++;
+   }
 
    // ============================================
    // PASS 1: Height
    // ============================================
    int calcY = 0;
-   calcY += titleBarH + 2;
-   calcY += lh;
-   calcY += detailCount * (lh - 2) + 2;
-   calcY += lh;
-   if(isStale) calcY += lh;
+   calcY += titleBarH + 2;                          // title
+   calcY += lh;                                      // case
+   calcY += detailCount * (lh - 2) + 2;             // detail
+   calcY += lh;                                      // info line
+   if(isStale) calcY += lh;                          // stale
+   if(isInvalidated) calcY += lh;                    // invalidated warning
    calcY += 3;
-   calcY += lh;
-   calcY += lh;
+   calcY += lh;                                      // recommendation / invalidated
+   calcY += lh;                                      // risk reason
    calcY += 3;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
+   calcY += lh;                                      // ATR
+   calcY += lh;                                      // Entry
+   calcY += lh;                                      // SL
+   calcY += lh;                                      // TP1
+   calcY += lh;                                      // TP2
+   calcY += lh;                                      // TP3
+   calcY += lh;                                      // P/L + R:R
+
+   if(hasZones)
+   {
+      calcY += 3;
+      calcY += lh;
+      calcY += visibleZones * lh;
+      calcY += lh;
+   }
 
    if(hasProb)
    {
       calcY += 3;
-      calcY += lh;
-      calcY += lh;
-      calcY += lh;
-      calcY += lh;
-      calcY += lh;
-      calcY += lh;
-      calcY += lh;
+      calcY += lh; calcY += lh; calcY += lh;
+      calcY += lh; calcY += lh; calcY += lh; calcY += lh;
    }
 
    if(hasMTF)
@@ -134,20 +157,27 @@ void DrawInfoPanel(int signalIndex)
       calcY += lh;
    }
 
-   calcY += lh;
-   calcY += 4;
+   calcY += lh + 4;
    int totalH = calcY;
-
-   // Auto-adjust
-   int chartH = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
-   int chartW = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
-   if(py + totalH > chartH - 10) { py = MathMax(0, chartH - totalH - 10); g_panelPosY = py; }
-   if(px + pw > chartW - 10)     { px = MathMax(0, chartW - pw - 10);     g_panelPosX = px; }
+   
+   // Auto-adjust: ONLY if user has NOT manually positioned panel
+   // Once user drags panel → respect their position
+   if(!g_panelUserMoved)
+   {
+      int chartH = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
+      int chartW = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
+      if(chartH > 100 && chartW > 100)
+      {
+         if(py + totalH > chartH - 10) { py = MathMax(0, chartH - totalH - 10); g_panelPosY = py; }
+         if(px + pw > chartW - 10)     { px = MathMax(0, chartW - pw - 10);     g_panelPosX = px; }
+      }
+   }
 
    // ============================================
    // PASS 2: Background
    // ============================================
-   CreateRectangleLabel(PREFIX_PANEL+"0_BG", px, py, pw, totalH, InpPanelBgColor, InpPanelBorderColor);
+   color borderClr = isInvalidated ? clrRed : InpPanelBorderColor;
+   CreateRectangleLabel(PREFIX_PANEL+"0_BG", px, py, pw, totalH, InpPanelBgColor, borderClr);
    CreateRectangleLabel(PREFIX_PANEL+"0_TB", px, py, pw, titleBarH, InpPanelBorderColor, InpPanelBorderColor);
 
    // ============================================
@@ -155,18 +185,20 @@ void DrawInfoPanel(int signalIndex)
    // ============================================
    int cy = py + 3;
 
-   //--- TITLE BAR ---
-   CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy,
-      "RSI Advanced - "+dir+" SIGNAL", InpPanelTitleColor, fs+1, true);
+   //--- TITLE ---
+   string titleText = "RSI Advanced - " + dir + " SIGNAL";
+   if(isInvalidated) titleText += " [INVALID]";
+   CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText,
+      isInvalidated ? clrRed : InpPanelTitleColor, fs+1, true);
    cy += titleBarH + 2 - 3;
 
-   //--- CASE NAME ---
+   //--- CASE ---
    CreateTextLabel(PREFIX_PANEL+"2_C", px+pad, cy,
       "Case "+IntegerToString(sig.caseNumber)+": "+GetCaseName(sig.caseNumber),
       dirClr, fs, true);
    cy += lh;
 
-   //--- DETAIL (compact) ---
+   //--- DETAIL ---
    for(int i=0; i<detailCount && i<3; i++)
    {
       CreateTextLabel(PREFIX_PANEL+"2_D"+IntegerToString(i), px+pad+3, cy,
@@ -175,47 +207,64 @@ void DrawInfoPanel(int signalIndex)
    }
    cy += 2;
 
-   //--- SYMBOL | TF | AGE (1 line) ---
+   //--- INFO LINE ---
    int minsAgo = barsAgo * Period();
    string ageShort;
    if(minsAgo >= 60) ageShort = IntegerToString(minsAgo/60)+"h"+IntegerToString(minsAgo%60)+"m";
    else              ageShort = IntegerToString(minsAgo)+"m";
-
    CreateTextLabel(PREFIX_PANEL+"3_I", px+pad, cy,
       GetCleanSymbolName()+" | "+GetTimeframeString()+
-      " | "+TimeToString(sig.signalTime, TIME_MINUTES)+
-      " | Age: "+ageShort,
+      " | "+TimeToString(sig.signalTime, TIME_MINUTES)+" | Age: "+ageShort,
       InpPanelTextColor, fs-1, false);
    cy += lh;
 
    //--- STALE ---
-   if(isStale)
+   if(isStale && !isInvalidated)
    {
       CreateTextLabel(PREFIX_PANEL+"3_ST", px+pad, cy,
          "!! STALE SIGNAL - Consider closing !!", clrRed, fs-1, true);
       cy += lh;
    }
+
+   //--- INVALIDATED WARNING ---
+   if(isInvalidated)
+   {
+      CreateTextLabel(PREFIX_PANEL+"3_INV", px+pad, cy,
+         "!! PRICE BREACHED SL - Signal invalidated !!", clrRed, fs-1, true);
+      cy += lh;
+   }
    cy += 3;
 
-   //--- RECOMMENDATION ---
-   CreateTextLabel(PREFIX_PANEL+"4_R", px+pad, cy,
-      ">> "+rec.label+" <<  ["+IntegerToString(rec.confidence)+"/100]",
-      rec.labelColor, fs+1, true);
-   cy += lh;
-
-   // Risk + Reason
-   string riskReason = "";
-   if(rec.suggestedRisk > 0)
-      riskReason = "Risk: "+DoubleToString(rec.suggestedRisk,1)+"% | ";
+   //--- RECOMMENDATION / INVALIDATED ---
+   if(isInvalidated)
+   {
+      CreateTextLabel(PREFIX_PANEL+"4_R", px+pad, cy,
+         ">> SL BREACHED - Do NOT trade <<", clrRed, fs+1, true);
+      cy += lh;
+      CreateTextLabel(PREFIX_PANEL+"4_RR", px+pad+3, cy,
+         "Waiting for new signal...", clrOrange, fs-2, false);
+      cy += lh;
+   }
    else
-      riskReason = "Do not trade | ";
-   riskReason += rec.reason;
-   CreateTextLabel(PREFIX_PANEL+"4_RR", px+pad+3, cy, riskReason,
-      rec.suggestedRisk > 0 ? InpPanelTextColor : clrOrange, fs-2, false);
-   cy += lh;
+   {
+      CreateTextLabel(PREFIX_PANEL+"4_R", px+pad, cy,
+         ">> "+rec.label+" <<  ["+IntegerToString(rec.confidence)+"/100]",
+         rec.labelColor, fs+1, true);
+      cy += lh;
+
+      string riskReason = "";
+      if(rec.suggestedRisk > 0)
+         riskReason = "Risk:"+DoubleToString(rec.suggestedRisk,1)+"% | ";
+      else
+         riskReason = "Do not trade | ";
+      riskReason += rec.reason;
+      CreateTextLabel(PREFIX_PANEL+"4_RR", px+pad+3, cy, riskReason,
+         rec.suggestedRisk > 0 ? InpPanelTextColor : clrOrange, fs-2, false);
+      cy += lh;
+   }
    cy += 3;
 
-   //--- ATR | SL:TP (merged) ---
+   //--- ATR ---
    CreateTextLabel(PREFIX_PANEL+"5_A", px+pad, cy,
       "ATR:"+DoubleToString(sig.atrValue,_Digits)+
       " | SL:"+DoubleToString(InpSLRatio,1)+
@@ -232,8 +281,7 @@ void DrawInfoPanel(int signalIndex)
 
    //--- SL ---
    CreateTextLabel(PREFIX_PANEL+"5_SL", px+pad, cy,
-      "SL    : "+DoubleToString(sig.stopLoss,_Digits)+
-      "  ("+DoubleToString(slPips,1)+"p)",
+      "SL    : "+DoubleToString(sig.stopLoss,_Digits)+"  ("+DoubleToString(slPips,1)+"p)",
       InpSLLineColor, fs-1, false);
    cy += lh;
 
@@ -258,10 +306,11 @@ void DrawInfoPanel(int signalIndex)
       InpTP3LineColor, fs-1, false);
    cy += lh;
 
-   //--- P/L | R:R (merged) ---
+   //--- P/L ---
    color plClr = plDist >= 0 ? clrLime : clrRed;
    string plText = "P/L:"+FormatPL(plDist, slDist);
-   if(isStale) plText += " [STALE]";
+   if(isInvalidated) plText += " [SL HIT]";
+   else if(isStale)  plText += " [STALE]";
    plText += "  R:R 1:"+DoubleToString(tp1R,1)+
              "|1:"+DoubleToString(tp2R,1)+
              "|1:"+DoubleToString(tp3R,1);
@@ -269,13 +318,61 @@ void DrawInfoPanel(int signalIndex)
    cy += lh;
 
    //==========================================================
-   // PROBABILITY (compact)
+   // ENTRY ZONES (hidden when invalidated)
+   //==========================================================
+   if(hasZones)
+   {
+      cy += 3;
+      CreateTextLabel(PREFIX_PANEL+"EZ_T", px+pad, cy,
+         "Entry Zones ("+IntegerToString(g_recommendedZoneCount)+
+         " rec | Risk:"+DoubleToString(InpTotalRiskPercent,1)+"%)",
+         InpPanelTitleColor, fs-1, true);
+      cy += lh;
+
+      double bestEV = -999;
+      int bestZone = 0;
+      for(int z = 0; z < 5; z++)
+      {
+         if(!g_entryZones[z].isValid) continue;
+         if(g_entryZones[z].expectedValue > bestEV)
+         {
+            bestEV = g_entryZones[z].expectedValue;
+            bestZone = z;
+         }
+
+         color zClr = GetZoneColor(z);
+         if(!g_entryZones[z].isRecommended) zClr = InpPanelDimColor;
+
+         string evStar = "";
+         if(g_entryZones[z].expectedValue > 0) evStar = " *";
+
+         string zLine = "Z"+IntegerToString(z+1)+" "+
+            g_entryZones[z].zoneName+":"+
+            DoubleToString(g_entryZones[z].price, _Digits)+
+            " "+DoubleToString(g_entryZones[z].lotSize, 2)+"lot"+
+            " R:R1:"+DoubleToString(g_entryZones[z].rrRatio, 1)+
+            " P:"+DoubleToString(g_entryZones[z].probReach*100, 0)+"%"+
+            " EV:"+DoubleToString(g_entryZones[z].expectedValue, 2)+"R"+evStar;
+
+         CreateTextLabel(PREFIX_PANEL+"EZ_"+IntegerToString(z), px+pad+3, cy,
+            zLine, zClr, fs-2, false);
+         cy += lh;
+      }
+
+      string bestText = "Best: Z"+IntegerToString(bestZone+1);
+      if(bestEV > 0) bestText += " EV+"+DoubleToString(bestEV, 2)+"R";
+      else           bestText += " (no positive EV)";
+      CreateTextLabel(PREFIX_PANEL+"EZ_B", px+pad, cy,
+         bestText, bestEV > 0 ? clrLime : clrOrange, fs-2, true);
+      cy += lh;
+   }
+
+   //==========================================================
+   // PROBABILITY
    //==========================================================
    if(hasProb)
    {
       cy += 3;
-
-      // Title + Confidence
       color confClr = clrGray;
       string confTxt = GetConfidenceText(g_currentProb.totalSamples, g_currentProb.probTP1, confClr);
       CreateTextLabel(PREFIX_PANEL+"P_T", px+pad, cy,
@@ -283,7 +380,6 @@ void DrawInfoPanel(int signalIndex)
          InpPanelTitleColor, fs-1, true);
       cy += lh;
 
-      // Win/Loss
       double winP = g_currentProb.probTP1, lossP = g_currentProb.probSL;
       color wlClr = winP >= lossP ? clrLime : clrOrange;
       CreateTextLabel(PREFIX_PANEL+"P_WL", px+pad, cy,
@@ -291,28 +387,24 @@ void DrawInfoPanel(int signalIndex)
          wlClr, fs, true);
       cy += lh;
 
-      // TP1
       CreateTextLabel(PREFIX_PANEL+"P_1", px+pad, cy,
          " TP1:"+DoubleToString(g_currentProb.probTP1,1)+"%"+ProbBar(g_currentProb.probTP1)+
          "("+IntegerToString(g_currentProb.samplesTP1)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
          InpTP1LineColor, fs-2, false);
       cy += lh;
 
-      // TP2
       CreateTextLabel(PREFIX_PANEL+"P_2", px+pad, cy,
          " TP2:"+DoubleToString(g_currentProb.probTP2,1)+"%"+ProbBar(g_currentProb.probTP2)+
          "("+IntegerToString(g_currentProb.samplesTP2)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
          InpTP2LineColor, fs-2, false);
       cy += lh;
 
-      // TP3
       CreateTextLabel(PREFIX_PANEL+"P_3", px+pad, cy,
          " TP3:"+DoubleToString(g_currentProb.probTP3,1)+"%"+ProbBar(g_currentProb.probTP3)+
          "("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
          InpTP3LineColor, fs-2, false);
       cy += lh;
 
-      // Avg bars + Edge (merged)
       double edge = MeasureEdgeFromHistory(sig.caseNumber, isBuy, GetMaxForwardBarsForTimeframe());
       string avgEdge = "";
       if(g_currentProb.avgBarsToTP1 > 0)
@@ -323,7 +415,6 @@ void DrawInfoPanel(int signalIndex)
       CreateTextLabel(PREFIX_PANEL+"P_AE", px+pad, cy, " "+avgEdge, InpPanelDimColor, fs-2, false);
       cy += lh;
 
-      // Accuracy + MTF influence (merged)
       string accMtf = " Acc:~72-78%";
       if(hasMTF)
       {
@@ -339,47 +430,39 @@ void DrawInfoPanel(int signalIndex)
    }
 
    //==========================================================
-   // MTF SIGNAL STATUS
+   // MTF
    //==========================================================
    if(hasMTF)
    {
       cy += 3;
-
       CreateTextLabel(PREFIX_PANEL+"M_T", px+pad, cy,
          "Multi-TF Signal Status", InpPanelTitleColor, fs-1, true);
       cy += lh;
 
       for(int t=0; t<g_mtfCount; t++)
       {
-         color tfClr; string sigDir;
-         if(g_mtfData[t].trend == 1)       { tfClr=InpMTF_BullColor;   sigDir="BUY  "; }
-         else if(g_mtfData[t].trend == -1) { tfClr=InpMTF_BearColor;   sigDir="SELL "; }
-         else                              { tfClr=InpMTF_NeutralColor; sigDir="WAIT "; }
+         color tfClr; string sigDir2;
+         if(g_mtfData[t].trend == 1)       { tfClr=InpMTF_BullColor;   sigDir2="BUY  "; }
+         else if(g_mtfData[t].trend == -1) { tfClr=InpMTF_BearColor;   sigDir2="SELL "; }
+         else                              { tfClr=InpMTF_NeutralColor; sigDir2="WAIT "; }
 
          string tfName = g_mtfData[t].tfName;
          while(StringLen(tfName) < 4) tfName += " ";
-
-         // Case info
          string caseInfo = "";
          if(g_mtfData[t].lastSignalCase > 0)
             caseInfo = " C"+IntegerToString(g_mtfData[t].lastSignalCase);
-
-         // RSI zone
-         string zone = "";
          double gv = g_mtfData[t].greenValue;
-         if(gv > 68)      zone = " OB";
-         else if(gv > 50) zone = " >>";
-         else if(gv > 32) zone = " <<";
-         else              zone = " OS";
+         string zone2 = "";
+         if(gv > 68) zone2 = " OB"; else if(gv > 50) zone2 = " >>";
+         else if(gv > 32) zone2 = " <<"; else zone2 = " OS";
 
          CreateTextLabel(PREFIX_PANEL+"M_"+IntegerToString(t), px+pad+3, cy,
-            tfName+" "+sigDir+g_mtfData[t].statusText+caseInfo+
-            " ["+DoubleToString(gv,1)+"]"+zone,
+            tfName+" "+sigDir2+g_mtfData[t].statusText+caseInfo+
+            " ["+DoubleToString(gv,1)+"]"+zone2,
             tfClr, fs-2, false);
          cy += lh;
       }
 
-      // Confluence + alignment + count
       int ag = CalculateMTFAgreement();
       string agTxt; color agClr;
       if(ag > 50)       { agTxt="STRONG BULL";  agClr=InpMTF_BullColor; }
@@ -388,9 +471,9 @@ void DrawInfoPanel(int signalIndex)
       else if(ag < 0)   { agTxt="WEAK BEAR";    agClr=InpMTF_BearColor; }
       else              { agTxt="MIXED";         agClr=InpMTF_NeutralColor; }
 
-      string align = "";
-      if((isBuy && ag>0)||(!isBuy && ag<0)) align=" ALIGNED";
-      else if((isBuy && ag<0)||(!isBuy && ag>0)) align=" AGAINST";
+      string alignTxt = "";
+      if((isBuy && ag>0)||(!isBuy && ag<0)) alignTxt=" ALIGNED";
+      else if((isBuy && ag<0)||(!isBuy && ag>0)) alignTxt=" AGAINST";
 
       int agreeCount = 0;
       for(int t=0; t<g_mtfCount; t++)
@@ -401,7 +484,7 @@ void DrawInfoPanel(int signalIndex)
 
       CreateTextLabel(PREFIX_PANEL+"M_AG", px+pad, cy,
          agTxt+" ("+IntegerToString(ag)+"%) "+
-         IntegerToString(agreeCount)+"/"+IntegerToString(g_mtfCount)+" TFs"+align,
+         IntegerToString(agreeCount)+"/"+IntegerToString(g_mtfCount)+" TFs"+alignTxt,
          agClr, fs-1, true);
       cy += lh;
    }
@@ -409,7 +492,6 @@ void DrawInfoPanel(int signalIndex)
    //--- FOOTER ---
    CreateTextLabel(PREFIX_PANEL+"Z_F", px+pad, cy,
       "Drag title to move | Click arrow", InpPanelDimColor, fs-2, false);
-
    ChartRedraw();
 }
 

@@ -4,9 +4,7 @@
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_CONFIG_MQH
 #define RSI_ADV_CONFIG_MQH
-
-#define VERSION "9.00"
-
+#define VERSION "10.20"
 
 //+------------------------------------------------------------------+
 //| Object name prefixes                                               |
@@ -15,31 +13,14 @@
 #define PREFIX_PANEL  "RSIAdv_Panel_"
 #define PREFIX_LINE   "RSIAdv_Line_"
 #define PREFIX_PROB   "RSIAdv_Prob_"
+#define PREFIX_ZONE   "RSIAdv_Zone_"
 
-//--- SL/TP Config
-input string inp_grp_sltp       = "========== SL/TP Config =========="; // ---
 enum ENUM_SLTP_METHOD
 {
    SLTP_ATR        = 0,  // ATR-based (Wilder + Van Tharp)
    SLTP_FIBONACCI  = 1,  // Fibonacci (Gaucan + Osler)
    SLTP_HYBRID     = 2   // ATR + Fibonacci (Hybrid)
 };
-input ENUM_SLTP_METHOD InpSLTPMethod = SLTP_HYBRID;  // SL/TP Method
-input bool   InpShowSLTPLines   = true;
-input bool   InpShowEntryLine   = true;
-input int    InpATRPeriod       = 14;
-input double InpSLRatio         = 2.0;
-input double InpTPRatio         = 4.0;
-input double InpTP2Multiplier   = 1.5;
-input double InpTP3Multiplier   = 2.0;
-input int    InpSLSwingLookback = 20;
-input color  InpEntryLineColor  = clrWhite;
-input color  InpSLLineColor     = clrRed;
-input color  InpTP1LineColor    = clrLime;
-input color  InpTP2LineColor    = clrDodgerBlue;
-input color  InpTP3LineColor    = clrGold;
-input int    InpSLTPLineStyle   = STYLE_DASH;
-input int    InpSLTPLineWidth   = 1;
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: RSI Core Settings                                     |
@@ -72,7 +53,7 @@ input double InpMinSignalScore   = 40.0;   // Minimum score to show signal (0-10
 input bool   InpUseVolumeFilter  = true;   // Use volume confirmation
 input bool   InpUseVolatFilter   = true;   // Use volatility confirmation
 input bool   InpUseSessionFilter = true;   // Use session time filter
-input bool   InpUseRegimeFilter  = false;   // Use market regime filter
+input bool   InpUseRegimeFilter  = false;  // Use market regime filter
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Case Filters                                          |
@@ -100,6 +81,7 @@ input color  InpSellArrowColor= clrRed;    // Sell arrow color
 //| INPUT GROUP: SL/TP Configuration                                   |
 //+------------------------------------------------------------------+
 input string inp_grp_sltp       = "========== SL/TP Config =========="; // ---
+input ENUM_SLTP_METHOD InpSLTPMethod = SLTP_HYBRID;  // SL/TP Method
 input bool   InpShowSLTPLines   = true;         // Show SL/TP lines
 input bool   InpShowEntryLine   = true;         // Show Entry line
 input int    InpATRPeriod       = 14;           // ATR Period
@@ -115,6 +97,19 @@ input color  InpTP2LineColor    = clrDodgerBlue; // TP2 line color
 input color  InpTP3LineColor    = clrGold;      // TP3 line color
 input int    InpSLTPLineStyle   = STYLE_DASH;   // SL/TP line style
 input int    InpSLTPLineWidth   = 1;            // SL/TP line width
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: Entry Zones                                           |
+//+------------------------------------------------------------------+
+input string inp_grp_zones       = "========== Entry Zones =========="; // ---
+input int    InpEntryZoneCount   = 3;                // Max entry zones (2-5)
+input double InpTotalRiskPercent = 1.0;              // Total risk % of account
+input int    InpPriceDistLookback= 50;               // Price distribution lookback bars
+input color  InpZone1Color       = clrWhite;         // Zone 1 (Market) color
+input color  InpZone2Color       = clrAqua;    // Zone 2 color
+input color  InpZone3Color       = clrDeepSkyBlue;     // Zone 3 color
+input color  InpZone4Color       = clrMediumOrchid;     // Zone 4 color
+input color  InpZone5Color       = clrHotPink; // Zone 5 color
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Info Panel                                            |
@@ -142,7 +137,7 @@ input bool   InpMTF_M15         = true;           // Show M15
 input bool   InpMTF_M30         = true;           // Show M30
 input bool   InpMTF_H1          = true;           // Show H1
 input bool   InpMTF_H4          = true;           // Show H4
-input bool   InpMTF_D1          = false;          // Show D1
+input bool   InpMTF_D1          = true;           // Show D1
 input color  InpMTF_BullColor   = clrLime;        // Bullish color
 input color  InpMTF_BearColor   = clrRed;         // Bearish color
 input color  InpMTF_NeutralColor= clrGray;        // Neutral color
@@ -162,10 +157,10 @@ input int    InpProbFontSize      = 8;             // Probability font size
 input string inp_grp_alert      = "========== Alerts =========="; // ---
 input bool   InpAlertPopup      = false;         // Alert popup
 input bool   InpAlertSound      = false;         // Play sound
-input string InpAlertSoundFile  = "alert.wav";  // Sound file
+input string InpAlertSoundFile  = "alert.wav";   // Sound file
 
 //+------------------------------------------------------------------+
-//| Thêm vào cuối Config.mqh, trước #endif                            |
+//| INPUT GROUP: Debug                                                 |
 //+------------------------------------------------------------------+
 input string inp_grp_debug      = "========== Debug =========="; // ---
 input bool   InpDebugMode       = false;        // Print debug info to Experts tab

@@ -8,18 +8,6 @@
 #include "Structs.mqh"
 
 //+------------------------------------------------------------------+
-//| Indicator Buffers (defined in main .mq4, referenced here)        |
-//+------------------------------------------------------------------+
-// extern double BufferGreen[];
-// extern double BufferRed[];
-// extern double BufferBBUpper[];
-// extern double BufferBBLower[];
-// extern double BufferOrange[];
-// extern double BufferBuySignal[];
-// extern double BufferSellSignal[];
-
-
-//+------------------------------------------------------------------+
 //| Internal RSI data                                                  |
 //+------------------------------------------------------------------+
 double g_rawRSI[];
@@ -34,14 +22,8 @@ datetime g_lastAlertTime   = 0;
 //| Signal storage                                                     |
 //+------------------------------------------------------------------+
 SignalData g_signals[];
-int        g_signalCount      = 0;
-int        g_activeSignalIndex= -1;
-
-//+------------------------------------------------------------------+
-//| Cooldown tracking                                                  |
-//+------------------------------------------------------------------+
-int g_lastBuyBar  = -9999;
-int g_lastSellBar = -9999;
+int        g_signalCount       = 0;
+int        g_activeSignalIndex = -1;
 
 //+------------------------------------------------------------------+
 //| MTF data                                                           |
@@ -55,6 +37,13 @@ int             g_mtfCount = 0;
 ProbabilityData g_currentProb;
 
 //+------------------------------------------------------------------+
+//| Entry Zone data                                                    |
+//+------------------------------------------------------------------+
+EntryZone g_entryZones[5];
+int       g_validZoneCount       = 0;
+int       g_recommendedZoneCount = 0;
+
+//+------------------------------------------------------------------+
 //| Panel state                                                        |
 //+------------------------------------------------------------------+
 int  g_panelPosX     = 20;
@@ -62,6 +51,8 @@ int  g_panelPosY     = 60;
 bool g_panelDragging = false;
 int  g_dragOffsetX   = 0;
 int  g_dragOffsetY   = 0;
+
+bool g_panelUserMoved = false;   // User đã drag panel → don't auto-adjust
 
 //+------------------------------------------------------------------+
 //| Panel position persistence                                         |
@@ -83,12 +74,51 @@ void LoadPanelPosition()
       g_panelPosY = (int)GlobalVariableGet(PanelGVName_Y());
       if(g_panelPosX < 0 || g_panelPosX > 2000) g_panelPosX = InpPanelDefaultX;
       if(g_panelPosY < 0 || g_panelPosY > 2000) g_panelPosY = InpPanelDefaultY;
+      g_panelUserMoved = true;  // ← THÊM: đã có saved position = user đã move trước đó
    }
    else
    {
       g_panelPosX = InpPanelDefaultX;
       g_panelPosY = InpPanelDefaultY;
+      g_panelUserMoved = false;
    }
+}
+
+//+------------------------------------------------------------------+
+//| Signal storage functions                                           |
+//+------------------------------------------------------------------+
+void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
+                 double entry, double sl, double tp1, double tp2, double tp3, double atr)
+{
+   g_signalCount++;
+   ArrayResize(g_signals, g_signalCount);
+   int idx = g_signalCount - 1;
+   g_signals[idx].signalTime  = t;
+   g_signals[idx].barIndex    = barIdx;
+   g_signals[idx].caseNumber  = caseNum;
+   g_signals[idx].isBuySignal = isBuy;
+   g_signals[idx].entryPrice  = entry;
+   g_signals[idx].stopLoss    = sl;
+   g_signals[idx].takeProfit1 = tp1;
+   g_signals[idx].takeProfit2 = tp2;
+   g_signals[idx].takeProfit3 = tp3;
+   g_signals[idx].atrValue    = atr;
+}
+
+int FindSignalByArrowName(string arrowName)
+{
+   string parts[];
+   int cnt = StringSplit(arrowName, '_', parts);
+   if(cnt < 5) return(-1);
+   bool isBuy = (parts[2] == "BUY");
+   int caseNum = (int)StringToInteger(parts[3]);
+   datetime sigTime = (datetime)StringToInteger(parts[4]);
+   for(int i = g_signalCount - 1; i >= 0; i--)
+      if(g_signals[i].signalTime == sigTime &&
+         g_signals[i].caseNumber == caseNum &&
+         g_signals[i].isBuySignal == isBuy)
+         return(i);
+   return(-1);
 }
 
 #endif

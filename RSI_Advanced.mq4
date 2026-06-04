@@ -1,5 +1,5 @@
 ﻿//+------------------------------------------------------------------+
-//|                                         RSI_AdvancedSignal.mq4     |
+//|                                         RSI_Advanced.mq4           |
 //|                         RSI Advanced - Main Indicator File          |
 //|                         Master Trading Wave Community               |
 //|                                                                    |
@@ -7,10 +7,11 @@
 //| + Adaptive angle threshold (Kaufman 1995, Ehlers 2001)            |
 //| + Realistic entry price (open[i+1] / ask / bid)                   |
 //| + Signal only on closed bars                                       |
+//| + Multi-Entry Zone System (Dalton 1993, Van Tharp 1998)           |
 //+------------------------------------------------------------------+
 #property copyright "Master Trading Wave"
 #property link      "https://mastertradingwave.com"
-#property version "9.00"
+#property version "10.20"
 #property strict
 
 #property indicator_separate_window
@@ -145,6 +146,7 @@ void OnDeinit(const int reason)
    DeleteObjectsByPrefix(PREFIX_PANEL);
    DeleteObjectsByPrefix(PREFIX_LINE);
    DeleteObjectsByPrefix(PREFIX_PROB);
+   DeleteObjectsByPrefix(PREFIX_ZONE);
    Comment("");
    ArrayFree(g_rawRSI);
    ArrayResize(g_signals, 0);
@@ -192,6 +194,7 @@ int OnCalculate(const int rates_total,
       DeleteObjectsByPrefix(PREFIX_LINE);
       DeleteObjectsByPrefix(PREFIX_PANEL);
       DeleteObjectsByPrefix(PREFIX_PROB);
+      DeleteObjectsByPrefix(PREFIX_ZONE);
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
@@ -245,34 +248,22 @@ int OnCalculate(const int rates_total,
 
    //=================================================================
    // SIGNAL DETECTION
-   //
-   // Logic: V9.00 proven (fixed swing depth/lookback)
-   // Enhancement: Adaptive angle threshold (Kaufman/Ehlers/Pardo)
-   // Enhancement: Signals only on closed bars
-   // Enhancement: Realistic entry price
    //=================================================================
    for(int i = sigStart; i < rates_total; i++)
    {
       BufferBuySignal[i]  = EMPTY_VALUE;
       BufferSellSignal[i] = EMPTY_VALUE;
 
-      // Is this bar still forming?
       bool isCurrentBar = (i == rates_total - 1);
 
-      // Validate buffers
       if(BufferGreen[i]   == EMPTY_VALUE || BufferGreen[i-1]  == EMPTY_VALUE) continue;
       if(BufferRed[i]     == EMPTY_VALUE || BufferRed[i-1]    == EMPTY_VALUE) continue;
       if(BufferOrange[i]  == EMPTY_VALUE) continue;
       if(BufferBBUpper[i] == EMPTY_VALUE || BufferBBLower[i]  == EMPTY_VALUE) continue;
 
-      // Crossover detection (V9.00)
       bool greenCrossUp   = (BufferGreen[i-1] <= BufferRed[i-1]) && (BufferGreen[i] > BufferRed[i]);
       bool greenCrossDown = (BufferGreen[i-1] >= BufferRed[i-1]) && (BufferGreen[i] < BufferRed[i]);
 
-      // Angle strength - ADAPTIVE threshold
-      // Kaufman (1995): "Fixed thresholds fail across different volatility regimes"
-      // Ehlers (2001): "Thresholds should be expressed in terms of noise level"
-      // stddev × 1.5 = "strong" relative to normal RSI movement
       double greenDelta = 0.0;
       if(i >= 2 && BufferGreen[i-2] != EMPTY_VALUE)
          greenDelta = BufferGreen[i] - BufferGreen[i-2];
@@ -281,72 +272,51 @@ int OnCalculate(const int rates_total,
       bool strongAngleUp    = (greenDelta >= adaptiveThresh);
       bool strongAngleDown  = (greenDelta <= -adaptiveThresh);
 
-      // Case detection (V9.00 logic, fixed depth/lookback)
       int buySignal  = 0;
       int sellSignal = 0;
 
-      // Case 1: OB/OS Bounce
       if(InpEnableCase1 && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase1_Buy(i))  buySignal  = 1;
          if(CheckCase1_Sell(i)) sellSignal = 1;
       }
-
-      // Case 2: Regular Divergence
       if(InpEnableCase2 && buySignal == 0 && sellSignal == 0)
       {
-         if(greenCrossUp && strongAngleUp && CheckCase2_Buy(i, low))
-            buySignal = 2;
-         if(greenCrossDown && strongAngleDown && CheckCase2_Sell(i, high))
-            sellSignal = 2;
+         if(greenCrossUp && strongAngleUp && CheckCase2_Buy(i, low)) buySignal = 2;
+         if(greenCrossDown && strongAngleDown && CheckCase2_Sell(i, high)) sellSignal = 2;
       }
-
-      // Case 3: Hidden Divergence
       if(InpEnableCase3 && buySignal == 0 && sellSignal == 0)
       {
-         if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low))
-            buySignal = 3;
-         if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high))
-            sellSignal = 3;
+         if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low)) buySignal = 3;
+         if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high)) sellSignal = 3;
       }
-
-      // Case 4: Strong Trend
       if(InpEnableCase4 && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase4_Buy(i))  buySignal  = 4;
          if(CheckCase4_Sell(i)) sellSignal = 4;
       }
-
-      // Case 5: Orange Near Level
       if(InpEnableCase5 && buySignal == 0 && sellSignal == 0)
       {
-         if(greenCrossUp && strongAngleUp && CheckCase5_Buy(i))
-            buySignal = 5;
-         if(greenCrossDown && strongAngleDown && CheckCase5_Sell(i))
-            sellSignal = 5;
+         if(greenCrossUp && strongAngleUp && CheckCase5_Buy(i)) buySignal = 5;
+         if(greenCrossDown && strongAngleDown && CheckCase5_Sell(i)) sellSignal = 5;
       }
-
-      // Case 6: Trend Continuation
       if(InpEnableCase6 && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase6_Buy(i))  buySignal  = 6;
          if(CheckCase6_Sell(i)) sellSignal = 6;
       }
-
-      // Case 7: Sideway Breakout
       if(InpEnableCase7 && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase7_Buy(i))  buySignal  = 7;
          if(CheckCase7_Sell(i)) sellSignal = 7;
       }
 
-      //--- Current bar: buffer only, no arrow/signal storage
+      //--- Current bar: buffer only
       if(isCurrentBar)
       {
          if(buySignal > 0) BufferBuySignal[i] = (double)buySignal;
          if(sellSignal > 0) BufferSellSignal[i] = (double)sellSignal;
 
-         // Tentative alert
          if((buySignal > 0 || sellSignal > 0) && time[i] != g_lastAlertTime)
          {
             g_lastAlertTime = time[i];
@@ -363,47 +333,32 @@ int OnCalculate(const int rates_total,
          continue;
       }
 
-      //--- Closed bars: create arrow + store signal + realistic entry
+      //--- Closed bars: create arrow + store signal
       if(buySignal > 0)
       {
          BufferBuySignal[i] = (double)buySignal;
          CreateSignalArrow(time[i], low[i], true, buySignal);
 
-         // Elder (1993) Confirmation Entry:
-         // Use open of next bar as base entry
-         // Add micro-confirmation: if open > close of signal bar → stronger
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
-         
-         // Connors (1995): Small buffer above signal bar close
-         // But CAPPED to prevent pushing entry too far
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
-         double maxSlippage = atrNow * 0.15;  // Max 15% ATR above open
+         double maxSlippage = atrNow * 0.15;
          double entryPrice = MathMin(baseEntry + maxSlippage, close[i] + atrNow * 0.3);
-         entryPrice = MathMax(entryPrice, baseEntry);  // At least open price
+         entryPrice = MathMax(entryPrice, baseEntry);
 
          double sl, tp1, tp2, tp3, atrVal;
          CalculateSLTP(true, i, entryPrice, high, low, rates_total,
                        sl, tp1, tp2, tp3, atrVal);
 
-         // VALIDATE: Force minimum R:R = 1:1.0
-         // If swing SL too far → cap SL at ATR × SL_Ratio from entry
          double slDist  = MathAbs(entryPrice - sl);
          double tp1Dist = MathAbs(tp1 - entryPrice);
          double maxSLDist = atrVal * InpSLRatio;
-         
+
          if(slDist > maxSLDist * 1.5)
-         {
-            // SL too far from entry → cap at ATR-based SL
             sl = entryPrice - maxSLDist;
-         }
-         
-         // Recalculate after cap
+
          slDist = MathAbs(entryPrice - sl);
          if(slDist > 0 && tp1Dist / slDist < 1.0)
-         {
-            // Still bad R:R → force SL = TP1 distance (R:R = 1:1)
             sl = entryPrice - tp1Dist;
-         }
 
          StoreSignal(time[i], i, buySignal, true, entryPrice,
                      sl, tp1, tp2, tp3, atrVal);
@@ -427,17 +382,13 @@ int OnCalculate(const int rates_total,
          double slDist  = MathAbs(sl - entryPrice);
          double tp1Dist = MathAbs(entryPrice - tp1);
          double maxSLDist = atrVal * InpSLRatio;
-         
+
          if(slDist > maxSLDist * 1.5)
-         {
             sl = entryPrice + maxSLDist;
-         }
-         
+
          slDist = MathAbs(sl - entryPrice);
          if(slDist > 0 && tp1Dist / slDist < 1.0)
-         {
             sl = entryPrice + tp1Dist;
-         }
 
          StoreSignal(time[i], i, sellSignal, false, entryPrice,
                      sl, tp1, tp2, tp3, atrVal);
@@ -468,16 +419,44 @@ int OnCalculate(const int rates_total,
    if(g_signalCount > 0)
    {
       g_activeSignalIndex = g_signalCount - 1;
+      SignalData activeSig = g_signals[g_activeSignalIndex];
+      double curPrice = iClose(NULL, 0, 0);
+
+      //--- Check if latest signal INVALIDATED
+      bool signalInvalidated = false;
+      if(activeSig.isBuySignal && curPrice < activeSig.stopLoss)
+         signalInvalidated = true;
+      if(!activeSig.isBuySignal && curPrice > activeSig.stopLoss)
+         signalInvalidated = true;
 
       if(InpShowMTF) RefreshMTFData();
       if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
 
+      //--- Always draw panel with signal info
       DrawInfoPanel(g_activeSignalIndex);
       DrawSLTPLines(g_activeSignalIndex);
 
       if(InpShowProbability) DrawProbabilityLabels();
+
+      //--- Entry zones + zone lines ONLY if signal still valid
+      if(!signalInvalidated)
+      {
+         CalculateEntryZones(
+            activeSig.isBuySignal, activeSig.barIndex,
+            activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
+            activeSig.atrValue, high, low, rates_total);
+         DrawZoneLines();
+      }
+      else
+      {
+         //--- Invalidated: clear zones only
+         DeleteObjectsByPrefix(PREFIX_ZONE);
+         g_validZoneCount = 0;
+         g_recommendedZoneCount = 0;
+      }
    }
 
    return(rates_total);
 }
+
 //+------------------------------------------------------------------+

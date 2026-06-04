@@ -76,12 +76,13 @@ void HandleChartEvent(const int id, const long &lparam,
                   DrawInfoPanel(g_activeSignalIndex);
                }
             }
-         }
+         }         
          else
          {
             g_panelDragging = false;
             ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
             SavePanelPosition();
+            g_panelUserMoved = true;  // ← THÊM DÒNG NÀY
             DrawInfoPanel(g_activeSignalIndex);
          }
       }

@@ -576,3 +576,873 @@ D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(117,14) : error 125:
 D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'InpSLTPLineWidth'
 Result: 16 errors, 0 warnings
 
+[06/02/2026 20:05:06] FAILED: RSI_Advanced_v9.00_20260602_200501.ex4
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh(86,14) : error 125: 'inp_grp_sltp' - variable already defined
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: info    see previous declaration of variable 'inp_grp_sltp'
+Result: 1 errors, 0 warnings
+
+
+==========================================
+[Build: RSI_Advanced_v9.00_20260602_200539.ex4] @ 06/02/2026 20:05:45
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 68 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v9.00_20260602_202311.ex4] @ 06/02/2026 20:23:17
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 65 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v9.00_20260603_231025.ex4] @ 06/03/2026 23:10:31
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 65 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v9.00_20260604_153123.ex4] @ 06/04/2026 15:31:29
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 234 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v9.00_20260604_160957.ex4] @ 06/04/2026 16:10:02
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 70 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v9.00_20260604_205503.ex4] @ 06/04/2026 20:55:09
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 407 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_210739.ex4] @ 06/04/2026 21:07:45
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 65 msec elapsed
+
+[06/04/2026 21:10:25] FAILED: RSI_Advanced_v10.20_20260604_211020.ex4
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh(98,6) : error 165: 'StoreSignal' - function already defined and has body
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: info    see previous declaration of function 'StoreSignal'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh(119,5) : error 165: 'FindSignalByArrowName' - function already defined and has body
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: info    see previous declaration of function 'FindSignalByArrowName'
+Result: 2 errors, 0 warnings
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_211414.ex4] @ 06/04/2026 21:14:19
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 64 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_211952.ex4] @ 06/04/2026 21:19:58
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 65 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_212309.ex4] @ 06/04/2026 21:23:14
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 71 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_212708.ex4] @ 06/04/2026 21:27:13
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 78 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_213149.ex4] @ 06/04/2026 21:31:55
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 68 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_213725.ex4] @ 06/04/2026 21:37:30
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 67 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_214022.ex4] @ 06/04/2026 21:40:27
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 73 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_214621.ex4] @ 06/04/2026 21:46:26
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 67 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_215831.ex4] @ 06/04/2026 21:58:36
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 71 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_221452.ex4] @ 06/04/2026 22:14:57
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 68 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_222833.ex4] @ 06/04/2026 22:28:39
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 66 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_222928.ex4] @ 06/04/2026 22:29:33
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 76 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_223027.ex4] @ 06/04/2026 22:30:32
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 66 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_223324.ex4] @ 06/04/2026 22:33:29
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 67 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_224032.ex4] @ 06/04/2026 22:40:38
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 70 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_224520.ex4] @ 06/04/2026 22:45:25
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 110 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_224812.ex4] @ 06/04/2026 22:48:17
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 65 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_225337.ex4] @ 06/04/2026 22:53:42
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 71 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_230708.ex4] @ 06/04/2026 23:07:13
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 75 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_232524.ex4] @ 06/04/2026 23:25:29
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 116 msec elapsed
+
+
+==========================================
+[Build: RSI_Advanced_v10.20_20260604_234512.ex4] @ 06/04/2026 23:45:17
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+Result: 0 errors, 0 warnings, 68 msec elapsed
+

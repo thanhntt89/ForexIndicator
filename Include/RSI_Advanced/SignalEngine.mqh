@@ -70,12 +70,6 @@ SignalScore CalculateSignalScore(int caseNum, bool isBuy, int barIndex,
 
    //--- Weighted Total
    // RSI is DOMINANT - if RSI signal is clear, other factors are secondary
-   // Old weights caused good RSI signals to be rejected by weak volume/session
-   //
-   // New philosophy:
-   //   RSI alone >= 70 → signal should ALWAYS pass (score >= 70 * 0.50 = 35 minimum)
-   //   Other factors can BOOST but should not KILL a valid RSI signal
-   
    score.totalScore = score.rsiScore       * 0.50   // RSI dominant
                     + score.volumeScore     * 0.08   // Low - unreliable tick vol
                     + score.volatilityScore * 0.12   // Medium - useful
@@ -92,42 +86,7 @@ SignalScore CalculateSignalScore(int caseNum, bool isBuy, int barIndex,
    return(score);
 }
 
-//+------------------------------------------------------------------+
-//| Store signal                                                       |
-//+------------------------------------------------------------------+
-void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
-                 double entry, double sl, double tp1, double tp2, double tp3, double atr)
-{
-   g_signalCount++;
-   ArrayResize(g_signals, g_signalCount);
-   int idx = g_signalCount - 1;
-   g_signals[idx].signalTime  = t;
-   g_signals[idx].barIndex    = barIdx;
-   g_signals[idx].caseNumber  = caseNum;
-   g_signals[idx].isBuySignal = isBuy;
-   g_signals[idx].entryPrice  = entry;
-   g_signals[idx].stopLoss    = sl;
-   g_signals[idx].takeProfit1 = tp1;
-   g_signals[idx].takeProfit2 = tp2;
-   g_signals[idx].takeProfit3 = tp3;
-   g_signals[idx].atrValue    = atr;
-}
-
-//+------------------------------------------------------------------+
-//| Find signal by arrow object name                                   |
-//+------------------------------------------------------------------+
-int FindSignalByArrowName(string arrowName)
-{
-   string parts[];
-   int cnt = StringSplit(arrowName, '_', parts);
-   if(cnt < 5) return(-1);
-   bool isBuy = (parts[2] == "BUY");
-   int caseNum = (int)StringToInteger(parts[3]);
-   datetime sigTime = (datetime)StringToInteger(parts[4]);
-   for(int i = g_signalCount - 1; i >= 0; i--)
-      if(g_signals[i].signalTime == sigTime && g_signals[i].caseNumber == caseNum && g_signals[i].isBuySignal == isBuy)
-         return(i);
-   return(-1);
-}
+// NOTE: StoreSignal() and FindSignalByArrowName() are in Globals.mqh
+// Do NOT duplicate here
 
 #endif
