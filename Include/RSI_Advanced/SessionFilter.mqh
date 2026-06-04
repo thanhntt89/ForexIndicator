@@ -6,6 +6,8 @@
 
 #include "Config.mqh"
 #include "Normalize.mqh"
+#include "IntermarketAnalysis.mqh"
+#include "WalkForward.mqh"
 
 double GetSessionQuality(int caseNum, datetime signalTime)
 {

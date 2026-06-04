@@ -74,4 +74,54 @@ struct EntryZone
    string zoneName;        // "Market", "PB-Zone2", etc
 };
 
+//+------------------------------------------------------------------+
+//| V11: Multi-Source + Walk-Forward structures                        |
+//+------------------------------------------------------------------+
+
+struct IntermarketData
+{
+   double dxyPrice;           // DXY or EURUSD price
+   double dxyTrend;           // SMA slope: positive=rising, negative=falling
+   double correlationScore;   // -1.0 to +1.0 alignment with signal
+   bool   isAvailable;        // DXY/EURUSD found on broker
+   string sourceSymbol;       // Which symbol used
+};
+
+struct SessionStats
+{
+   int    wins[4];            // Per session: Asian/London/Overlap/LateNY
+   int    losses[4];
+   double winRate[4];         // Calculated win rate per session
+   int    totalPerSession[4];
+};
+
+struct WalkForwardData
+{
+   double isWinRate;          // In-sample win rate
+   double oosWinRate;         // Out-of-sample win rate
+   double overfitRatio;       // IS/OOS ratio (< 1.2 = robust)
+   bool   isRobust;
+   int    isSamples;
+   int    oosSamples;
+};
+
+struct RollingPerformance
+{
+   double last10WR;
+   double last20WR;
+   double last50WR;
+   double allTimeWR;
+   int    totalTracked;
+   bool   isDecreasing;       // Performance declining warning
+};
+
+struct SpreadRegime
+{
+   double currentSpread;
+   double avgSpread;
+   double spreadRatio;
+   bool   isSpike;            // > 2x average
+   bool   isExtreme;          // > 3x average
+};
+
 #endif

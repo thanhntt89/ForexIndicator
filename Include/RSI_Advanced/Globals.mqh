@@ -121,4 +121,32 @@ int FindSignalByArrowName(string arrowName)
    return(-1);
 }
 
+
+//+------------------------------------------------------------------+
+//| V11: Multi-Source + Walk-Forward data                               |
+//+------------------------------------------------------------------+
+IntermarketData   g_intermarket;
+SessionStats      g_sessionStats;
+WalkForwardData   g_walkForward;
+RollingPerformance g_rollingPerf;
+SpreadRegime      g_spreadRegime;
+
+//--- Signal outcome tracking for rolling performance
+struct SignalOutcome
+{
+   datetime signalTime;
+   int      caseNumber;
+   bool     isBuy;
+   int      sessionBlock;   // 0=Asian, 1=London, 2=Overlap, 3=LateNY
+   double   entryPrice;
+   double   stopLoss;
+   double   takeProfit1;
+   int      outcome;        // 1=TP1 hit, -1=SL hit, 0=pending
+   datetime outcomeTime;
+};
+
+SignalOutcome g_outcomes[];
+int           g_outcomeCount = 0;
+
+
 #endif

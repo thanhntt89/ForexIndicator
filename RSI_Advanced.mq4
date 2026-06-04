@@ -8,6 +8,7 @@
 //| + Realistic entry price (open[i+1] / ask / bid)                   |
 //| + Signal only on closed bars                                       |
 //| + Multi-Entry Zone System (Dalton 1993, Van Tharp 1998)           |
+//| + V11: Intermarket + Session + WalkForward + Spread                |
 //+------------------------------------------------------------------+
 #property copyright "Master Trading Wave"
 #property link      "https://mastertradingwave.com"
@@ -84,6 +85,9 @@ double BufferSellSignal[];
 #include <RSI_Advanced/SignalCases.mqh>
 #include <RSI_Advanced/SLTP.mqh>
 #include <RSI_Advanced/MTFEngine.mqh>
+#include <RSI_Advanced/IntermarketAnalysis.mqh>
+#include <RSI_Advanced/SessionStatistics.mqh>
+#include <RSI_Advanced/WalkForward.mqh>
 #include <RSI_Advanced/ProbabilityEngine.mqh>
 #include <RSI_Advanced/ArrowManager.mqh>
 #include <RSI_Advanced/LineDrawing.mqh>
@@ -130,7 +134,12 @@ int OnInit()
    g_lastAlertTime     = 0;
    g_signalCount       = 0;
    g_activeSignalIndex = -1;
+   g_outcomeCount      = 0;
    ArrayResize(g_signals, 0);
+   ArrayResize(g_outcomes, 0);
+
+   // V11: Initialize session stats
+   InitSessionStats();
 
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
@@ -150,7 +159,9 @@ void OnDeinit(const int reason)
    Comment("");
    ArrayFree(g_rawRSI);
    ArrayResize(g_signals, 0);
+   ArrayResize(g_outcomes, 0);
    g_signalCount    = 0;
+   g_outcomeCount   = 0;
    g_prevRatesTotal = 0;
    ChartRedraw();
 }
@@ -316,7 +327,6 @@ int OnCalculate(const int rates_total,
       {
          if(buySignal > 0) BufferBuySignal[i] = (double)buySignal;
          if(sellSignal > 0) BufferSellSignal[i] = (double)sellSignal;
-
          if((buySignal > 0 || sellSignal > 0) && time[i] != g_lastAlertTime)
          {
             g_lastAlertTime = time[i];
@@ -352,16 +362,14 @@ int OnCalculate(const int rates_total,
          double slDist  = MathAbs(entryPrice - sl);
          double tp1Dist = MathAbs(tp1 - entryPrice);
          double maxSLDist = atrVal * InpSLRatio;
-
-         if(slDist > maxSLDist * 1.5)
-            sl = entryPrice - maxSLDist;
-
+         if(slDist > maxSLDist * 1.5) sl = entryPrice - maxSLDist;
          slDist = MathAbs(entryPrice - sl);
-         if(slDist > 0 && tp1Dist / slDist < 1.0)
-            sl = entryPrice - tp1Dist;
+         if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
 
-         StoreSignal(time[i], i, buySignal, true, entryPrice,
-                     sl, tp1, tp2, tp3, atrVal);
+         StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal);
+
+         // V11: Track for session statistics + rolling performance
+         TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
       }
 
       if(sellSignal > 0)
@@ -382,16 +390,14 @@ int OnCalculate(const int rates_total,
          double slDist  = MathAbs(sl - entryPrice);
          double tp1Dist = MathAbs(entryPrice - tp1);
          double maxSLDist = atrVal * InpSLRatio;
-
-         if(slDist > maxSLDist * 1.5)
-            sl = entryPrice + maxSLDist;
-
+         if(slDist > maxSLDist * 1.5) sl = entryPrice + maxSLDist;
          slDist = MathAbs(sl - entryPrice);
-         if(slDist > 0 && tp1Dist / slDist < 1.0)
-            sl = entryPrice + tp1Dist;
+         if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
 
-         StoreSignal(time[i], i, sellSignal, false, entryPrice,
-                     sl, tp1, tp2, tp3, atrVal);
+         StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal);
+
+         // V11: Track for session statistics + rolling performance
+         TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
       }
 
       //--- Alert on newly closed bar
@@ -414,6 +420,16 @@ int OnCalculate(const int rates_total,
    }
 
    //=================================================================
+   // V11: Update multi-source data
+   //=================================================================
+   RefreshIntermarketData();
+   CheckPendingOutcomes();
+   UpdateSessionStats();
+   UpdateSpreadRegime();
+   CalculateRollingPerformance();
+   CalculateWalkForwardMetrics();
+
+   //=================================================================
    // UPDATE DISPLAY
    //=================================================================
    if(g_signalCount > 0)
@@ -429,34 +445,39 @@ int OnCalculate(const int rates_total,
       if(!activeSig.isBuySignal && curPrice > activeSig.stopLoss)
          signalInvalidated = true;
 
+      if(signalInvalidated)
+      {
+         DeleteObjectsByPrefix(PREFIX_LINE);
+         DeleteObjectsByPrefix(PREFIX_PROB);
+         DeleteObjectsByPrefix(PREFIX_ZONE);
+         g_validZoneCount = 0;
+         g_recommendedZoneCount = 0;
+      }
+
       if(InpShowMTF) RefreshMTFData();
       if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
 
-      //--- Always draw panel with signal info
+      // V11: Update intermarket score for current signal
+      if(g_intermarket.isAvailable)
+         GetIntermarketScore(activeSig.isBuySignal);
+
+      // Always draw panel
       DrawInfoPanel(g_activeSignalIndex);
-      DrawSLTPLines(g_activeSignalIndex);
 
-      if(InpShowProbability) DrawProbabilityLabels();
-
-      //--- Entry zones + zone lines ONLY if signal still valid
       if(!signalInvalidated)
       {
+         DrawSLTPLines(g_activeSignalIndex);
+
          CalculateEntryZones(
             activeSig.isBuySignal, activeSig.barIndex,
             activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
             activeSig.atrValue, high, low, rates_total);
          DrawZoneLines();
-      }
-      else
-      {
-         //--- Invalidated: clear zones only
-         DeleteObjectsByPrefix(PREFIX_ZONE);
-         g_validZoneCount = 0;
-         g_recommendedZoneCount = 0;
+
+         if(InpShowProbability) DrawProbabilityLabels();
       }
    }
 
    return(rates_total);
 }
-
 //+------------------------------------------------------------------+

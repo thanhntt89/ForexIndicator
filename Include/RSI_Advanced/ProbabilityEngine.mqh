@@ -18,6 +18,8 @@
 #include "MathUtils.mqh"
 #include "MTFEngine.mqh"
 #include "Normalize.mqh"
+#include "IntermarketAnalysis.mqh"
+#include "WalkForward.mqh"
 
 //+------------------------------------------------------------------+
 //| Simulate one signal forward (live-accurate version)                |
@@ -316,10 +318,17 @@ void CalculateProbability(int currentSignalIndex)
    double measuredEdge = MeasureEdgeFromHistory(
       curSig.caseNumber, curSig.isBuySignal, maxFwd);
 
+  
    //=================================================================
-   // STEP 3: MTF-adjusted edge
+   // STEP 3: MTF + Intermarket adjusted edge
+   //
+   // MTF: measured alignment ratio × 0.03 (max ±3%)
+   // Intermarket: DXY/EURUSD correlation × 0.02 (max ±2%)
+   // Combined max: ±5%
    //=================================================================
-   double mtfEdgeAdjustment = 0;
+   double edgeAdjustment = 0;
+
+   // MTF adjustment
    if(InpShowMTF && g_mtfCount > 0)
    {
       int agreeCount = 0;
@@ -329,9 +338,17 @@ void CalculateProbability(int currentSignalIndex)
          if(!curSig.isBuySignal && g_mtfData[t].trend == -1) agreeCount++;
       }
       double alignRatio = ((double)agreeCount / (double)g_mtfCount) * 2.0 - 1.0;
-      mtfEdgeAdjustment = alignRatio * 0.03;
+      edgeAdjustment += alignRatio * 0.03;
    }
-   double mtfAdjustedEdge = MathMax(0.40, MathMin(0.70, measuredEdge + mtfEdgeAdjustment));
+
+   // Intermarket adjustment (V11)
+   if(g_intermarket.isAvailable)
+   {
+      double interAdj = GetIntermarketEdgeAdjustment(curSig.isBuySignal);
+      edgeAdjustment += interAdj;
+   }
+
+   double adjustedEdge = MathMax(0.40, MathMin(0.70, measuredEdge + edgeAdjustment));
 
    //=================================================================
    // STEP 4: Theoretical probability using MTF-adjusted edge
@@ -341,9 +358,9 @@ void CalculateProbability(int currentSignalIndex)
    double tp2Dist = MathAbs(curSig.takeProfit2 - curSig.entryPrice);
    double tp3Dist = MathAbs(curSig.takeProfit3 - curSig.entryPrice);
 
-   double theoTP1 = CalculateRealMarketProbTP(mtfAdjustedEdge, slDist, tp1Dist, curSig.atrValue) * 100.0;
-   double theoTP2 = CalculateRealMarketProbTP(mtfAdjustedEdge, slDist, tp2Dist, curSig.atrValue) * 100.0;
-   double theoTP3 = CalculateRealMarketProbTP(mtfAdjustedEdge, slDist, tp3Dist, curSig.atrValue) * 100.0;
+   double theoTP1 = CalculateRealMarketProbTP(adjustedEdge, slDist, tp1Dist, curSig.atrValue) * 100.0;
+   double theoTP2 = CalculateRealMarketProbTP(adjustedEdge, slDist, tp2Dist, curSig.atrValue) * 100.0;
+   double theoTP3 = CalculateRealMarketProbTP(adjustedEdge, slDist, tp3Dist, curSig.atrValue) * 100.0;
 
    //=================================================================
    // STEP 5: Bayesian combine historical + theoretical

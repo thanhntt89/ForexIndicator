@@ -11,6 +11,8 @@
 
 #include "Config.mqh"
 #include "Normalize.mqh"
+#include "IntermarketAnalysis.mqh"
+#include "WalkForward.mqh"
 
 double GetATRValue(int barShift)
 { return(iATR(NULL, 0, InpATRPeriod, barShift)); }

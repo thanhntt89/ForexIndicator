@@ -160,6 +160,28 @@ input bool   InpAlertSound      = false;         // Play sound
 input string InpAlertSoundFile  = "alert.wav";   // Sound file
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Intermarket Analysis                                  |
+//+------------------------------------------------------------------+
+input string inp_grp_inter       = "========== Intermarket =========="; // ---
+input bool   InpUseIntermarket   = true;          // Use intermarket correlation (DXY/EURUSD)
+input int    InpIntermarketPeriod= 20;            // Intermarket SMA period for trend
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: Walk-Forward Validation                                |
+//+------------------------------------------------------------------+
+input string inp_grp_wf          = "========== Walk-Forward =========="; // ---
+input bool   InpUseWalkForward   = true;          // Enable IS/OOS validation
+input double InpOOSPercent       = 20.0;          // Out-of-sample % (10-30)
+input bool   InpShowRollingPerf  = true;          // Show rolling performance
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: Spread Regime                                         |
+//+------------------------------------------------------------------+
+input string inp_grp_spread      = "========== Spread Regime =========="; // ---
+input bool   InpUseSpreadRegime  = true;          // Monitor spread anomalies
+input double InpSpreadSpikeMulti = 2.0;           // Spread spike threshold (x average)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Debug                                                 |
 //+------------------------------------------------------------------+
 input string inp_grp_debug      = "========== Debug =========="; // ---
