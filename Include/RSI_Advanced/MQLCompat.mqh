@@ -204,10 +204,10 @@ double iATR(string symbol, int timeframe, int period, int shift)
    double val[];
    if(CopyBuffer(handle, 0, shift, 1, val) > 0) return val[0];
    
-   if(BarsCalculated(handle) <= 0)
-      g_prevRatesTotal = 0; // Only force recalculation if data is truly not ready yet
+   int totalBars = iBars(symbol, timeframe);
+   if(shift < totalBars - period - 2)
+      g_prevRatesTotal = 0; // Data should exist, still calculating asynchronously
       
-   LogCompatError("iATR CopyBuffer failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
    return EMPTY_VALUE;
 }
 
@@ -227,10 +227,10 @@ double iRSI(string symbol, int timeframe, int period, int applied_price, int shi
    double val[];
    if(CopyBuffer(handle, 0, shift, 1, val) > 0) return val[0];
    
-   if(BarsCalculated(handle) <= 0)
-      g_prevRatesTotal = 0; // Only force recalculation if data is truly not ready yet
+   int totalBars = iBars(symbol, timeframe);
+   if(shift < totalBars - period - 2)
+      g_prevRatesTotal = 0; // Data should exist, still calculating asynchronously
       
-   LogCompatError("iRSI CopyBuffer failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
    return EMPTY_VALUE;
 }
 
