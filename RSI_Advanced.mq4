@@ -138,9 +138,7 @@ int OnInit()
    ArrayResize(g_signals, 0);
    ArrayResize(g_outcomes, 0);
 
-   // V11: Initialize session stats
    InitSessionStats();
-
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
 
@@ -367,8 +365,6 @@ int OnCalculate(const int rates_total,
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
 
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal);
-
-         // V11: Track for session statistics + rolling performance
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
       }
 
@@ -395,8 +391,6 @@ int OnCalculate(const int rates_total,
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
 
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal);
-
-         // V11: Track for session statistics + rolling performance
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
       }
 
@@ -422,12 +416,33 @@ int OnCalculate(const int rates_total,
    //=================================================================
    // V11: Update multi-source data
    //=================================================================
+   static datetime s_lastBarTime = 0;
+   datetime currentBarTime = iTime(NULL, 0, 0);
+   bool isNewBar = (currentBarTime != s_lastBarTime);
+
+   // Lightweight: every tick
    RefreshIntermarketData();
    CheckPendingOutcomes();
-   UpdateSessionStats();
    UpdateSpreadRegime();
-   CalculateRollingPerformance();
-   CalculateWalkForwardMetrics();
+
+   // Heavy: only per new bar
+   if(isNewBar)
+   {
+      s_lastBarTime = currentBarTime;
+      UpdateSessionStats();
+      CalculateRollingPerformance();
+      CalculateWalkForwardMetrics();
+
+      // Memory management: cap outcomes at 500
+      if(g_outcomeCount > 500)
+      {
+         int removeCount = g_outcomeCount - 500;
+         for(int i = 0; i < 500; i++)
+            g_outcomes[i] = g_outcomes[i + removeCount];
+         g_outcomeCount = 500;
+         ArrayResize(g_outcomes, 500);
+      }
+   }
 
    //=================================================================
    // UPDATE DISPLAY
@@ -438,11 +453,10 @@ int OnCalculate(const int rates_total,
       SignalData activeSig = g_signals[g_activeSignalIndex];
       double curPrice = iClose(NULL, 0, 0);
 
-      //--- Check if latest signal INVALIDATED
       bool signalInvalidated = false;
-      if(activeSig.isBuySignal && curPrice < activeSig.stopLoss)
+      if(activeSig.isBuySignal && curPrice <= activeSig.stopLoss)
          signalInvalidated = true;
-      if(!activeSig.isBuySignal && curPrice > activeSig.stopLoss)
+      if(!activeSig.isBuySignal && curPrice >= activeSig.stopLoss)
          signalInvalidated = true;
 
       if(signalInvalidated)
@@ -457,17 +471,17 @@ int OnCalculate(const int rates_total,
       if(InpShowMTF) RefreshMTFData();
       if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
 
-      // V11: Update intermarket score for current signal
       if(g_intermarket.isAvailable)
          GetIntermarketScore(activeSig.isBuySignal);
 
-      // Always draw panel
       DrawInfoPanel(g_activeSignalIndex);
 
       if(!signalInvalidated)
       {
          DrawSLTPLines(g_activeSignalIndex);
 
+         // Calculate and draw zones every tick (no cache)
+         // Lightweight: only 5 zones max, no performance issue
          CalculateEntryZones(
             activeSig.isBuySignal, activeSig.barIndex,
             activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,

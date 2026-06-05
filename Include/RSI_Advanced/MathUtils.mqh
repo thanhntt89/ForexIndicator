@@ -172,4 +172,25 @@ datetime GetTimeFromBarPlusPixels(int pixelsRight)
    return(barTime + Period() * 60 * 5);
 }
 
+//+------------------------------------------------------------------+
+//| Max scan bars for TP measurement by timeframe                      |
+//| Uses ALL available bars for maximum statistical reliability        |
+//+------------------------------------------------------------------+
+int GetTPMeasurementBars()
+{
+   int tf = Period();
+   int available = Bars - 100;
+   int target = 0;
+
+   if(tf <= PERIOD_M1)       target = 3000;
+   else if(tf <= PERIOD_M5)  target = 4000;
+   else if(tf <= PERIOD_M15) target = 5000;
+   else if(tf <= PERIOD_M30) target = 5000;
+   else if(tf <= PERIOD_H1)  target = 5000;
+   else if(tf <= PERIOD_H4)  target = 3000;
+   else                      target = 2000;
+
+   return(MathMin(target, MathMax(available, 500)));
+}
+
 #endif

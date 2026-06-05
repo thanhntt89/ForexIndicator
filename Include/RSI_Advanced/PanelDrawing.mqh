@@ -88,8 +88,8 @@ void DrawInfoPanel(int signalIndex)
    double tp3R = PriceToRMultiple(tp3Dist, slDist);
 
    bool isInvalidated = false;
-   if(isBuy && curPrice < sig.stopLoss) isInvalidated = true;
-   if(!isBuy && curPrice > sig.stopLoss) isInvalidated = true;
+   if(isBuy && curPrice <= sig.stopLoss) isInvalidated = true;
+   if(!isBuy && curPrice >= sig.stopLoss) isInvalidated = true;
 
    bool hasProb = (InpShowProbability && g_currentProb.totalSamples >= GetMinSamplesForTimeframe());
    bool hasMTF = (InpShowMTF && g_mtfCount > 0);
@@ -112,6 +112,12 @@ void DrawInfoPanel(int signalIndex)
          if(g_entryZones[z].isValid) visibleZones++;
    }
 
+   // V11: Check which advanced metrics have data
+   bool hasV11Data = (g_intermarket.isAvailable ||
+                      g_outcomeCount > 0 ||
+                      g_walkForward.isSamples > 0 ||
+                      InpUseSpreadRegime);
+
    // ============================================
    // PASS 1: Height
    // ============================================
@@ -126,11 +132,6 @@ void DrawInfoPanel(int signalIndex)
    calcY += lh;
    calcY += lh;
    calcY += 3;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
-   calcY += lh;
    calcY += lh;
    calcY += lh;
 
@@ -157,14 +158,17 @@ void DrawInfoPanel(int signalIndex)
       calcY += lh;
    }
 
-   // V11 metrics
-   calcY += 3;
-   calcY += lh;    // title
-   calcY += lh;    // intermarket
-   calcY += lh;    // session
-   calcY += lh;    // walk-forward
-   calcY += lh;    // spread + regime
-   calcY += lh;    // rolling perf
+   // V11 metrics - only count sections with data
+   if(hasV11Data)
+   {
+      calcY += 3;
+      calcY += lh;    // title
+      if(g_intermarket.isAvailable) calcY += lh;
+      if(g_outcomeCount > 0) calcY += lh;
+      if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0) calcY += lh;
+      if(InpUseSpreadRegime) calcY += lh;
+      if(g_rollingPerf.totalTracked > 0) calcY += lh;
+   }
 
    calcY += lh + 4;
    int totalH = calcY;
@@ -268,7 +272,7 @@ void DrawInfoPanel(int signalIndex)
    }
    cy += 3;
 
-   //--- ATR ---
+   //--- ATR + SL:TP ---
    CreateTextLabel(PREFIX_PANEL+"5_A", px+pad, cy,
       "ATR:"+DoubleToString(sig.atrValue,_Digits)+
       " | SL:"+DoubleToString(InpSLRatio,1)+
@@ -278,39 +282,7 @@ void DrawInfoPanel(int signalIndex)
       InpPanelDimColor, fs-2, false);
    cy += lh;
 
-   //--- ENTRY ---
-   CreateTextLabel(PREFIX_PANEL+"5_E", px+pad, cy,
-      "Entry : "+DoubleToString(sig.entryPrice,_Digits), clrWhite, fs, true);
-   cy += lh;
-
-   //--- SL ---
-   CreateTextLabel(PREFIX_PANEL+"5_SL", px+pad, cy,
-      "SL    : "+DoubleToString(sig.stopLoss,_Digits)+"  ("+DoubleToString(slPips,1)+"p)",
-      InpSLLineColor, fs-1, false);
-   cy += lh;
-
-   //--- TP1 ---
-   CreateTextLabel(PREFIX_PANEL+"5_T1", px+pad, cy,
-      "TP1   : "+DoubleToString(sig.takeProfit1,_Digits)+
-      "  ("+DoubleToString(PriceToNormalizedPips(tp1Dist),1)+"p|"+DoubleToString(tp1R,1)+"R)",
-      InpTP1LineColor, fs-1, false);
-   cy += lh;
-
-   //--- TP2 ---
-   CreateTextLabel(PREFIX_PANEL+"5_T2", px+pad, cy,
-      "TP2   : "+DoubleToString(sig.takeProfit2,_Digits)+
-      "  ("+DoubleToString(PriceToNormalizedPips(tp2Dist),1)+"p|"+DoubleToString(tp2R,1)+"R)",
-      InpTP2LineColor, fs-1, false);
-   cy += lh;
-
-   //--- TP3 ---
-   CreateTextLabel(PREFIX_PANEL+"5_T3", px+pad, cy,
-      "TP3   : "+DoubleToString(sig.takeProfit3,_Digits)+
-      "  ("+DoubleToString(PriceToNormalizedPips(tp3Dist),1)+"p|"+DoubleToString(tp3R,1)+"R)",
-      InpTP3LineColor, fs-1, false);
-   cy += lh;
-
-   //--- P/L ---
+   //--- P/L + R:R ---
    color plClr = plDist >= 0 ? clrLime : clrRed;
    string plText = "P/L:"+FormatPL(plDist, slDist);
    if(isInvalidated) plText += " [SL HIT]";
@@ -476,57 +448,58 @@ void DrawInfoPanel(int signalIndex)
    }
 
    //==========================================================
-   // V11: ADVANCED METRICS
+   // V11: ADVANCED METRICS (auto-hide empty sections)
    //==========================================================
-   cy += 3;
-
-   CreateTextLabel(PREFIX_PANEL+"V_T", px+pad, cy,
-      "Advanced Metrics", InpPanelTitleColor, fs-1, true);
-   cy += lh;
-
-   // Intermarket
+   if(hasV11Data)
    {
-      string interText = GetIntermarketDisplayText();
-      color interClr = clrGray;
-      if(g_intermarket.isAvailable) interClr = GetIntermarketColor(isBuy);
-      CreateTextLabel(PREFIX_PANEL+"V_IM", px+pad+3, cy, interText, interClr, fs-2, false);
+      cy += 3;
+      CreateTextLabel(PREFIX_PANEL+"V_T", px+pad, cy,
+         "Advanced Metrics", InpPanelTitleColor, fs-1, true);
       cy += lh;
-   }
 
-   // Session statistics
-   {
-      string sesText = GetCurrentSessionDisplay();
-      CreateTextLabel(PREFIX_PANEL+"V_SS", px+pad+3, cy, sesText, InpPanelDimColor, fs-2, false);
-      cy += lh;
-   }
+      if(g_intermarket.isAvailable)
+      {
+         string interText = GetIntermarketDisplayText();
+         color interClr = GetIntermarketColor(isBuy);
+         CreateTextLabel(PREFIX_PANEL+"V_IM", px+pad+3, cy, interText, interClr, fs-2, false);
+         cy += lh;
+      }
 
-   // Walk-forward
-   {
-      string wfText = GetWalkForwardDisplay();
-      color wfClr = GetWalkForwardColor();
-      CreateTextLabel(PREFIX_PANEL+"V_WF", px+pad+3, cy, wfText, wfClr, fs-2, false);
-      cy += lh;
-   }
+      if(g_outcomeCount > 0)
+      {
+         string sesText = GetCurrentSessionDisplay();
+         CreateTextLabel(PREFIX_PANEL+"V_SS", px+pad+3, cy, sesText, InpPanelDimColor, fs-2, false);
+         cy += lh;
+      }
 
-   // Spread + Regime
-   {
-      string spreadText = GetSpreadDisplay();
-      color spreadClr = GetSpreadColor();
-      string regimeText = CheckRegimeStability();
-      color regimeClr = GetRegimeColor();
-      color combinedClr = (spreadClr==clrRed||regimeClr==clrRed) ? clrRed :
-                          (spreadClr==clrOrange||regimeClr==clrOrange) ? clrOrange : clrGray;
-      CreateTextLabel(PREFIX_PANEL+"V_SR", px+pad+3, cy,
-         spreadText+" | "+regimeText, combinedClr, fs-2, false);
-      cy += lh;
-   }
+      if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0)
+      {
+         string wfText = GetWalkForwardDisplay();
+         color wfClr = GetWalkForwardColor();
+         CreateTextLabel(PREFIX_PANEL+"V_WF", px+pad+3, cy, wfText, wfClr, fs-2, false);
+         cy += lh;
+      }
 
-   // Rolling performance
-   {
-      string rpText = GetRollingPerfDisplay();
-      color rpClr = GetRollingPerfColor();
-      CreateTextLabel(PREFIX_PANEL+"V_RP", px+pad+3, cy, rpText, rpClr, fs-2, false);
-      cy += lh;
+      if(InpUseSpreadRegime)
+      {
+         string spreadText = GetSpreadDisplay();
+         color spreadClr = GetSpreadColor();
+         string regimeText = CheckRegimeStability();
+         color regimeClr = GetRegimeColor();
+         color combinedClr = (spreadClr==clrRed||regimeClr==clrRed) ? clrRed :
+                             (spreadClr==clrOrange||regimeClr==clrOrange) ? clrOrange : clrGray;
+         CreateTextLabel(PREFIX_PANEL+"V_SR", px+pad+3, cy,
+            spreadText+" | "+regimeText, combinedClr, fs-2, false);
+         cy += lh;
+      }
+
+      if(g_rollingPerf.totalTracked > 0)
+      {
+         string rpText = GetRollingPerfDisplay();
+         color rpClr = GetRollingPerfColor();
+         CreateTextLabel(PREFIX_PANEL+"V_RP", px+pad+3, cy, rpText, rpClr, fs-2, false);
+         cy += lh;
+      }
    }
 
    //--- FOOTER ---

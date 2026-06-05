@@ -42,6 +42,7 @@ ProbabilityData g_currentProb;
 EntryZone g_entryZones[5];
 int       g_validZoneCount       = 0;
 int       g_recommendedZoneCount = 0;
+bool      g_forceZoneRedraw      = false;
 
 //+------------------------------------------------------------------+
 //| Panel state                                                        |

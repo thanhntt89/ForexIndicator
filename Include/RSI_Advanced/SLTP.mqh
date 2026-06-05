@@ -21,9 +21,6 @@ double GetATRValue(int barShift)
 //|        SWING FINDING FOR FIBONACCI                                 |
 //+------------------------------------------------------------------+
 
-//+------------------------------------------------------------------+
-//| Find nearest significant swing low before barIndex                 |
-//+------------------------------------------------------------------+
 double FindNearestSwingLow(const double &lo[], int barIndex, int lookback)
 {
    double swingLow = lo[barIndex];
@@ -46,15 +43,12 @@ double FindNearestSwingLow(const double &lo[], int barIndex, int lookback)
       {
          swingLow = lo[i];
          swingBar = i;
-         break;  // Nearest swing low found
+         break;
       }
    }
    return(swingLow);
 }
 
-//+------------------------------------------------------------------+
-//| Find nearest significant swing high before barIndex                |
-//+------------------------------------------------------------------+
 double FindNearestSwingHigh(const double &hi[], int barIndex, int lookback)
 {
    double swingHigh = hi[barIndex];
@@ -83,9 +77,6 @@ double FindNearestSwingHigh(const double &hi[], int barIndex, int lookback)
    return(swingHigh);
 }
 
-//+------------------------------------------------------------------+
-//| Find swing range (highest high and lowest low) for Fibonacci       |
-//+------------------------------------------------------------------+
 void FindSwingRange(bool isBuy, int barIndex,
                     const double &hi[], const double &lo[],
                     int lookback,
@@ -163,8 +154,7 @@ void CalculateSLTP_Fibonacci(bool isBuy, int barNS, double entry,
    FindSwingRange(isBuy, barNS, hi, lo, fibLookback, swingHigh, swingLow);
    double swingRange = swingHigh - swingLow;
 
-   if(swingRange < outATR)
-      swingRange = outATR;
+   if(swingRange < outATR) swingRange = outATR;
 
    if(isBuy)
    {
@@ -210,7 +200,6 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
    double swingHigh = 0, swingLow = 0;
    FindSwingRange(isBuy, barNS, hi, lo, fibLookback, swingHigh, swingLow);
    double swingRange = MathMax(swingHigh - swingLow, outATR);
-
    double maxSLDist = outATR * (InpSLRatio + 0.5);
 
    if(isBuy)
@@ -219,15 +208,12 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
       double atrSL = entry - atrSLDist;
       int slLookback = GetNormalizedSLLookback();
       double swingSL = FindNearestSwingLow(lo, barNS, slLookback) - totalBuf;
-
       outSL = MathMin(fibSL, MathMin(atrSL, swingSL));
       if(entry - outSL > maxSLDist) outSL = entry - maxSLDist;
       if(entry - outSL < minSL) outSL = entry - minSL;
-
       double fibTP1 = entry + swingRange * 1.0;
       double fibTP2 = entry + swingRange * 1.618;
       double fibTP3 = entry + swingRange * 2.618;
-
       outTP1 = MathMax(fibTP1, entry + atrTP1);
       outTP2 = MathMax(fibTP2, entry + atrTP2);
       outTP3 = MathMax(fibTP3, entry + atrTP3);
@@ -238,20 +224,143 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
       double atrSL = entry + atrSLDist;
       int slLookback = GetNormalizedSLLookback();
       double swingSL = FindNearestSwingHigh(hi, barNS, slLookback) + totalBuf;
-
       outSL = MathMax(fibSL, MathMax(atrSL, swingSL));
       if(outSL - entry > maxSLDist) outSL = entry + maxSLDist;
       if(outSL - entry < minSL) outSL = entry + minSL;
-
       double fibTP1 = entry - swingRange * 1.0;
       double fibTP2 = entry - swingRange * 1.618;
       double fibTP3 = entry - swingRange * 2.618;
-
       outTP1 = MathMin(fibTP1, entry - atrTP1);
       outTP2 = MathMin(fibTP2, entry - atrTP2);
       outTP3 = MathMin(fibTP3, entry - atrTP3);
    }
 }
+
+//+------------------------------------------------------------------+
+//| Measure optimal TP ratios from ACTUAL market data                   |
+//| Phase 1: Actual signals (highest quality)                          |
+//| Phase 2: Deep history scan (max samples via GetTPMeasurementBars)  |
+//| Returns percentile-based ratios: 50th, 75th, 90th                 |
+//+------------------------------------------------------------------+
+void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
+                             double &tp1Ratio, double &tp2Ratio, double &tp3Ratio)
+{
+   tp1Ratio = InpTPRatio;
+   tp2Ratio = InpTPRatio * InpTP2Multiplier;
+   tp3Ratio = InpTPRatio * InpTP3Multiplier;
+
+   int maxFwd = GetMaxForwardBarsForTimeframe();
+   int tpScanBars = GetTPMeasurementBars();
+
+   double moveRatios[];
+   int moveCount = 0;
+
+   //--- Phase 1: Actual signals
+   for(int s = 0; s < g_signalCount; s++)
+   {
+      if(g_signals[s].isBuySignal != isBuy) continue;
+      if(g_signals[s].barIndex + maxFwd >= Bars) continue;
+
+      double sigEntry = g_signals[s].entryPrice;
+      double sigATR   = g_signals[s].atrValue;
+      double sigSL    = g_signals[s].stopLoss;
+      if(sigATR <= 0) continue;
+
+      double maxFav = 0;
+      for(int b = g_signals[s].barIndex + 1;
+          b < g_signals[s].barIndex + maxFwd && b < Bars; b++)
+      {
+         int bs = Bars - 1 - b;
+         if(bs < 0) break;
+         double bH = iHigh(NULL, 0, bs);
+         double bL = iLow(NULL, 0, bs);
+         double fav = isBuy ? (bH - sigEntry) : (sigEntry - bL);
+         if(fav > maxFav) maxFav = fav;
+         if(isBuy && bL <= sigSL) break;
+         if(!isBuy && bH >= sigSL) break;
+      }
+
+      if(maxFav > 0)
+      {
+         moveCount++;
+         ArrayResize(moveRatios, moveCount);
+         moveRatios[moveCount - 1] = maxFav / sigATR;
+      }
+   }
+
+   //--- Phase 2: Deep history (all available bars per TF)
+   int deepStart = MathMax(InpRSIPeriod + 10, totalBars - tpScanBars);
+   if(deepStart < 0) deepStart = 0;
+   int deepEnd = totalBars - maxFwd - 10;
+
+   for(int i = deepStart; i < deepEnd && moveCount < 500; i++)
+   {
+      int bs = totalBars - 1 - i;
+      if(bs < 0) continue;
+
+      double rsi = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs);
+      double atr = iATR(NULL, 0, InpATRPeriod, bs);
+      if(rsi == 0 || atr == 0) continue;
+
+      bool rel = false;
+      if(isBuy && rsi < 45 && rsi > 15) rel = true;
+      if(!isBuy && rsi > 55 && rsi < 85) rel = true;
+      if(!rel) continue;
+
+      double rsiPrev = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs + 1);
+      if(rsiPrev == 0) continue;
+      if(isBuy && rsi <= rsiPrev) continue;
+      if(!isBuy && rsi >= rsiPrev) continue;
+
+      double entryP = iClose(NULL, 0, bs);
+      double slDist = atr * InpSLRatio;
+      double maxFav = 0;
+
+      for(int b = i + 1; b < i + maxFwd && b < deepEnd; b++)
+      {
+         int fbs = totalBars - 1 - b;
+         if(fbs < 0) break;
+         double bH = iHigh(NULL, 0, fbs);
+         double bL = iLow(NULL, 0, fbs);
+         double fav = isBuy ? (bH - entryP) : (entryP - bL);
+         if(fav > maxFav) maxFav = fav;
+         if(isBuy && (entryP - bL) > slDist) break;
+         if(!isBuy && (bH - entryP) > slDist) break;
+      }
+
+      if(maxFav > 0)
+      {
+         moveCount++;
+         ArrayResize(moveRatios, moveCount);
+         moveRatios[moveCount - 1] = maxFav / atr;
+      }
+   }
+
+   if(moveCount < 30) return;
+
+   // Sort
+   for(int a = 0; a < moveCount - 1; a++)
+      for(int b = a + 1; b < moveCount; b++)
+         if(moveRatios[b] < moveRatios[a])
+         {
+            double temp = moveRatios[a];
+            moveRatios[a] = moveRatios[b];
+            moveRatios[b] = temp;
+         }
+
+   int idx50 = MathMax(0, MathMin((int)(moveCount * 0.50), moveCount - 1));
+   int idx75 = MathMax(0, MathMin((int)(moveCount * 0.75), moveCount - 1));
+   int idx90 = MathMax(0, MathMin((int)(moveCount * 0.90), moveCount - 1));
+
+   tp1Ratio = moveRatios[idx50];
+   tp2Ratio = moveRatios[idx75];
+   tp3Ratio = moveRatios[idx90];
+
+   tp1Ratio = MathMax(tp1Ratio, InpSLRatio);
+   if(tp2Ratio <= tp1Ratio) tp2Ratio = tp1Ratio * 1.5;
+   if(tp3Ratio <= tp2Ratio) tp3Ratio = tp2Ratio * 1.3;
+}
+
 
 //+------------------------------------------------------------------+
 //|        MAIN ENTRY POINT - Routes to selected method                |
@@ -261,6 +370,11 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
                    double &outSL, double &outTP1, double &outTP2, double &outTP3,
                    double &outATR)
 {
+   // Measure optimal TP ratios from actual market data
+   double optTP1, optTP2, optTP3;
+   MeasureOptimalTPRatios(isBuy, barNS, total, optTP1, optTP2, optTP3);
+
+   // Calculate SL/TP using selected method
    switch(InpSLTPMethod)
    {
       case SLTP_FIBONACCI:
@@ -271,28 +385,43 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
          CalculateSLTP_Hybrid(isBuy, barNS, entry, hi, lo, total,
                               outSL, outTP1, outTP2, outTP3, outATR);
          break;
-      default: // SLTP_ATR
+      default:
          CalculateSLTP_ATR(isBuy, barNS, entry, hi, lo, total,
                            outSL, outTP1, outTP2, outTP3, outATR);
          break;
+   }
+
+   // Apply measured TP if significantly different from method TP
+   // Use CLOSER TP (more achievable)
+   if(MathAbs(optTP1 - InpTPRatio) > 0.3)
+   {
+      double mTP1 = entry + (isBuy ? 1 : -1) * outATR * optTP1;
+      double mTP2 = entry + (isBuy ? 1 : -1) * outATR * optTP2;
+      double mTP3 = entry + (isBuy ? 1 : -1) * outATR * optTP3;
+
+      if(isBuy)
+      {
+         outTP1 = MathMin(outTP1, mTP1);
+         outTP2 = MathMin(outTP2, mTP2);
+         outTP3 = MathMin(outTP3, mTP3);
+         if(outTP2 < outTP1) outTP2 = outTP1 + outATR * 0.5;
+         if(outTP3 < outTP2) outTP3 = outTP2 + outATR * 0.5;
+      }
+      else
+      {
+         outTP1 = MathMax(outTP1, mTP1);
+         outTP2 = MathMax(outTP2, mTP2);
+         outTP3 = MathMax(outTP3, mTP3);
+         if(outTP2 > outTP1) outTP2 = outTP1 - outATR * 0.5;
+         if(outTP3 > outTP2) outTP3 = outTP2 - outATR * 0.5;
+      }
    }
 }
 
 //+------------------------------------------------------------------+
 //|     ██  ENTRY ZONE SYSTEM  ██                                      |
-//|                                                                    |
-//| Theory: Price Distribution (Dalton 1993) + Liquidity Voids (ICT)   |
-//| Risk: Van Tharp (1998) Fixed Fractional                            |
-//| Sizing: Kelly (1956) Half-Kelly                                    |
 //+------------------------------------------------------------------+
 
-//+------------------------------------------------------------------+
-//| Price Distribution Analysis - ANTI-OVERFITTING                     |
-//|                                                                    |
-//| Method: Price Time at Level (proxy cho Volume Profile)             |
-//| Search ranges: equal division (no hardcoded boundaries)            |
-//| Default prob: linear decay (no magic numbers)                      |
-//+------------------------------------------------------------------+
 void AnalyzePriceDistribution(bool isBuy, int barIndex,
                                double entryPrice, double slPrice,
                                const double &hi[], const double &lo[],
@@ -307,13 +436,10 @@ void AnalyzePriceDistribution(bool isBuy, int barIndex,
    double rangeHigh = isBuy ? entryPrice : slPrice;
    double rangeLow  = isBuy ? slPrice : entryPrice;
    double rangeSize = rangeHigh - rangeLow;
-
    if(rangeSize <= 0) return;
 
    int microZones = 20;
    double zoneHeight = rangeSize / microZones;
-
-   // TIME AT LEVEL: proportion of bar time in each zone
    double zoneTime[];
    ArrayResize(zoneTime, microZones);
    ArrayInitialize(zoneTime, 0);
@@ -325,44 +451,33 @@ void AnalyzePriceDistribution(bool isBuy, int barIndex,
    {
       double barRange = hi[b] - lo[b];
       if(barRange <= 0) continue;
-
       for(int z = 0; z < microZones; z++)
       {
          double zLow  = rangeLow + z * zoneHeight;
          double zHigh = zLow + zoneHeight;
-
          double overlap = MathMin(zHigh, hi[b]) - MathMax(zLow, lo[b]);
          if(overlap <= 0) continue;
-
          double timeFraction = overlap / barRange;
          zoneTime[z] += timeFraction;
          totalTime += timeFraction;
       }
    }
-
    if(totalTime <= 0) return;
 
-   // Normalize
    for(int z = 0; z < microZones; z++)
       zoneTime[z] /= totalTime;
 
-   // ANTI-OVERFITTING: Equal division search ranges
-   // No hardcoded {0.15,0.35,0.55,0.75} boundaries
    int maxPullbackZones = numZonesRequested - 1;
    if(maxPullbackZones > 4) maxPullbackZones = 4;
-
    double rangeStart = 0.10;
    double rangeEnd   = 0.90;
    double segmentSize = (rangeEnd - rangeStart) / MathMax(maxPullbackZones, 1);
-
-   // Fibonacci fallback levels (math constants, not tuned)
    double fibFallback[] = {0.382, 0.618, 0.786, 0.886};
 
    for(int req = 0; req < maxPullbackZones; req++)
    {
       double sLow  = rangeStart + req * segmentSize;
       double sHigh = sLow + segmentSize;
-
       double lowestTime = 999;
       int lowestIdx = -1;
 
@@ -370,7 +485,6 @@ void AnalyzePriceDistribution(bool isBuy, int barIndex,
       {
          double zoneRatio = ((double)z + 0.5) / microZones;
          if(isBuy) zoneRatio = 1.0 - zoneRatio;
-
          if(zoneRatio >= sLow && zoneRatio <= sHigh)
          {
             if(zoneTime[z] < lowestTime)
@@ -384,21 +498,17 @@ void AnalyzePriceDistribution(bool isBuy, int barIndex,
       if(lowestIdx >= 0 && totalTime > 5)
       {
          zonePrices[req] = rangeLow + (lowestIdx + 0.5) * zoneHeight;
-
          double avgTime = 1.0 / microZones;
          double timeRatio = lowestTime / MathMax(avgTime, 0.001);
          zoneProbs[req] = MathMax(0.10, MathMin(0.90, 1.0 - timeRatio));
       }
       else
       {
-         // Fibonacci fallback
          int fibIdx = MathMin(req, 3);
          if(isBuy)
             zonePrices[req] = entryPrice - rangeSize * fibFallback[fibIdx];
          else
             zonePrices[req] = entryPrice + rangeSize * fibFallback[fibIdx];
-
-         // ANTI-OVERFITTING: Linear decay probability (not hardcoded array)
          double progress = (double)(req + 1) / (double)(maxPullbackZones + 1);
          zoneProbs[req] = MathMax(0.10, 0.65 * (1.0 - progress));
       }
@@ -407,36 +517,36 @@ void AnalyzePriceDistribution(bool isBuy, int barIndex,
 
 //+------------------------------------------------------------------+
 //| Validate SL against high volume zones                              |
-//| ANTI-OVERFITTING: threshold = mean + stddev (statistical)          |
-//| Not hardcoded 1.5× multiplier                                     |
+//| DATA-DRIVEN buffer: spread × 2 (not hardcoded ATR ratio)          |
 //+------------------------------------------------------------------+
 double ValidateSLAgainstVolume(bool isBuy, double currentSL, double entryPrice,
                                 const double &hi[], const double &lo[],
                                 int barIndex, int lookback, double atr)
 {
-   // Scan range WIDER than just Entry→SL
-   // Use ±2 ATR from entry to capture full volume context
-   // Old: only scanned Entry→SL range (too narrow)
    double scanRange = atr * 2.0;
    double rangeHigh, rangeLow;
-   
+
    if(isBuy)
    {
-      rangeHigh = entryPrice + atr * 0.5;  // Include some above entry
-      rangeLow  = currentSL - atr * 0.5;   // Include some below SL
+      rangeHigh = entryPrice + atr * 0.5;
+      rangeLow  = currentSL - atr * 0.5;
    }
    else
    {
       rangeHigh = currentSL + atr * 0.5;
       rangeLow  = entryPrice - atr * 0.5;
    }
-   
+
    double rangeSize = rangeHigh - rangeLow;
    if(rangeSize <= 0) return(currentSL);
 
+   // DATA-DRIVEN SL buffer: MAX of spread × 2 or ATR × 0.1
+   // spread × 2 covers typical spread widening during stop hunt
+   // Not hardcoded ratio - derived from actual broker spread
+   double slBuffer = MathMax(MarketInfo(Symbol(), MODE_SPREAD) * _Point * 2.0, atr * 0.1);
+
    int microZones = 20;
    double zoneHeight = rangeSize / microZones;
-
    double zoneTime[];
    ArrayResize(zoneTime, microZones);
    ArrayInitialize(zoneTime, 0);
@@ -458,10 +568,8 @@ double ValidateSLAgainstVolume(bool isBuy, double currentSL, double entryPrice,
          totalTime += overlap / barRange;
       }
    }
-
    if(totalTime <= 0) return(currentSL);
 
-   // Find SL zone
    int slZone = -1;
    for(int z = 0; z < microZones; z++)
    {
@@ -470,10 +578,8 @@ double ValidateSLAgainstVolume(bool isBuy, double currentSL, double entryPrice,
       if(currentSL >= zLow && currentSL <= zHigh)
       { slZone = z; break; }
    }
-
    if(slZone < 0) return(currentSL);
 
-   // Statistical threshold
    double sumTime = 0, sumTimeSq = 0;
    int validZones = 0;
    for(int z = 0; z < microZones; z++)
@@ -490,49 +596,39 @@ double ValidateSLAgainstVolume(bool isBuy, double currentSL, double entryPrice,
    double varTime = (validZones > 1) ?
       (sumTimeSq / validZones) - (meanTime * meanTime) : 0;
    double stdTime = MathSqrt(MathMax(varTime, 0));
-
    double highVolThreshold = meanTime + stdTime;
    double slZoneTime = zoneTime[slZone];
 
-   // SL NOT in high volume → OK
    if(slZoneTime <= highVolThreshold) return(currentSL);
 
-   // SL in high volume → push BEYOND the high volume cluster
    if(isBuy)
    {
-      // BUY SL below entry → push further DOWN past high volume edge
       for(int z = slZone - 1; z >= 0; z--)
       {
          if(zoneTime[z] <= meanTime)
          {
-            // Found low volume zone = edge of cluster
             double newSL = rangeLow + z * zoneHeight;
-            newSL -= atr * 0.1;  // Small buffer beyond edge
-            
-            // Only move FURTHER from entry (more protection)
+            newSL -= slBuffer;
             if(newSL < currentSL) return(newSL);
             break;
          }
       }
-      // All zones below are high volume → push to bottom of scan range
-      double bottomSL = rangeLow - atr * 0.1;
+      double bottomSL = rangeLow - slBuffer;
       if(bottomSL < currentSL) return(bottomSL);
    }
    else
    {
-      // SELL SL above entry → push further UP past high volume edge
       for(int z = slZone + 1; z < microZones; z++)
       {
          if(zoneTime[z] <= meanTime)
          {
             double newSL = rangeLow + (z + 1) * zoneHeight;
-            newSL += atr * 0.1;
-            
+            newSL += slBuffer;
             if(newSL > currentSL) return(newSL);
             break;
          }
       }
-      double topSL = rangeHigh + atr * 0.1;
+      double topSL = rangeHigh + slBuffer;
       if(topSL > currentSL) return(topSL);
    }
 
@@ -540,13 +636,10 @@ double ValidateSLAgainstVolume(bool isBuy, double currentSL, double entryPrice,
 }
 
 //+------------------------------------------------------------------+
-//| Measure zone reach probability from historical signals             |
-//+------------------------------------------------------------------+
 double MeasureZoneReachProb(bool isBuy, double entryPrice, double zonePrice,
                              double moveHeight, int maxForward)
 {
    if(moveHeight <= 0) return(0.5);
-
    double retraceLevel = MathAbs(entryPrice - zonePrice) / moveHeight;
    int reachedCount = 0;
    int totalCount = 0;
@@ -555,11 +648,9 @@ double MeasureZoneReachProb(bool isBuy, double entryPrice, double zonePrice,
    {
       if(g_signals[s].isBuySignal != isBuy) continue;
       if(g_signals[s].barIndex + maxForward >= Bars) continue;
-
       double sigEntry = g_signals[s].entryPrice;
       double sigMove = MathAbs(sigEntry - g_signals[s].stopLoss);
       if(sigMove <= 0) continue;
-
       double extremePrice = sigEntry;
 
       for(int b = g_signals[s].barIndex + 1;
@@ -567,7 +658,6 @@ double MeasureZoneReachProb(bool isBuy, double entryPrice, double zonePrice,
       {
          int bs = Bars - 1 - b;
          if(bs < 0) break;
-
          if(isBuy)
          {
             double barLow = iLow(NULL, 0, bs);
@@ -579,19 +669,14 @@ double MeasureZoneReachProb(bool isBuy, double entryPrice, double zonePrice,
             if(barHigh > extremePrice) extremePrice = barHigh;
          }
       }
-
       double actualRetrace = MathAbs(sigEntry - extremePrice) / sigMove;
       totalCount++;
       if(actualRetrace >= retraceLevel) reachedCount++;
    }
-
    if(totalCount < 5) return(0.5);
    return((double)reachedCount / (double)totalCount);
 }
 
-//+------------------------------------------------------------------+
-//| Get zone color by index                                            |
-//+------------------------------------------------------------------+
 color GetZoneColor(int zoneIndex)
 {
    switch(zoneIndex)
@@ -605,32 +690,18 @@ color GetZoneColor(int zoneIndex)
    return(clrGray);
 }
 
-//+------------------------------------------------------------------+
-//| ANTI-OVERFITTING: Mathematical risk distribution                   |
-//| Inverse index weighting (no arbitrary 0.40+0.10/N formula)        |
-//| Zone 1 weight=N, Zone 2=N-1, ..., Zone N=1                        |
-//| Total = N×(N+1)/2                                                  |
-//+------------------------------------------------------------------+
 void CalculateRiskShares(int zoneCount, double &shares[])
 {
    ArrayResize(shares, zoneCount);
    if(zoneCount <= 0) return;
    if(zoneCount == 1) { shares[0] = 1.0; return; }
-
    double totalWeight = zoneCount * (zoneCount + 1) / 2.0;
-
    for(int i = 0; i < zoneCount; i++)
       shares[i] = (double)(zoneCount - i) / totalWeight;
 }
 
 //+------------------------------------------------------------------+
-//| MAIN: Calculate all entry zones for a signal                       |
-//|                                                                    |
-//| Called from RSI_AdvancedSignal.mq4 after signal detection          |
-//| Populates g_entryZones[], g_validZoneCount, g_recommendedZoneCount |
-//|                                                                    |
-//| SL validation: If SL sits in high volume zone → push beyond       |
-//| to avoid stop hunting (Dalton 1993)                                |
+//| MAIN: Calculate all entry zones                                    |
 //+------------------------------------------------------------------+
 void CalculateEntryZones(bool isBuy, int barIndex,
                           double marketEntry, double sl, double tp1,
@@ -641,7 +712,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
    g_validZoneCount = 0;
    g_recommendedZoneCount = 0;
 
-   // Initialize all zones as invalid
    for(int z = 0; z < 5; z++)
    {
       g_entryZones[z].price = 0;
@@ -660,43 +730,35 @@ void CalculateEntryZones(bool isBuy, int barIndex,
 
    int maxZones = MathMax(2, MathMin(5, InpEntryZoneCount));
    double moveHeight = MathAbs(marketEntry - sl);
-   
-   // ANTI-OVERFITTING: Min SL from broker data, not hardcoded ratio
+
+   // DATA-DRIVEN minSLDist: from broker data, not hardcoded ratio
+   // spread × 5 = zone must survive 5× spread movement
+   // This ensures meaningful trade distance
    double brokerMinSL = MarketInfo(Symbol(), MODE_STOPLEVEL) * _Point;
-   double spreadMinSL = MarketInfo(Symbol(), MODE_SPREAD) * _Point * 3;
+   double spreadMinSL = MarketInfo(Symbol(), MODE_SPREAD) * _Point * 5.0;
    double minSLDist = MathMax(brokerMinSL, spreadMinSL);
-   minSLDist = MathMax(minSLDist, atr * 0.2);  // Absolute floor
 
    int maxFwd = GetMaxForwardBarsForTimeframe();
-
    if(moveHeight <= 0) return;
 
-   //--- Validate SL against high volume zones (prevent stop hunt)
-   //--- effectiveSL used for zone calculations
-   //--- Original SL in SignalData stays on chart unchanged
    double effectiveSL = ValidateSLAgainstVolume(isBuy, sl, marketEntry,
                                                  hi, lo, barIndex,
                                                  InpPriceDistLookback, atr);
 
-   // Only accept if pushed FURTHER from entry (more protection)
    if(isBuy)
-      effectiveSL = MathMin(effectiveSL, sl);   // Lower = further for BUY
+      effectiveSL = MathMin(effectiveSL, sl);
    else
-      effectiveSL = MathMax(effectiveSL, sl);   // Higher = further for SELL
+      effectiveSL = MathMax(effectiveSL, sl);
 
-   // Recalculate moveHeight with validated SL
    moveHeight = MathAbs(marketEntry - effectiveSL);
    if(moveHeight <= 0) return;
 
-   //--- Get pullback zone prices from price distribution
-   //--- Uses effectiveSL as range boundary
    double pullbackPrices[];
    double pullbackProbs[];
    AnalyzePriceDistribution(isBuy, barIndex, marketEntry, effectiveSL,
                              hi, lo, InpPriceDistLookback,
                              maxZones, pullbackPrices, pullbackProbs);
 
-   //--- Adaptive zone count based on market condition
    double curATR = iATR(NULL, 0, InpATRPeriod, totalBars - 1 - barIndex);
    double avgATR = 0;
    int atrCnt = 0;
@@ -718,10 +780,8 @@ void CalculateEntryZones(bool isBuy, int barIndex,
    }
    adaptiveMax = MathMin(adaptiveMax, maxZones);
 
-   //--- Measure edge for probability calculations
    double edge = MeasureEdgeFromHistory(0, isBuy, maxFwd);
 
-   //--- Calculate risk shares
    double shares[];
    CalculateRiskShares(adaptiveMax, shares);
 
@@ -729,14 +789,12 @@ void CalculateEntryZones(bool isBuy, int barIndex,
    if(accountBalance <= 0) accountBalance = 1000;
    double totalRisk = accountBalance * InpTotalRiskPercent / 100.0;
 
-   //--- Zone 1: Market entry (always valid)
    g_entryZones[0].price = marketEntry;
    g_entryZones[0].zoneName = "Market";
    g_entryZones[0].probReach = 0.95;
    g_entryZones[0].isValid = true;
    g_validZoneCount = 1;
 
-   //--- Zones 2+: Pullback entries from price distribution
    for(int z = 1; z < adaptiveMax; z++)
    {
       if(z - 1 < ArraySize(pullbackPrices) && pullbackPrices[z - 1] > 0)
@@ -746,7 +804,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
 
       g_entryZones[z].zoneName = "PB-Z" + IntegerToString(z + 1);
 
-      // Validate: zone price must be between entry and effectiveSL
       if(g_entryZones[z].price <= 0)
       { g_entryZones[z].isValid = false; continue; }
 
@@ -764,7 +821,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       g_entryZones[z].isValid = true;
       g_validZoneCount++;
 
-      // Reach probability
       if(z - 1 < ArraySize(pullbackProbs) && pullbackProbs[z - 1] > 0)
          g_entryZones[z].probReach = pullbackProbs[z - 1];
       else
@@ -772,14 +828,12 @@ void CalculateEntryZones(bool isBuy, int barIndex,
             isBuy, marketEntry, g_entryZones[z].price, moveHeight, maxFwd);
    }
 
-   //--- Calculate metrics for all valid zones
    g_recommendedZoneCount = 0;
 
    for(int z = 0; z < adaptiveMax; z++)
    {
       if(!g_entryZones[z].isValid) continue;
 
-      // SL/TP distances from this zone (using effectiveSL)
       if(isBuy)
       {
          g_entryZones[z].slDistance = g_entryZones[z].price - effectiveSL;
@@ -791,7 +845,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
          g_entryZones[z].tp1Distance = g_entryZones[z].price - tp1;
       }
 
-      // Validate minimum SL distance (skip Zone 1 - always valid)
       if(g_entryZones[z].slDistance < minSLDist && z > 0)
       {
          g_entryZones[z].isValid = false;
@@ -799,27 +852,21 @@ void CalculateEntryZones(bool isBuy, int barIndex,
          continue;
       }
 
-      // R:R ratio
       g_entryZones[z].rrRatio = (g_entryZones[z].slDistance > 0) ?
          g_entryZones[z].tp1Distance / g_entryZones[z].slDistance : 0;
 
-      // P(TP1) from this zone using Gambler's Ruin
       g_entryZones[z].probTP1 = CalculateRealMarketProbTP(
          edge, g_entryZones[z].slDistance, g_entryZones[z].tp1Distance, atr) * 100.0;
 
-      // Expected Value = P(reach) × [P(win) × R:R - P(loss) × 1.0]
       double winRate = g_entryZones[z].probTP1 / 100.0;
       g_entryZones[z].expectedValue = g_entryZones[z].probReach *
          (winRate * g_entryZones[z].rrRatio - (1.0 - winRate) * 1.0);
 
-      // Recommend if EV positive OR Zone 1 (market baseline)
       g_entryZones[z].isRecommended = (g_entryZones[z].expectedValue > 0 || z == 0);
       if(g_entryZones[z].isRecommended) g_recommendedZoneCount++;
 
-      // Risk share
       g_entryZones[z].riskShare = (z < ArraySize(shares)) ? shares[z] : 0;
 
-      // Lot size calculation
       double pipValue = 0;
       double tickValue = MarketInfo(Symbol(), MODE_TICKVALUE);
       double tickSize = MarketInfo(Symbol(), MODE_TICKSIZE);
@@ -836,7 +883,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       g_entryZones[z].lotSize = MathMax(g_entryZones[z].lotSize, minLot);
    }
 
-   //--- Ensure minimum 2 recommended zones
    if(g_recommendedZoneCount < 2)
    {
       for(int z = 0; z < adaptiveMax && g_recommendedZoneCount < 2; z++)
@@ -849,7 +895,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       }
    }
 
-   //--- Redistribute risk to recommended zones only
    double totalRecShare = 0;
    for(int z = 0; z < adaptiveMax; z++)
       if(g_entryZones[z].isRecommended)
@@ -862,16 +907,13 @@ void CalculateEntryZones(bool isBuy, int barIndex,
          if(g_entryZones[z].isRecommended)
          {
             g_entryZones[z].riskShare /= totalRecShare;
-
             double pv = 0;
             double tv = MarketInfo(Symbol(), MODE_TICKVALUE);
             double ts = MarketInfo(Symbol(), MODE_TICKSIZE);
-            if(ts > 0)
-               pv = tv * (g_entryZones[z].slDistance / ts);
+            if(ts > 0) pv = tv * (g_entryZones[z].slDistance / ts);
             if(pv > 0)
                g_entryZones[z].lotSize = NormalizeDouble(
                   (totalRisk * g_entryZones[z].riskShare) / pv, 2);
-
             double ml = MarketInfo(Symbol(), MODE_MINLOT);
             g_entryZones[z].lotSize = MathMax(g_entryZones[z].lotSize, ml);
          }
@@ -883,4 +925,5 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       }
    }
 }
+
 #endif

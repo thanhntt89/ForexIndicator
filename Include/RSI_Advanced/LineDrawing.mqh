@@ -60,7 +60,6 @@ void CreateProbLabel(string name, string text, double price, color clr, datetime
 //+------------------------------------------------------------------+
 void DrawSLTPLines(int sigIdx)
 {
-   DeleteObjectsByPrefix(PREFIX_LINE);
    DeleteObjectsByPrefix(PREFIX_ZONE);  // Clean zone lines when redrawing
 
    if(!InpShowSLTPLines || sigIdx < 0 || sigIdx >= g_signalCount) return;

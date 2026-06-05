@@ -8,6 +8,7 @@
 //| - No hardcoded magic numbers in probability pipeline               |
 //| - Broker-resistant confirmations (High/Low, not Close)             |
 //| - TF-scaled confidence adjustments                                 |
+//| - Session quality from MEASURED data (when n >= 20)                |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_PROBABILITYENGINE_MQH
 #define RSI_ADV_PROBABILITYENGINE_MQH
@@ -19,6 +20,7 @@
 #include "MTFEngine.mqh"
 #include "Normalize.mqh"
 #include "IntermarketAnalysis.mqh"
+#include "SessionStatistics.mqh"
 #include "WalkForward.mqh"
 
 //+------------------------------------------------------------------+
@@ -318,17 +320,11 @@ void CalculateProbability(int currentSignalIndex)
    double measuredEdge = MeasureEdgeFromHistory(
       curSig.caseNumber, curSig.isBuySignal, maxFwd);
 
-  
    //=================================================================
    // STEP 3: MTF + Intermarket adjusted edge
-   //
-   // MTF: measured alignment ratio × 0.03 (max ±3%)
-   // Intermarket: DXY/EURUSD correlation × 0.02 (max ±2%)
-   // Combined max: ±5%
    //=================================================================
    double edgeAdjustment = 0;
 
-   // MTF adjustment
    if(InpShowMTF && g_mtfCount > 0)
    {
       int agreeCount = 0;
@@ -341,7 +337,6 @@ void CalculateProbability(int currentSignalIndex)
       edgeAdjustment += alignRatio * 0.03;
    }
 
-   // Intermarket adjustment (V11)
    if(g_intermarket.isAvailable)
    {
       double interAdj = GetIntermarketEdgeAdjustment(curSig.isBuySignal);
@@ -351,7 +346,7 @@ void CalculateProbability(int currentSignalIndex)
    double adjustedEdge = MathMax(0.40, MathMin(0.70, measuredEdge + edgeAdjustment));
 
    //=================================================================
-   // STEP 4: Theoretical probability using MTF-adjusted edge
+   // STEP 4: Theoretical probability using adjusted edge
    //=================================================================
    double slDist  = MathAbs(curSig.entryPrice - curSig.stopLoss);
    double tp1Dist = MathAbs(curSig.takeProfit1 - curSig.entryPrice);
@@ -382,15 +377,9 @@ void CalculateProbability(int currentSignalIndex)
 
    //=================================================================
    // STEP 5.5: BROKER-RESISTANT confidence adjustments
-   //
-   // Only uses High/Low and ATR data (most consistent across brokers)
-   // Does NOT use Close prices (vary by broker timezone)
-   // Reduction scaled by timeframe reliability
    //=================================================================
 
    //--- 1-Bar Price Confirmation (Brooks 2012)
-   // Uses High/Low comparison (broker-resistant)
-   // NOT Close comparison (broker-dependent due to timezone)
    if(curSig.barIndex < Bars - 2)
    {
       int sigBarShift  = Bars - 1 - curSig.barIndex;
@@ -404,24 +393,17 @@ void CalculateProbability(int currentSignalIndex)
          double nextLow  = iLow(NULL, 0, nextBarShift);
 
          bool confirmed = false;
-
-         if(curSig.isBuySignal)
-            confirmed = (nextHigh > sigHigh);   // Made higher high = momentum confirmed
-         else
-            confirmed = (nextLow < sigLow);     // Made lower low = momentum confirmed
+         if(curSig.isBuySignal) confirmed = (nextHigh > sigHigh);
+         else                   confirmed = (nextLow < sigLow);
 
          if(!confirmed)
          {
-            // No follow-through → reduce confidence
-            // Scale by TF reliability:
-            //   M1-M5: High/Low still vary ~10-20% between brokers → small reduction
-            //   M15+: High/Low consistent → larger reduction (more meaningful)
             double reductionFactor = 0.95;
             int tf = Period();
-            if(tf <= PERIOD_M5)       reductionFactor = 0.97;  // 3% (low reliability on small TF)
-            else if(tf <= PERIOD_M15) reductionFactor = 0.92;  // 8%
-            else if(tf <= PERIOD_M30) reductionFactor = 0.88;  // 12%
-            else                      reductionFactor = 0.85;  // 15% (high reliability on large TF)
+            if(tf <= PERIOD_M5)       reductionFactor = 0.97;
+            else if(tf <= PERIOD_M15) reductionFactor = 0.92;
+            else if(tf <= PERIOD_M30) reductionFactor = 0.88;
+            else                      reductionFactor = 0.85;
 
             g_currentProb.probTP1 *= reductionFactor;
             g_currentProb.probTP2 *= reductionFactor;
@@ -431,9 +413,7 @@ void CalculateProbability(int currentSignalIndex)
       }
    }
 
-   //--- ATR Spike Detection (fully broker-independent)
-   // ATR = High-Low based → same across all brokers
-   // Spike → model predictions less reliable → shrink toward 50%
+   //--- ATR Spike Detection
    {
       int curBarShift = Bars - 1 - curSig.barIndex;
       if(curBarShift >= 0)
@@ -451,8 +431,6 @@ void CalculateProbability(int currentSignalIndex)
 
          if(avgATR > 0 && curATR > avgATR * 2.0)
          {
-            // Volatility spike: model assumptions breaking
-            // Shrink probability toward 50% (maximum uncertainty)
             double spikeRatio = curATR / avgATR;
             double shrinkFactor = 1.0 / spikeRatio;
 
@@ -460,6 +438,53 @@ void CalculateProbability(int currentSignalIndex)
             g_currentProb.probTP2 = 50.0 + (g_currentProb.probTP2 - 50.0) * shrinkFactor;
             g_currentProb.probTP3 = 50.0 + (g_currentProb.probTP3 - 50.0) * shrinkFactor;
             g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
+         }
+      }
+   }
+
+   //=================================================================
+   // STEP 5.6: SESSION QUALITY adjustment
+   //=================================================================
+   {
+      int block = GetSessionBlock(curSig.signalTime);
+
+      if(g_sessionStats.totalPerSession[block] >= 20)
+      {
+         double measuredWR = g_sessionStats.winRate[block];
+         double baselineWR = g_currentProb.probTP1 / 100.0;
+
+         if(MathAbs(measuredWR - baselineWR) > 0.10)
+         {
+            // ANTI-OVERFITTING: Inverse variance weighting
+            // Instead of fixed 70/30 blend
+            // Weight each source by inverse of its uncertainty
+            
+            // Model uncertainty: ~15% (Gambler's Ruin typical error)
+            double modelSE = 0.15;
+            
+            // Measured uncertainty: Wilson SE
+            double p = measuredWR;
+            if(p <= 0) p = 0.01; if(p >= 1) p = 0.99;
+            double n = (double)g_sessionStats.totalPerSession[block];
+            double z2 = 3.84; // 1.96^2
+            double measuredSE = MathSqrt((p * (1.0 - p) / n + z2 / (4.0 * n * n)) / (1.0 + z2 / n));
+            measuredSE = MathMax(measuredSE, 0.05);
+            
+            // Inverse variance weights
+            double modelWeight = 1.0 / (modelSE * modelSE);
+            double measuredWeight = 1.0 / (measuredSE * measuredSE);
+            double totalW = modelWeight + measuredWeight;
+            
+            if(totalW > 0)
+            {
+               double blended = (baselineWR * modelWeight + measuredWR * measuredWeight) / totalW;
+               double ratio = blended / MathMax(baselineWR, 0.01);
+               
+               g_currentProb.probTP1 *= ratio;
+               g_currentProb.probTP2 *= ratio;
+               g_currentProb.probTP3 *= ratio;
+               g_currentProb.probSL = 100.0 - g_currentProb.probTP1;
+            }
          }
       }
    }

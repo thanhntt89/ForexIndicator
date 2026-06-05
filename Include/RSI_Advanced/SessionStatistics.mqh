@@ -145,45 +145,58 @@ void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
 
 //+------------------------------------------------------------------+
 //| Check pending signal outcomes                                      |
-//| Called each tick to see if any pending signals hit TP1 or SL       |
+//| Scan HISTORICAL bars (not just current price)                      |
+//| to resolve outcomes that already happened                          |
 //+------------------------------------------------------------------+
 void CheckPendingOutcomes()
 {
-   double curBid = MarketInfo(Symbol(), MODE_BID);
-   double curAsk = MarketInfo(Symbol(), MODE_ASK);
-
    for(int i = 0; i < g_outcomeCount; i++)
    {
       if(g_outcomes[i].outcome != 0) continue;  // Already resolved
 
-      if(g_outcomes[i].isBuy)
+      // Find signal bar index
+      int sigBarShift = iBarShift(NULL, 0, g_outcomes[i].signalTime, false);
+      if(sigBarShift < 0) continue;
+
+      // Scan bars from signal to current
+      for(int b = sigBarShift - 1; b >= 0; b--)
       {
-         // BUY: SL hit when bid drops to SL
-         if(curBid <= g_outcomes[i].stopLoss)
+         double barHigh = iHigh(NULL, 0, b);
+         double barLow  = iLow(NULL, 0, b);
+
+         if(g_outcomes[i].isBuy)
          {
-            g_outcomes[i].outcome = -1;
-            g_outcomes[i].outcomeTime = TimeCurrent();
+            // BUY: SL hit when low <= SL
+            if(barLow <= g_outcomes[i].stopLoss)
+            {
+               g_outcomes[i].outcome = -1;
+               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
+               break;
+            }
+            // BUY: TP1 hit when high >= TP1
+            if(barHigh >= g_outcomes[i].takeProfit1)
+            {
+               g_outcomes[i].outcome = 1;
+               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
+               break;
+            }
          }
-         // BUY: TP1 hit when bid reaches TP1
-         else if(curBid >= g_outcomes[i].takeProfit1)
+         else
          {
-            g_outcomes[i].outcome = 1;
-            g_outcomes[i].outcomeTime = TimeCurrent();
-         }
-      }
-      else
-      {
-         // SELL: SL hit when ask rises to SL
-         if(curAsk >= g_outcomes[i].stopLoss)
-         {
-            g_outcomes[i].outcome = -1;
-            g_outcomes[i].outcomeTime = TimeCurrent();
-         }
-         // SELL: TP1 hit when ask drops to TP1
-         else if(curAsk <= g_outcomes[i].takeProfit1)
-         {
-            g_outcomes[i].outcome = 1;
-            g_outcomes[i].outcomeTime = TimeCurrent();
+            // SELL: SL hit when high >= SL
+            if(barHigh >= g_outcomes[i].stopLoss)
+            {
+               g_outcomes[i].outcome = -1;
+               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
+               break;
+            }
+            // SELL: TP1 hit when low <= TP1
+            if(barLow <= g_outcomes[i].takeProfit1)
+            {
+               g_outcomes[i].outcome = 1;
+               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
+               break;
+            }
          }
       }
    }
