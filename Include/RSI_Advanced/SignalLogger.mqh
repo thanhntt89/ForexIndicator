@@ -22,6 +22,39 @@ static bool s_loggerReady     = false;
 static bool s_signalHeaderOK  = false;
 static bool s_outcomeHeaderOK = false;
 
+// Memory buffer for logs (Non-blocking queue)
+static string s_signalQueue[];
+static int    s_signalQueueCount = 0;
+
+static string s_outcomeQueue[];
+static int    s_outcomeQueueCount = 0;
+
+//+------------------------------------------------------------------+
+//| Helper: Push a signal log row to memory queue                     |
+//+------------------------------------------------------------------+
+void QueueSignalRow(string row)
+{
+   int size = ArraySize(s_signalQueue);
+   if(s_signalQueueCount >= size)
+   {
+      ArrayResize(s_signalQueue, size + 128);
+   }
+   s_signalQueue[s_signalQueueCount++] = row;
+}
+
+//+------------------------------------------------------------------+
+//| Helper: Push an outcome log row to memory queue                  |
+//+------------------------------------------------------------------+
+void QueueOutcomeRow(string row)
+{
+   int size = ArraySize(s_outcomeQueue);
+   if(s_outcomeQueueCount >= size)
+   {
+      ArrayResize(s_outcomeQueue, size + 128);
+   }
+   s_outcomeQueue[s_outcomeQueueCount++] = row;
+}
+
 //+------------------------------------------------------------------+
 //| Helper: Tên timeframe ngắn gọn                                    |
 //+------------------------------------------------------------------+
@@ -168,6 +201,12 @@ void LoggerInit(bool fullReset)
 
       s_signalHeaderOK  = false;
       s_outcomeHeaderOK = false;
+
+      // Reset queues
+      s_signalQueueCount = 0;
+      s_outcomeQueueCount = 0;
+      ArrayResize(s_signalQueue, 0);
+      ArrayResize(s_outcomeQueue, 0);
    }
 }
 
@@ -187,14 +226,6 @@ void LogSignalEntry(datetime signalTime,
                     int      sessionBlock)
 {
    if(!InpEnableSignalLog || !s_loggerReady) return;
-
-   string header =
-      "SIGNAL_ID|SYMBOL|TF|SIGNAL_TIME|LOG_TIME|DIR|CASE_NUM|CASE_NAME"
-      "|ENTRY|SL|TP1|TP2|TP3|ATR|SL_DIST_ATR|TP1_DIST_ATR|RR_RATIO|SESSION";
-
-   bool isNew;
-   int fh = SL_OpenAppend(SL_GetSignalPath(), header, isNew);
-   if(fh == INVALID_HANDLE) return;
 
    // Tính các chỉ số phái sinh
    double slDist    = MathAbs(entry - sl);
@@ -222,8 +253,7 @@ void LogSignalEntry(datetime signalTime,
               + DoubleToString(rrRatio, 3)          + "|"
               + SL_GetSessionName(sessionBlock);
 
-   FileWriteString(fh, row + "\n");
-   FileClose(fh);
+   QueueSignalRow(row);
 }
 
 //+------------------------------------------------------------------+
@@ -234,21 +264,12 @@ void LogOutcomePending(datetime signalTime, int caseNum, bool isBuy)
 {
    if(!InpEnableSignalLog || !s_loggerReady) return;
 
-   string header =
-      "SIGNAL_ID|SYMBOL|SIGNAL_TIME|OUTCOME|OUTCOME_TIME"
-      "|EXIT_PRICE|BARS_HELD|REASON|MFE|MAE";
-
-   bool isNew;
-   int fh = SL_OpenAppend(SL_GetOutcomePath(), header, isNew);
-   if(fh == INVALID_HANDLE) return;
-
    string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + "|"
               + Symbol()               + "|"
               + SL_FmtDT(signalTime)   + "|"
               + "PENDING|0|0|0|PENDING|0|0";
 
-   FileWriteString(fh, row + "\n");
-   FileClose(fh);
+   QueueOutcomeRow(row);
 }
 
 //+------------------------------------------------------------------+
@@ -267,14 +288,6 @@ void LogOutcomeResolved(datetime signalTime,
 {
    if(!InpEnableSignalLog || !s_loggerReady) return;
 
-   string header =
-      "SIGNAL_ID|SYMBOL|SIGNAL_TIME|OUTCOME|OUTCOME_TIME"
-      "|EXIT_PRICE|BARS_HELD|REASON|MFE|MAE";
-
-   bool isNew;
-   int fh = SL_OpenAppend(SL_GetOutcomePath(), header, isNew);
-   if(fh == INVALID_HANDLE) return;
-
    string outcomeStr, reason;
    if(outcome == 1)       { outcomeStr = "TP1";      reason = "TP1_HIT";       }
    else if(outcome == -1) { outcomeStr = "SL";       reason = "SL_HIT";        }
@@ -292,8 +305,7 @@ void LogOutcomeResolved(datetime signalTime,
               + DoubleToString(mfe, _Digits)          + "|"
               + DoubleToString(mae, _Digits);
 
-   FileWriteString(fh, row + "\n");
-   FileClose(fh);
+   QueueOutcomeRow(row);
 }
 
 //+------------------------------------------------------------------+
@@ -341,6 +353,52 @@ void CheckAndLogNewlyResolved()
       );
 
       g_outcomes[i].loggedToFile = true;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Flush toàn bộ hàng đợi ghi log ra đĩa cứng                      |
+//+------------------------------------------------------------------+
+void FlushLogQueues()
+{
+   if(!InpEnableSignalLog || !s_loggerReady) return;
+
+   // 1. Ghi và làm sạch Signal Queue
+   if(s_signalQueueCount > 0)
+   {
+      string header = "SIGNAL_ID|SYMBOL|TF|SIGNAL_TIME|LOG_TIME|DIR|CASE_NUM|CASE_NAME"
+                      "|ENTRY|SL|TP1|TP2|TP3|ATR|SL_DIST_ATR|TP1_DIST_ATR|RR_RATIO|SESSION";
+      bool isNew;
+      int fh = SL_OpenAppend(SL_GetSignalPath(), header, isNew);
+      if(fh != INVALID_HANDLE)
+      {
+         for(int i = 0; i < s_signalQueueCount; i++)
+         {
+            FileWriteString(fh, s_signalQueue[i] + "\n");
+         }
+         FileClose(fh);
+         s_signalQueueCount = 0;
+         ArrayResize(s_signalQueue, 0);
+      }
+   }
+
+   // 2. Ghi và làm sạch Outcome Queue
+   if(s_outcomeQueueCount > 0)
+   {
+      string header = "SIGNAL_ID|SYMBOL|SIGNAL_TIME|OUTCOME|OUTCOME_TIME"
+                      "|EXIT_PRICE|BARS_HELD|REASON|MFE|MAE";
+      bool isNew;
+      int fh = SL_OpenAppend(SL_GetOutcomePath(), header, isNew);
+      if(fh != INVALID_HANDLE)
+      {
+         for(int i = 0; i < s_outcomeQueueCount; i++)
+         {
+            FileWriteString(fh, s_outcomeQueue[i] + "\n");
+         }
+         FileClose(fh);
+         s_outcomeQueueCount = 0;
+         ArrayResize(s_outcomeQueue, 0);
+      }
    }
 }
 

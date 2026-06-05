@@ -185,7 +185,7 @@ input double InpSpreadSpikeMulti = 2.0;           // Spread spike threshold (x a
 //| INPUT GROUP: Signal Logging                                        |
 //+------------------------------------------------------------------+
 input string inp_grp_log        = "========== Signal Logging =========="; // ---
-input bool   InpEnableSignalLog = true;                   // Enable signal logging to CSV
+input bool   InpEnableSignalLog = false;                  // Enable signal logging to CSV
 input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside MQL4/Files/)
 
 //+------------------------------------------------------------------+

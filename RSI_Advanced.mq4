@@ -124,12 +124,13 @@ int OnInit()
    InitSessionStats();
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
-   LoggerInit(false); // KhÃ¡Â»Å¸i tÃ¡ÂºÂ¡o logger (khÃƒÂ´ng xoÃƒÂ¡ file nÃ¡ÂºÂ¿u Ã„â€˜ÃƒÂ£ cÃƒÂ³)
+   LoggerInit(false); // KhÃƒÂ¡Ã‚Â»Ã…Â¸i tÃƒÂ¡Ã‚ÂºÃ‚Â¡o logger (khÃƒÆ’Ã‚Â´ng xoÃƒÆ’Ã‚Â¡ file nÃƒÂ¡Ã‚ÂºÃ‚Â¿u Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â£ cÃƒÆ’Ã‚Â³)
    return(INIT_SUCCEEDED);
 }
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   FlushLogQueues();
    SavePanelPosition();
    DeleteObjectsByPrefix(PREFIX_ARROW);
    DeleteObjectsByPrefix(PREFIX_PANEL);
@@ -188,7 +189,7 @@ int OnCalculate(const int rates_total,
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
-      LoggerInit(true); // fullRecalc: reset file log, ghi lÃ¡ÂºÂ¡i tÃ¡Â»Â« Ã„â€˜Ã¡ÂºÂ§u
+      LoggerInit(true); // fullRecalc: reset file log, ghi lÃƒÂ¡Ã‚ÂºÃ‚Â¡i tÃƒÂ¡Ã‚Â»Ã‚Â« Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚ÂºÃ‚Â§u
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
@@ -311,7 +312,7 @@ int OnCalculate(const int rates_total,
       //--- Closed bars: create arrow + store signal
       if(buySignal > 0)
       {
-         //--- NÃ¡ÂºÂ¿u prev signal lÃƒÂ  SELL cÃƒÂ²n pending Ã¢â€ â€™ reversal
+         //--- NÃƒÂ¡Ã‚ÂºÃ‚Â¿u prev signal lÃƒÆ’Ã‚Â  SELL cÃƒÆ’Ã‚Â²n pending ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ reversal
          if(g_signalCount > 0 && !g_signals[g_signalCount-1].isBuySignal)
          {
             SignalData prev = g_signals[g_signalCount-1];
@@ -341,14 +342,14 @@ int OnCalculate(const int rates_total,
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
-         //--- Log signal mÃ¡Â»â€ºi + trÃ¡ÂºÂ¡ng thÃƒÂ¡i pending
+         //--- Log signal mÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi + trÃƒÂ¡Ã‚ÂºÃ‚Â¡ng thÃƒÆ’Ã‚Â¡i pending
          LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
                         GetSessionBlock(time[i]));
          LogOutcomePending(time[i], buySignal, true);
       }
       if(sellSignal > 0)
       {
-         //--- NÃ¡ÂºÂ¿u prev signal lÃƒÂ  BUY cÃƒÂ²n pending Ã¢â€ â€™ reversal
+         //--- NÃƒÂ¡Ã‚ÂºÃ‚Â¿u prev signal lÃƒÆ’Ã‚Â  BUY cÃƒÆ’Ã‚Â²n pending ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ reversal
          if(g_signalCount > 0 && g_signals[g_signalCount-1].isBuySignal)
          {
             SignalData prev = g_signals[g_signalCount-1];
@@ -377,7 +378,7 @@ int OnCalculate(const int rates_total,
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
-         //--- Log signal mÃ¡Â»â€ºi + trÃ¡ÂºÂ¡ng thÃƒÂ¡i pending
+         //--- Log signal mÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi + trÃƒÂ¡Ã‚ÂºÃ‚Â¡ng thÃƒÆ’Ã‚Â¡i pending
          LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
                         GetSessionBlock(time[i]));
          LogOutcomePending(time[i], sellSignal, false);
@@ -400,6 +401,10 @@ int OnCalculate(const int rates_total,
          }
       }
    }
+   if(fullRecalc)
+   {
+      FlushLogQueues(); // Bulk flush all historical log rows to CSV
+   }
    //=================================================================
    // V11: Update multi-source data
    //=================================================================
@@ -409,12 +414,13 @@ int OnCalculate(const int rates_total,
    // Lightweight: every tick
    RefreshIntermarketData();
    CheckPendingOutcomes();
-   CheckAndLogNewlyResolved(); // Ghi outcome vÃ¡Â»Â«a Ã„â€˜Ã†Â°Ã¡Â»Â£c resolve vÃƒÂ o CSV
+   CheckAndLogNewlyResolved(); // Ghi outcome vÃƒÂ¡Ã‚Â»Ã‚Â«a Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã‚Â£c resolve vÃƒÆ’Ã‚Â o CSV
    UpdateSpreadRegime();
    // Heavy: only per new bar
    if(isNewBar)
    {
       s_lastBarTime = currentBarTime;
+      FlushLogQueues(); // Flush any live-queued signals/outcomes to CSV
       UpdateSessionStats();
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
