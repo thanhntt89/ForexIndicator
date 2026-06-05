@@ -4,7 +4,6 @@
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_PANELDRAWING_MQH
 #define RSI_ADV_PANELDRAWING_MQH
-
 #include "Config.mqh"
 #include "Structs.mqh"
 #include "Globals.mqh"
@@ -16,11 +15,19 @@
 #include "IntermarketAnalysis.mqh"
 #include "SessionStatistics.mqh"
 #include "WalkForward.mqh"
-
 //+------------------------------------------------------------------+
 void CreateRectangleLabel(string name,int x,int y,int w,int h,color bg,color brd)
 {
-   if(ObjectFind(name)>=0) ObjectDelete(name);
+   if(ObjectFind(name)>=0)
+   {
+      ObjectSetInteger(0,name,OBJPROP_XDISTANCE,x);
+      ObjectSetInteger(0,name,OBJPROP_YDISTANCE,y);
+      ObjectSetInteger(0,name,OBJPROP_XSIZE,w);
+      ObjectSetInteger(0,name,OBJPROP_YSIZE,h);
+      ObjectSetInteger(0,name,OBJPROP_BGCOLOR,bg);
+      ObjectSetInteger(0,name,OBJPROP_BORDER_COLOR,brd);
+      return;
+   }
    ObjectCreate(name,OBJ_RECTANGLE_LABEL,0,0,0);
    ObjectSetInteger(0,name,OBJPROP_XDISTANCE,x);
    ObjectSetInteger(0,name,OBJPROP_YDISTANCE,y);
@@ -34,10 +41,18 @@ void CreateRectangleLabel(string name,int x,int y,int w,int h,color bg,color brd
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 }
-
 void CreateTextLabel(string name,int x,int y,string text,color clr,int fs,bool bold)
 {
-   if(ObjectFind(name)>=0) ObjectDelete(name);
+   if(ObjectFind(name)>=0)
+   {
+      ObjectSetString(0,name,OBJPROP_TEXT,text);
+      ObjectSetInteger(0,name,OBJPROP_COLOR,clr);
+      ObjectSetInteger(0,name,OBJPROP_XDISTANCE,x);
+      ObjectSetInteger(0,name,OBJPROP_YDISTANCE,y);
+      ObjectSetString(0,name,OBJPROP_FONT,bold?"Arial Bold":"Arial");
+      ObjectSetInteger(0,name,OBJPROP_FONTSIZE,fs);
+      return;
+   }
    ObjectCreate(name,OBJ_LABEL,0,0,0);
    ObjectSetInteger(0,name,OBJPROP_XDISTANCE,x);
    ObjectSetInteger(0,name,OBJPROP_YDISTANCE,y);
@@ -50,35 +65,40 @@ void CreateTextLabel(string name,int x,int y,string text,color clr,int fs,bool b
    ObjectSetInteger(0,name,OBJPROP_SELECTABLE,false);
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 }
-
 //+------------------------------------------------------------------+
 void DrawInfoPanel(int signalIndex)
 {
-   DeleteObjectsByPrefix(PREFIX_PANEL);
    if(!InpShowPanel) return;
    if(signalIndex < 0 || signalIndex >= g_signalCount) return;
+
+   // Track layout changes to avoid unnecessary delete/recreate
+   static int  s_lastPanelHeight = 0;
+   static int  s_lastSignalIndex = -1;
+   static bool s_lastInvalidated = false;
+   static bool s_lastSuppressZones = false;
+   static bool s_lastHasProb = false;
+   static bool s_lastHasMTF = false;
+   static bool s_lastHasV11 = false;
+   static int  s_lastMTFCount = 0;
+   static int  s_lastVisibleZones = 0;
 
    int px = g_panelPosX, py = g_panelPosY;
    int pw = InpPanelWidth, fs = InpPanelFontSize;
    int lh = fs + 6, pad = 8, titleBarH = lh + 6;
-
    SignalData sig = g_signals[signalIndex];
    bool isBuy = sig.isBuySignal;
    string dir = isBuy ? "BUY" : "SELL";
    color dirClr = isBuy ? InpPanelBuyColor : InpPanelSellColor;
-
    // Pre-calc
    string detailText = isBuy ? GetCaseDetailBuy(sig.caseNumber) : GetCaseDetailSell(sig.caseNumber);
    string detailLines[];
    int detailCount = StringSplit(detailText, '|', detailLines);
    int barsAgo = iBarShift(NULL, 0, sig.signalTime, false);
    if(barsAgo < 0) barsAgo = 0;
-
    double slDist = MathAbs(sig.entryPrice - sig.stopLoss);
    double curPrice = iClose(NULL, 0, 0);
    double plDist = isBuy ? (curPrice - sig.entryPrice) : (sig.entryPrice - curPrice);
    bool isStale = (barsAgo > 20 && plDist < -slDist * 0.5);
-
    double tp1Dist = MathAbs(sig.takeProfit1 - sig.entryPrice);
    double tp2Dist = MathAbs(sig.takeProfit2 - sig.entryPrice);
    double tp3Dist = MathAbs(sig.takeProfit3 - sig.entryPrice);
@@ -86,15 +106,12 @@ void DrawInfoPanel(int signalIndex)
    double tp1R = PriceToRMultiple(tp1Dist, slDist);
    double tp2R = PriceToRMultiple(tp2Dist, slDist);
    double tp3R = PriceToRMultiple(tp3Dist, slDist);
-
    bool isInvalidated = false;
    if(isBuy && curPrice <= sig.stopLoss) isInvalidated = true;
    if(!isBuy && curPrice >= sig.stopLoss) isInvalidated = true;
-
    bool hasProb = (InpShowProbability && g_currentProb.totalSamples >= GetMinSamplesForTimeframe());
    bool hasMTF = (InpShowMTF && g_mtfCount > 0);
    bool hasZones = (InpEntryZoneCount >= 2 && g_validZoneCount >= 1 && !isInvalidated);
-
    int mtfAgree = 0;
    if(hasMTF) mtfAgree = CalculateMTFAgreement();
    TradeRecommendation rec;
@@ -104,19 +121,48 @@ void DrawInfoPanel(int signalIndex)
          sig.caseNumber, isBuy, g_currentProb.probTP1, g_currentProb.probSL,
          g_currentProb.totalSamples, mtfAgree, slDist, tp1Dist, sig.atrValue, sig.signalTime);
    }
-
+   // V11: Suppress entry zones when recommendation is AVOID/WAIT/COUNTER_TREND
+   bool suppressZones = false;
+   if(!isInvalidated)
+   {
+      if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
+         suppressZones = true;
+   }
    int visibleZones = 0;
    if(hasZones)
    {
       for(int z = 0; z < 5; z++)
          if(g_entryZones[z].isValid) visibleZones++;
    }
-
    // V11: Check which advanced metrics have data
    bool hasV11Data = (g_intermarket.isAvailable ||
                       g_outcomeCount > 0 ||
                       g_walkForward.isSamples > 0 ||
                       InpUseSpreadRegime);
+
+   // Detect layout change → need full redraw (delete stale objects)
+   bool layoutChanged = false;
+   if(signalIndex != s_lastSignalIndex)     layoutChanged = true;
+   if(isInvalidated != s_lastInvalidated)   layoutChanged = true;
+   if(suppressZones != s_lastSuppressZones) layoutChanged = true;
+   if(hasProb != s_lastHasProb)             layoutChanged = true;
+   if(hasMTF != s_lastHasMTF)               layoutChanged = true;
+   if(hasV11Data != s_lastHasV11)           layoutChanged = true;
+   if(g_mtfCount != s_lastMTFCount)         layoutChanged = true;
+   if(visibleZones != s_lastVisibleZones)   layoutChanged = true;
+
+   if(layoutChanged)
+   {
+      DeleteObjectsByPrefix(PREFIX_PANEL);
+      s_lastSignalIndex   = signalIndex;
+      s_lastInvalidated   = isInvalidated;
+      s_lastSuppressZones = suppressZones;
+      s_lastHasProb       = hasProb;
+      s_lastHasMTF        = hasMTF;
+      s_lastHasV11        = hasV11Data;
+      s_lastMTFCount      = g_mtfCount;
+      s_lastVisibleZones  = visibleZones;
+   }
 
    // ============================================
    // PASS 1: Height
@@ -134,22 +180,26 @@ void DrawInfoPanel(int signalIndex)
    calcY += 3;
    calcY += lh;
    calcY += lh;
-
-   if(hasZones)
+   if(hasZones && !suppressZones)
    {
       calcY += 3;
       calcY += lh;
       calcY += visibleZones * lh;
       calcY += lh;
    }
-
+   else if(hasZones && suppressZones)
+   {
+      calcY += 3;
+      calcY += lh;     // "Entry Zones: SUPPRESSED"
+      calcY += lh;     // reason line
+      calcY += lh;     // metrics line
+   }
    if(hasProb)
    {
       calcY += 3;
       calcY += lh; calcY += lh; calcY += lh;
       calcY += lh; calcY += lh; calcY += lh; calcY += lh;
    }
-
    if(hasMTF)
    {
       calcY += 3;
@@ -157,7 +207,6 @@ void DrawInfoPanel(int signalIndex)
       calcY += g_mtfCount * lh;
       calcY += lh;
    }
-
    // V11 metrics - only count sections with data
    if(hasV11Data)
    {
@@ -169,10 +218,8 @@ void DrawInfoPanel(int signalIndex)
       if(InpUseSpreadRegime) calcY += lh;
       if(g_rollingPerf.totalTracked > 0) calcY += lh;
    }
-
    calcY += lh + 4;
    int totalH = calcY;
-
    if(!g_panelUserMoved)
    {
       int chartH = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
@@ -183,32 +230,27 @@ void DrawInfoPanel(int signalIndex)
          if(px + pw > chartW - 10)     { px = MathMax(0, chartW - pw - 10);     g_panelPosX = px; }
       }
    }
-
    // ============================================
    // PASS 2: Background
    // ============================================
    color borderClr = isInvalidated ? clrRed : InpPanelBorderColor;
    CreateRectangleLabel(PREFIX_PANEL+"0_BG", px, py, pw, totalH, InpPanelBgColor, borderClr);
    CreateRectangleLabel(PREFIX_PANEL+"0_TB", px, py, pw, titleBarH, InpPanelBorderColor, InpPanelBorderColor);
-
    // ============================================
    // PASS 3: Content
    // ============================================
    int cy = py + 3;
-
    //--- TITLE ---
    string titleText = "RSI Advanced - " + dir + " SIGNAL";
    if(isInvalidated) titleText += " [INVALID]";
    CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText,
       isInvalidated ? clrRed : InpPanelTitleColor, fs+1, true);
    cy += titleBarH + 2 - 3;
-
    //--- CASE ---
    CreateTextLabel(PREFIX_PANEL+"2_C", px+pad, cy,
       "Case "+IntegerToString(sig.caseNumber)+": "+GetCaseName(sig.caseNumber),
       dirClr, fs, true);
    cy += lh;
-
    //--- DETAIL ---
    for(int i=0; i<detailCount && i<3; i++)
    {
@@ -217,7 +259,6 @@ void DrawInfoPanel(int signalIndex)
       cy += lh - 2;
    }
    cy += 2;
-
    //--- INFO LINE ---
    int minsAgo = barsAgo * Period();
    string ageShort;
@@ -228,7 +269,6 @@ void DrawInfoPanel(int signalIndex)
       " | "+TimeToString(sig.signalTime, TIME_MINUTES)+" | Age: "+ageShort,
       InpPanelTextColor, fs-1, false);
    cy += lh;
-
    //--- STALE ---
    if(isStale && !isInvalidated)
    {
@@ -236,7 +276,6 @@ void DrawInfoPanel(int signalIndex)
          "!! STALE SIGNAL - Consider closing !!", clrRed, fs-1, true);
       cy += lh;
    }
-
    //--- INVALIDATED ---
    if(isInvalidated)
    {
@@ -245,7 +284,6 @@ void DrawInfoPanel(int signalIndex)
       cy += lh;
    }
    cy += 3;
-
    //--- RECOMMENDATION ---
    if(isInvalidated)
    {
@@ -271,7 +309,6 @@ void DrawInfoPanel(int signalIndex)
       cy += lh;
    }
    cy += 3;
-
    //--- ATR + SL:TP ---
    CreateTextLabel(PREFIX_PANEL+"5_A", px+pad, cy,
       "ATR:"+DoubleToString(sig.atrValue,_Digits)+
@@ -281,7 +318,6 @@ void DrawInfoPanel(int signalIndex)
       DoubleToString(InpTPRatio*InpTP3Multiplier,1),
       InpPanelDimColor, fs-2, false);
    cy += lh;
-
    //--- P/L + R:R ---
    color plClr = plDist >= 0 ? clrLime : clrRed;
    string plText = "P/L:"+FormatPL(plDist, slDist);
@@ -292,11 +328,10 @@ void DrawInfoPanel(int signalIndex)
              "|1:"+DoubleToString(tp3R,1);
    CreateTextLabel(PREFIX_PANEL+"6_PL", px+pad, cy, plText, plClr, fs-1, true);
    cy += lh;
-
    //==========================================================
    // ENTRY ZONES
    //==========================================================
-   if(hasZones)
+   if(hasZones && !suppressZones)
    {
       cy += 3;
       CreateTextLabel(PREFIX_PANEL+"EZ_T", px+pad, cy,
@@ -304,7 +339,6 @@ void DrawInfoPanel(int signalIndex)
          " rec | Risk:"+DoubleToString(InpTotalRiskPercent,1)+"%)",
          InpPanelTitleColor, fs-1, true);
       cy += lh;
-
       double bestEV = -999;
       int bestZone = 0;
       for(int z = 0; z < 5; z++)
@@ -312,11 +346,9 @@ void DrawInfoPanel(int signalIndex)
          if(!g_entryZones[z].isValid) continue;
          if(g_entryZones[z].expectedValue > bestEV)
          { bestEV = g_entryZones[z].expectedValue; bestZone = z; }
-
          color zClr = GetZoneColor(z);
          if(!g_entryZones[z].isRecommended) zClr = InpPanelDimColor;
          string evStar = (g_entryZones[z].expectedValue > 0) ? " *" : "";
-
          string zLine = "Z"+IntegerToString(z+1)+" "+
             g_entryZones[z].zoneName+":"+DoubleToString(g_entryZones[z].price, _Digits)+
             " "+DoubleToString(g_entryZones[z].lotSize, 2)+"lot"+
@@ -326,7 +358,6 @@ void DrawInfoPanel(int signalIndex)
          CreateTextLabel(PREFIX_PANEL+"EZ_"+IntegerToString(z), px+pad+3, cy, zLine, zClr, fs-2, false);
          cy += lh;
       }
-
       string bestText = "Best: Z"+IntegerToString(bestZone+1);
       if(bestEV > 0) bestText += " EV+"+DoubleToString(bestEV, 2)+"R";
       else bestText += " (no positive EV)";
@@ -334,7 +365,28 @@ void DrawInfoPanel(int signalIndex)
          bestEV > 0 ? clrLime : clrOrange, fs-2, true);
       cy += lh;
    }
-
+   else if(hasZones && suppressZones)
+   {
+      cy += 3;
+      CreateTextLabel(PREFIX_PANEL+"EZ_T", px+pad, cy,
+         "Entry Zones: SUPPRESSED", clrGray, fs-1, true);
+      cy += lh;
+      CreateTextLabel(PREFIX_PANEL+"EZ_R1", px+pad+3, cy,
+         "Score "+IntegerToString(rec.confidence)+"/100 below entry threshold (35)",
+         clrGray, fs-2, false);
+      cy += lh;
+      string metLine = "Win:"+DoubleToString(g_currentProb.probTP1,1)+"%";
+      double evCalc = 0;
+      if(slDist > 0)
+         evCalc = (g_currentProb.probTP1/100.0 * tp1Dist/slDist) - ((1.0 - g_currentProb.probTP1/100.0) * 1.0);
+      metLine += " | EV:"+DoubleToString(evCalc,2)+"R";
+      if(g_walkForward.oosSamples >= 3 && !g_walkForward.isRobust) metLine += " | WF overfit";
+      if(g_spreadRegime.isExtreme) metLine += " | Spread extreme";
+      else if(g_spreadRegime.isSpike) metLine += " | Spread spike";
+      CreateTextLabel(PREFIX_PANEL+"EZ_R2", px+pad+3, cy,
+         metLine, clrOrange, fs-2, false);
+      cy += lh;
+   }
    //==========================================================
    // PROBABILITY
    //==========================================================
@@ -347,32 +399,27 @@ void DrawInfoPanel(int signalIndex)
          "Prob [n="+IntegerToString(g_currentProb.totalSamples)+"]  "+confTxt,
          InpPanelTitleColor, fs-1, true);
       cy += lh;
-
       double winP = g_currentProb.probTP1, lossP = g_currentProb.probSL;
       color wlClr = winP >= lossP ? clrLime : clrOrange;
       CreateTextLabel(PREFIX_PANEL+"P_WL", px+pad, cy,
          "Win:"+DoubleToString(winP,1)+"%  |  Loss:"+DoubleToString(lossP,1)+"%",
          wlClr, fs, true);
       cy += lh;
-
       CreateTextLabel(PREFIX_PANEL+"P_1", px+pad, cy,
          " TP1:"+DoubleToString(g_currentProb.probTP1,1)+"%"+ProbBar(g_currentProb.probTP1)+
          "("+IntegerToString(g_currentProb.samplesTP1)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
          InpTP1LineColor, fs-2, false);
       cy += lh;
-
       CreateTextLabel(PREFIX_PANEL+"P_2", px+pad, cy,
          " TP2:"+DoubleToString(g_currentProb.probTP2,1)+"%"+ProbBar(g_currentProb.probTP2)+
          "("+IntegerToString(g_currentProb.samplesTP2)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
          InpTP2LineColor, fs-2, false);
       cy += lh;
-
       CreateTextLabel(PREFIX_PANEL+"P_3", px+pad, cy,
          " TP3:"+DoubleToString(g_currentProb.probTP3,1)+"%"+ProbBar(g_currentProb.probTP3)+
          "("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
          InpTP3LineColor, fs-2, false);
       cy += lh;
-
       double edge = MeasureEdgeFromHistory(sig.caseNumber, isBuy, GetMaxForwardBarsForTimeframe());
       string avgEdge = "";
       if(g_currentProb.avgBarsToTP1 > 0) avgEdge += "TP1~"+IntegerToString((int)g_currentProb.avgBarsToTP1)+"bars ";
@@ -380,7 +427,6 @@ void DrawInfoPanel(int signalIndex)
       avgEdge += "Edge:"+DoubleToString(edge*100,1)+"%";
       CreateTextLabel(PREFIX_PANEL+"P_AE", px+pad, cy, " "+avgEdge, InpPanelDimColor, fs-2, false);
       cy += lh;
-
       string accMtf = " Acc:~72-78%";
       if(hasMTF)
       {
@@ -394,7 +440,6 @@ void DrawInfoPanel(int signalIndex)
       CreateTextLabel(PREFIX_PANEL+"P_AM", px+pad, cy, accMtf, InpPanelDimColor, fs-2, false);
       cy += lh;
    }
-
    //==========================================================
    // MTF
    //==========================================================
@@ -404,7 +449,6 @@ void DrawInfoPanel(int signalIndex)
       CreateTextLabel(PREFIX_PANEL+"M_T", px+pad, cy,
          "Multi-TF Signal Status", InpPanelTitleColor, fs-1, true);
       cy += lh;
-
       for(int t=0; t<g_mtfCount; t++)
       {
          color tfClr; string sigDir2;
@@ -424,7 +468,6 @@ void DrawInfoPanel(int signalIndex)
             tfClr, fs-2, false);
          cy += lh;
       }
-
       int ag = CalculateMTFAgreement();
       string agTxt; color agClr;
       if(ag > 50)       { agTxt="STRONG BULL";  agClr=InpMTF_BullColor; }
@@ -446,7 +489,6 @@ void DrawInfoPanel(int signalIndex)
          agClr, fs-1, true);
       cy += lh;
    }
-
    //==========================================================
    // V11: ADVANCED METRICS (auto-hide empty sections)
    //==========================================================
@@ -456,7 +498,6 @@ void DrawInfoPanel(int signalIndex)
       CreateTextLabel(PREFIX_PANEL+"V_T", px+pad, cy,
          "Advanced Metrics", InpPanelTitleColor, fs-1, true);
       cy += lh;
-
       if(g_intermarket.isAvailable)
       {
          string interText = GetIntermarketDisplayText();
@@ -464,14 +505,12 @@ void DrawInfoPanel(int signalIndex)
          CreateTextLabel(PREFIX_PANEL+"V_IM", px+pad+3, cy, interText, interClr, fs-2, false);
          cy += lh;
       }
-
       if(g_outcomeCount > 0)
       {
          string sesText = GetCurrentSessionDisplay();
          CreateTextLabel(PREFIX_PANEL+"V_SS", px+pad+3, cy, sesText, InpPanelDimColor, fs-2, false);
          cy += lh;
       }
-
       if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0)
       {
          string wfText = GetWalkForwardDisplay();
@@ -479,7 +518,6 @@ void DrawInfoPanel(int signalIndex)
          CreateTextLabel(PREFIX_PANEL+"V_WF", px+pad+3, cy, wfText, wfClr, fs-2, false);
          cy += lh;
       }
-
       if(InpUseSpreadRegime)
       {
          string spreadText = GetSpreadDisplay();
@@ -492,7 +530,6 @@ void DrawInfoPanel(int signalIndex)
             spreadText+" | "+regimeText, combinedClr, fs-2, false);
          cy += lh;
       }
-
       if(g_rollingPerf.totalTracked > 0)
       {
          string rpText = GetRollingPerfDisplay();
@@ -501,11 +538,9 @@ void DrawInfoPanel(int signalIndex)
          cy += lh;
       }
    }
-
    //--- FOOTER ---
    CreateTextLabel(PREFIX_PANEL+"Z_F", px+pad, cy,
       "Drag title to move | Click arrow", InpPanelDimColor, fs-2, false);
    ChartRedraw();
 }
-
 #endif

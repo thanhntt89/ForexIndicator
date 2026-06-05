@@ -61,6 +61,7 @@ string GetTimeframeString()
 //+------------------------------------------------------------------+
 //| Delete all objects with prefix                                     |
 //+------------------------------------------------------------------+
+#ifndef __MQL5__
 void DeleteObjectsByPrefix(string prefix)
 {
    for(int i = ObjectsTotal() - 1; i >= 0; i--)
@@ -70,6 +71,7 @@ void DeleteObjectsByPrefix(string prefix)
          ObjectDelete(name);
    }
 }
+#endif
 
 //+------------------------------------------------------------------+
 //| Get minimum bars required                                          |
