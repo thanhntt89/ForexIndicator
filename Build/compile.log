@@ -2155,3 +2155,261 @@ D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information
 D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10) : warning 31: variable 'trendClr' not used
 Result: 0 errors, 1 warnings, 72 msec elapsed
 
+
+==========================================
+[MT4 Build: RSI_Advanced_v10.20_20260605_135423.ex4] @ 06/05/2026 13:54:29
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh : information: including 'IntermarketAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh : information: including 'WalkForward.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionStatistics.mqh : information: including 'SessionStatistics.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10) : warning 31: variable 'trendClr' not used
+Result: 0 errors, 1 warnings, 69 msec elapsed
+
+[06/05/2026 13:54:34] MT5 FAILED: RSI_Advanced_v10.20_20260605_135423.ex5
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: compiling D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5(51,9) : warning 30: built-in macro '__MQL5__' redefinition
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionStatistics.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(15,5) : error 282: idenfitier '_Period' already used
+ : information: info    built-in variable '_Period'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(17,27) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(47,47) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(213,28) : warning 43: possible loss of data due to type conversion from 'long' to 'double'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(214,28) : warning 43: possible loss of data due to type conversion from 'long' to 'double'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(46,11) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(58,27) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(66,16) : error 199: wrong parameters count
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: info    built-in: int ObjectsTotal(long,int,int)
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(68,21) : error 199: wrong parameters count
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: info    built-in: string ObjectName(long,int,int,int)
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(68,21) : warning 94: implicit conversion from 'unknown' to 'string'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(102,13) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(114,13) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(126,13) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(165,24) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(172,21) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(181,13) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh(182,20) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(103,23) : error 256: undeclared identifier 'AccountServer'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(103,37) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(103,23) : warning 94: implicit conversion from 'unknown' to 'string'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(130,10) : error 256: undeclared identifier 'TimeHour'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(130,19) : error 152: 'localTime' - some operator expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(130,29) : error 154: semicolon expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(130,29) : warning 89: result of expression not used
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(158,11) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(169,11) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(173,23) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(179,11) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(183,45) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(201,49) : error 256: undeclared identifier 'MODE_FREEZELEVEL'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(214,20) : error 256: undeclared identifier 'TimeHour'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(214,29) : error 152: 'signalTime' - some operator expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(274,32) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(297,32) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(362,44) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(366,82) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(368,17) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(376,31) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(377,16) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(381,14) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh(408,18) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(36,44) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(51,44) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(89,34) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(97,34) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(104,41) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(111,32) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10) : warning 31: variable 'trendClr' not used
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh(291,35) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh(353,34) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh(366,34) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(262,44) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(271,53) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(273,19) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(650,48) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(657,57) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(659,19) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(768,16) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(788,28) : error 256: undeclared identifier 'AccountBalance'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh(788,43) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh(66,19) : error 262: cannot convert enum
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: info    built-in: int iBars(const string,ENUM_TIMEFRAMES)
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh(82,20) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(37,71) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(39,22) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(133,44) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(161,47) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(162,28) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(165,31) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(168,16) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(383,25) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(385,26) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(386,26) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(402,22) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(418,25) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh(425,68) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh(222,28) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh(19,62) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh(39,17) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh(45,17) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh(62,35) : error 157: ')' - expression expected
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh(39,56) : error 157: ')' - expression expected
+Result: 75 errors, 7 warnings
+
+
+==========================================
+[MT4 Build: RSI_Advanced_v10.20_20260605_135808.ex4] @ 06/05/2026 13:58:14
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh : information: including 'IntermarketAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh : information: including 'WalkForward.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionStatistics.mqh : information: including 'SessionStatistics.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10) : warning 31: variable 'trendClr' not used
+Result: 0 errors, 1 warnings, 73 msec elapsed
+
+
+==========================================
+[MT5 Build: RSI_Advanced_v10.20_20260605_135808.ex5] @ 06/05/2026 13:58:20
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: compiling D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5(51,9) : warning 30: built-in macro '__MQL5__' redefinition
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionStatistics.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(17,27) : warning 42: implicit enum conversion
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(220,30) : warning 43: possible loss of data due to type conversion from 'long' to 'double'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(221,30) : warning 43: possible loss of data due to type conversion from 'long' to 'double'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh(222,30) : warning 43: possible loss of data due to type conversion from 'long' to 'double'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10) : warning 31: variable 'trendClr' not used
+ : information: generating code
+ : information: generating code 3%
+ : information: generating code 6%
+ : information: generating code 9%
+ : information: generating code 12%
+ : information: generating code 15%
+ : information: generating code 18%
+ : information: generating code 21%
+ : information: generating code 24%
+ : information: generating code 27%
+ : information: generating code 30%
+ : information: generating code 33%
+ : information: generating code 36%
+ : information: generating code 39%
+ : information: generating code 42%
+ : information: generating code 45%
+ : information: generating code 48%
+ : information: generating code 51%
+ : information: generating code 54%
+ : information: generating code 57%
+ : information: generating code 60%
+ : information: generating code 63%
+ : information: generating code 66%
+ : information: generating code 69%
+ : information: generating code 72%
+ : information: generating code 75%
+ : information: generating code 78%
+ : information: generating code 81%
+ : information: generating code 84%
+ : information: generating code 87%
+ : information: generating code 90%
+ : information: generating code 93%
+ : information: generating code 95%
+ : information: generating code 100%
+ : information: code generated
+Result: 0 errors, 6 warnings, 974 ms elapsed, cpu='X64 Regular'
+
