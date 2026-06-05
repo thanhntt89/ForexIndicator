@@ -14,48 +14,39 @@
 #property link      "https://mastertradingwave.com"
 #property version "10.20"
 #property strict
-
 #property indicator_separate_window
 #property indicator_minimum  0
 #property indicator_maximum  100
 #property indicator_buffers  7
-
 #property indicator_label1  "RSI Fast"
 #property indicator_type1   DRAW_LINE
 #property indicator_color1  clrLime
 #property indicator_style1  STYLE_SOLID
 #property indicator_width1  2
-
 #property indicator_label2  "Signal"
 #property indicator_type2   DRAW_LINE
 #property indicator_color2  clrRed
 #property indicator_style2  STYLE_SOLID
 #property indicator_width2  2
-
 #property indicator_label3  "BB Upper"
 #property indicator_type3   DRAW_LINE
 #property indicator_color3  clrDeepSkyBlue
 #property indicator_style3  STYLE_SOLID
 #property indicator_width3  1
-
 #property indicator_label4  "BB Lower"
 #property indicator_type4   DRAW_LINE
 #property indicator_color4  clrDeepSkyBlue
 #property indicator_style4  STYLE_SOLID
 #property indicator_width4  1
-
 #property indicator_label5  "Baseline"
 #property indicator_type5   DRAW_LINE
 #property indicator_color5  clrOrange
 #property indicator_style5  STYLE_SOLID
 #property indicator_width5  2
-
 #property indicator_label6  "BuySignal"
 #property indicator_type6   DRAW_NONE
-
 #property indicator_label7  "SellSignal"
 #property indicator_type7   DRAW_NONE
-
 #property indicator_level1     20
 #property indicator_level2     32
 #property indicator_level3     50
@@ -64,7 +55,6 @@
 #property indicator_levelcolor clrGray
 #property indicator_levelstyle STYLE_DOT
 #property indicator_levelwidth 1
-
 //--- Buffers
 double BufferGreen[];
 double BufferRed[];
@@ -73,7 +63,6 @@ double BufferBBLower[];
 double BufferOrange[];
 double BufferBuySignal[];
 double BufferSellSignal[];
-
 //--- Includes
 #include <RSI_Advanced/Config.mqh>
 #include <RSI_Advanced/Structs.mqh>
@@ -93,7 +82,7 @@ double BufferSellSignal[];
 #include <RSI_Advanced/LineDrawing.mqh>
 #include <RSI_Advanced/PanelDrawing.mqh>
 #include <RSI_Advanced/ChartEvents.mqh>
-
+#include <RSI_Advanced/SignalLogger.mqh>
 //+------------------------------------------------------------------+
 int OnInit()
 {
@@ -101,7 +90,6 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
    if(InpBBDeviation <= 0 || InpSLRatio <= 0 || InpTPRatio <= 0)
       return(INIT_PARAMETERS_INCORRECT);
-
    SetIndexBuffer(0, BufferGreen);
    SetIndexBuffer(1, BufferRed);
    SetIndexBuffer(2, BufferBBUpper);
@@ -109,7 +97,6 @@ int OnInit()
    SetIndexBuffer(4, BufferOrange);
    SetIndexBuffer(5, BufferBuySignal);
    SetIndexBuffer(6, BufferSellSignal);
-
    ArraySetAsSeries(BufferGreen, false);
    ArraySetAsSeries(BufferRed, false);
    ArraySetAsSeries(BufferBBUpper, false);
@@ -117,19 +104,16 @@ int OnInit()
    ArraySetAsSeries(BufferOrange, false);
    ArraySetAsSeries(BufferBuySignal, false);
    ArraySetAsSeries(BufferSellSignal, false);
-
    int mb = GetMinBarsRequired();
    for(int i = 0; i < 7; i++)
    {
       SetIndexEmptyValue(i, EMPTY_VALUE);
       SetIndexDrawBegin(i, mb);
    }
-
    IndicatorShortName("RSI Advanced (" + IntegerToString(InpRSIPeriod) +
                       ") SL:" + DoubleToString(InpSLRatio, 1) +
                       " TP:" + DoubleToString(InpTPRatio, 1));
    IndicatorDigits(2);
-
    g_prevRatesTotal    = 0;
    g_lastAlertTime     = 0;
    g_signalCount       = 0;
@@ -137,14 +121,12 @@ int OnInit()
    g_outcomeCount      = 0;
    ArrayResize(g_signals, 0);
    ArrayResize(g_outcomes, 0);
-
    InitSessionStats();
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
-
+   LoggerInit(false); // KhÃ¡Â»Å¸i tÃ¡ÂºÂ¡o logger (khÃƒÂ´ng xoÃƒÂ¡ file nÃ¡ÂºÂ¿u Ã„â€˜ÃƒÂ£ cÃƒÂ³)
    return(INIT_SUCCEEDED);
 }
-
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
@@ -162,15 +144,16 @@ void OnDeinit(const int reason)
    g_outcomeCount   = 0;
    g_prevRatesTotal = 0;
    ChartRedraw();
+   #ifdef __MQL5__
+   ReleaseAllHandles();
+   #endif
 }
-
 //+------------------------------------------------------------------+
 void OnChartEvent(const int id, const long &lparam,
                   const double &dparam, const string &sparam)
 {
    HandleChartEvent(id, lparam, dparam, sparam);
 }
-
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,
                 const int prev_calculated,
@@ -188,10 +171,8 @@ int OnCalculate(const int rates_total,
    ArraySetAsSeries(high, false);
    ArraySetAsSeries(low, false);
    ArraySetAsSeries(close, false);
-
    int minBars = GetMinBarsRequired();
    if(rates_total < minBars) return(0);
-
    //--- Array management
    bool fullRecalc = false;
    if(prev_calculated <= 0 || rates_total != g_prevRatesTotal)
@@ -207,12 +188,11 @@ int OnCalculate(const int rates_total,
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
+      LoggerInit(true); // fullRecalc: reset file log, ghi lÃ¡ÂºÂ¡i tÃ¡Â»Â« Ã„â€˜Ã¡ÂºÂ§u
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
-
    g_prevRatesTotal = rates_total;
-
    //--- Calculation range
    int startBar;
    if(fullRecalc)
@@ -233,14 +213,11 @@ int OnCalculate(const int rates_total,
       startBar = MathMax(InpRSIPeriod, prev_calculated - 1 - lb);
       startBar = MathMax(startBar, rates_total - InpMaxBars);
    }
-
    //--- Calculate RSI lines
    CalculateRSILines(startBar, rates_total);
-
    //--- Signal detection range
    int sigStart = MathMax(startBar, InpRSIPeriod + InpBBPeriod + 2);
    sigStart = MathMax(sigStart, InpRSIPeriod + InpSignalMAPeriod + 2);
-
    if(!fullRecalc)
    {
       int keepCount = 0;
@@ -254,7 +231,6 @@ int OnCalculate(const int rates_total,
       g_signalCount = keepCount;
       ArrayResize(g_signals, g_signalCount);
    }
-
    //=================================================================
    // SIGNAL DETECTION
    //=================================================================
@@ -262,28 +238,21 @@ int OnCalculate(const int rates_total,
    {
       BufferBuySignal[i]  = EMPTY_VALUE;
       BufferSellSignal[i] = EMPTY_VALUE;
-
       bool isCurrentBar = (i == rates_total - 1);
-
       if(BufferGreen[i]   == EMPTY_VALUE || BufferGreen[i-1]  == EMPTY_VALUE) continue;
       if(BufferRed[i]     == EMPTY_VALUE || BufferRed[i-1]    == EMPTY_VALUE) continue;
       if(BufferOrange[i]  == EMPTY_VALUE) continue;
       if(BufferBBUpper[i] == EMPTY_VALUE || BufferBBLower[i]  == EMPTY_VALUE) continue;
-
       bool greenCrossUp   = (BufferGreen[i-1] <= BufferRed[i-1]) && (BufferGreen[i] > BufferRed[i]);
       bool greenCrossDown = (BufferGreen[i-1] >= BufferRed[i-1]) && (BufferGreen[i] < BufferRed[i]);
-
       double greenDelta = 0.0;
       if(i >= 2 && BufferGreen[i-2] != EMPTY_VALUE)
          greenDelta = BufferGreen[i] - BufferGreen[i-2];
-
       double adaptiveThresh = GetNormalizedAngleThreshold(i, BufferGreen);
       bool strongAngleUp    = (greenDelta >= adaptiveThresh);
       bool strongAngleDown  = (greenDelta <= -adaptiveThresh);
-
       int buySignal  = 0;
       int sellSignal = 0;
-
       if(InpEnableCase1 && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase1_Buy(i))  buySignal  = 1;
@@ -319,7 +288,6 @@ int OnCalculate(const int rates_total,
          if(CheckCase7_Buy(i))  buySignal  = 7;
          if(CheckCase7_Sell(i)) sellSignal = 7;
       }
-
       //--- Current bar: buffer only
       if(isCurrentBar)
       {
@@ -340,60 +308,80 @@ int OnCalculate(const int rates_total,
          }
          continue;
       }
-
       //--- Closed bars: create arrow + store signal
       if(buySignal > 0)
       {
+         //--- NÃ¡ÂºÂ¿u prev signal lÃƒÂ  SELL cÃƒÂ²n pending Ã¢â€ â€™ reversal
+         if(g_signalCount > 0 && !g_signals[g_signalCount-1].isBuySignal)
+         {
+            SignalData prev = g_signals[g_signalCount-1];
+            int barsRev = (int)MathRound((double)(time[i]-prev.signalTime)/(double)PeriodSeconds(Period()));
+            LogOutcomeResolved(prev.signalTime, prev.caseNumber, false, -2,
+                               time[i], close[i], barsRev, 0, 0);
+            // Mark corresponding outcome as logged
+            for(int oi = g_outcomeCount-1; oi >= 0; oi--)
+               if(g_outcomes[oi].signalTime == prev.signalTime && !g_outcomes[oi].isBuy && g_outcomes[oi].outcome == 0)
+               { g_outcomes[oi].outcome = -2; g_outcomes[oi].outcomeTime = time[i]; g_outcomes[oi].loggedToFile = true; break; }
+         }
          BufferBuySignal[i] = (double)buySignal;
          CreateSignalArrow(time[i], low[i], true, buySignal);
-
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
          double maxSlippage = atrNow * 0.15;
          double entryPrice = MathMin(baseEntry + maxSlippage, close[i] + atrNow * 0.3);
          entryPrice = MathMax(entryPrice, baseEntry);
-
          double sl, tp1, tp2, tp3, atrVal;
          CalculateSLTP(true, i, entryPrice, high, low, rates_total,
                        sl, tp1, tp2, tp3, atrVal);
-
          double slDist  = MathAbs(entryPrice - sl);
          double tp1Dist = MathAbs(tp1 - entryPrice);
          double maxSLDist = atrVal * InpSLRatio;
          if(slDist > maxSLDist * 1.5) sl = entryPrice - maxSLDist;
          slDist = MathAbs(entryPrice - sl);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
-
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
+         //--- Log signal mÃ¡Â»â€ºi + trÃ¡ÂºÂ¡ng thÃƒÂ¡i pending
+         LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
+                        GetSessionBlock(time[i]));
+         LogOutcomePending(time[i], buySignal, true);
       }
-
       if(sellSignal > 0)
       {
+         //--- NÃ¡ÂºÂ¿u prev signal lÃƒÂ  BUY cÃƒÂ²n pending Ã¢â€ â€™ reversal
+         if(g_signalCount > 0 && g_signals[g_signalCount-1].isBuySignal)
+         {
+            SignalData prev = g_signals[g_signalCount-1];
+            int barsRev = (int)MathRound((double)(time[i]-prev.signalTime)/(double)PeriodSeconds(Period()));
+            LogOutcomeResolved(prev.signalTime, prev.caseNumber, true, -2,
+                               time[i], close[i], barsRev, 0, 0);
+            for(int oi = g_outcomeCount-1; oi >= 0; oi--)
+               if(g_outcomes[oi].signalTime == prev.signalTime && g_outcomes[oi].isBuy && g_outcomes[oi].outcome == 0)
+               { g_outcomes[oi].outcome = -2; g_outcomes[oi].outcomeTime = time[i]; g_outcomes[oi].loggedToFile = true; break; }
+         }
          BufferSellSignal[i] = (double)sellSignal;
          CreateSignalArrow(time[i], high[i], false, sellSignal);
-
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
          double maxSlippage = atrNow * 0.15;
          double entryPrice = MathMax(baseEntry - maxSlippage, close[i] - atrNow * 0.3);
          entryPrice = MathMin(entryPrice, baseEntry);
-
          double sl, tp1, tp2, tp3, atrVal;
          CalculateSLTP(false, i, entryPrice, high, low, rates_total,
                        sl, tp1, tp2, tp3, atrVal);
-
          double slDist  = MathAbs(sl - entryPrice);
          double tp1Dist = MathAbs(entryPrice - tp1);
          double maxSLDist = atrVal * InpSLRatio;
          if(slDist > maxSLDist * 1.5) sl = entryPrice + maxSLDist;
          slDist = MathAbs(sl - entryPrice);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
-
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
+         //--- Log signal mÃ¡Â»â€ºi + trÃ¡ÂºÂ¡ng thÃƒÂ¡i pending
+         LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
+                        GetSessionBlock(time[i]));
+         LogOutcomePending(time[i], sellSignal, false);
       }
-
       //--- Alert on newly closed bar
       if(i == rates_total - 2 && (buySignal > 0 || sellSignal > 0))
       {
@@ -412,19 +400,17 @@ int OnCalculate(const int rates_total,
          }
       }
    }
-
    //=================================================================
    // V11: Update multi-source data
    //=================================================================
    static datetime s_lastBarTime = 0;
    datetime currentBarTime = iTime(NULL, 0, 0);
    bool isNewBar = (currentBarTime != s_lastBarTime);
-
    // Lightweight: every tick
    RefreshIntermarketData();
    CheckPendingOutcomes();
+   CheckAndLogNewlyResolved(); // Ghi outcome vÃ¡Â»Â«a Ã„â€˜Ã†Â°Ã¡Â»Â£c resolve vÃƒÂ o CSV
    UpdateSpreadRegime();
-
    // Heavy: only per new bar
    if(isNewBar)
    {
@@ -432,7 +418,6 @@ int OnCalculate(const int rates_total,
       UpdateSessionStats();
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
-
       // Memory management: cap outcomes at 500
       if(g_outcomeCount > 500)
       {
@@ -443,7 +428,6 @@ int OnCalculate(const int rates_total,
          ArrayResize(g_outcomes, 500);
       }
    }
-
    //=================================================================
    // UPDATE DISPLAY
    //=================================================================
@@ -452,13 +436,11 @@ int OnCalculate(const int rates_total,
       g_activeSignalIndex = g_signalCount - 1;
       SignalData activeSig = g_signals[g_activeSignalIndex];
       double curPrice = iClose(NULL, 0, 0);
-
       bool signalInvalidated = false;
       if(activeSig.isBuySignal && curPrice <= activeSig.stopLoss)
          signalInvalidated = true;
       if(!activeSig.isBuySignal && curPrice >= activeSig.stopLoss)
          signalInvalidated = true;
-
       if(signalInvalidated)
       {
          DeleteObjectsByPrefix(PREFIX_LINE);
@@ -467,31 +449,41 @@ int OnCalculate(const int rates_total,
          g_validZoneCount = 0;
          g_recommendedZoneCount = 0;
       }
-
       if(InpShowMTF) RefreshMTFData();
       if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
-
       if(g_intermarket.isAvailable)
          GetIntermarketScore(activeSig.isBuySignal);
+      // V11: Calculate suppressZones BEFORE drawing panel and zones
+      bool suppressZones = false;
+      if(!signalInvalidated)
+      {
+         int mtfAgree = 0;
+         if(InpShowMTF && g_mtfCount > 0) mtfAgree = CalculateMTFAgreement();
+         double slDist  = MathAbs(activeSig.entryPrice - activeSig.stopLoss);
+         double tp1Dist = MathAbs(activeSig.takeProfit1 - activeSig.entryPrice);
+         TradeRecommendation rec = GetTradeRecommendation(
+            activeSig.caseNumber, activeSig.isBuySignal,
+            g_currentProb.probTP1, g_currentProb.probSL,
+            g_currentProb.totalSamples, mtfAgree,
+            slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
+         if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
+            suppressZones = true;
+      }
 
       DrawInfoPanel(g_activeSignalIndex);
-
       if(!signalInvalidated)
       {
          DrawSLTPLines(g_activeSignalIndex);
-
          // Calculate and draw zones every tick (no cache)
          // Lightweight: only 5 zones max, no performance issue
          CalculateEntryZones(
             activeSig.isBuySignal, activeSig.barIndex,
             activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
             activeSig.atrValue, high, low, rates_total);
-         DrawZoneLines();
-
+         DrawZoneLines(suppressZones);
          if(InpShowProbability) DrawProbabilityLabels();
       }
    }
-
    return(rates_total);
 }
 //+------------------------------------------------------------------+

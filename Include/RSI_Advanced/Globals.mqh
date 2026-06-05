@@ -142,8 +142,11 @@ struct SignalOutcome
    double   entryPrice;
    double   stopLoss;
    double   takeProfit1;
-   int      outcome;        // 1=TP1 hit, -1=SL hit, 0=pending
+   int      outcome;        // 1=TP1 hit, -1=SL hit, -2=Reversal, 0=pending
    datetime outcomeTime;
+   double   mfe;            // Max Favorable Excursion from entry price
+   double   mae;            // Max Adverse Excursion from entry price
+   bool     loggedToFile;  // Prevent duplicate outcome logging
 };
 
 SignalOutcome g_outcomes[];

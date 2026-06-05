@@ -182,6 +182,13 @@ input bool   InpUseSpreadRegime  = true;          // Monitor spread anomalies
 input double InpSpreadSpikeMulti = 2.0;           // Spread spike threshold (x average)
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Signal Logging                                        |
+//+------------------------------------------------------------------+
+input string inp_grp_log        = "========== Signal Logging =========="; // ---
+input bool   InpEnableSignalLog = true;                   // Enable signal logging to CSV
+input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside MQL4/Files/)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Debug                                                 |
 //+------------------------------------------------------------------+
 input string inp_grp_debug      = "========== Debug =========="; // ---

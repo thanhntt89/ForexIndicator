@@ -132,15 +132,18 @@ void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
    ArrayResize(g_outcomes, g_outcomeCount);
 
    int idx = g_outcomeCount - 1;
-   g_outcomes[idx].signalTime = signalTime;
-   g_outcomes[idx].caseNumber = caseNum;
-   g_outcomes[idx].isBuy = isBuy;
+   g_outcomes[idx].signalTime   = signalTime;
+   g_outcomes[idx].caseNumber   = caseNum;
+   g_outcomes[idx].isBuy        = isBuy;
    g_outcomes[idx].sessionBlock = GetSessionBlock(signalTime);
-   g_outcomes[idx].entryPrice = entryPrice;
-   g_outcomes[idx].stopLoss = sl;
-   g_outcomes[idx].takeProfit1 = tp1;
-   g_outcomes[idx].outcome = 0;  // Pending
-   g_outcomes[idx].outcomeTime = 0;
+   g_outcomes[idx].entryPrice   = entryPrice;
+   g_outcomes[idx].stopLoss     = sl;
+   g_outcomes[idx].takeProfit1  = tp1;
+   g_outcomes[idx].outcome      = 0;  // Pending
+   g_outcomes[idx].outcomeTime  = 0;
+   g_outcomes[idx].mfe          = 0;
+   g_outcomes[idx].mae          = 0;
+   g_outcomes[idx].loggedToFile = false;
 }
 
 //+------------------------------------------------------------------+
@@ -163,6 +166,22 @@ void CheckPendingOutcomes()
       {
          double barHigh = iHigh(NULL, 0, b);
          double barLow  = iLow(NULL, 0, b);
+
+         // Track MFE / MAE while pending
+         if(g_outcomes[i].isBuy)
+         {
+            double favor = barHigh - g_outcomes[i].entryPrice;
+            double advers= g_outcomes[i].entryPrice - barLow;
+            if(favor  > g_outcomes[i].mfe) g_outcomes[i].mfe = favor;
+            if(advers > g_outcomes[i].mae) g_outcomes[i].mae = advers;
+         }
+         else
+         {
+            double favor = g_outcomes[i].entryPrice - barLow;
+            double advers= barHigh - g_outcomes[i].entryPrice;
+            if(favor  > g_outcomes[i].mfe) g_outcomes[i].mfe = favor;
+            if(advers > g_outcomes[i].mae) g_outcomes[i].mae = advers;
+         }
 
          if(g_outcomes[i].isBuy)
          {
