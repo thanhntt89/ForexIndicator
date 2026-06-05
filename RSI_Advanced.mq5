@@ -11,7 +11,7 @@
 #property indicator_minimum  0
 #property indicator_maximum  100
 #property indicator_buffers  7
-#property indicator_plots    5
+#property indicator_plots    7
 
 //--- Plot 1 (RSI Fast)
 #property indicator_label1  "RSI Fast"

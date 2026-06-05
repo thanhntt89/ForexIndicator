@@ -8,6 +8,19 @@
 #ifdef __MQL5__
 
 //====================================================================
+// 0. ERROR LOGGING WITH LIMITS
+//====================================================================
+void LogCompatError(string msg, int err)
+{
+   static int count = 0;
+   if(count < 50)
+   {
+      Print("[MQLCompat Error] ", msg, " | GetLastError: ", err);
+      count++;
+   }
+}
+
+//====================================================================
 // 1. DATA TYPES AND TIMEFRAME CONVERSION
 //====================================================================
 #define Period() _MQL4Period()
@@ -80,6 +93,7 @@ double iHigh(string symbol, int timeframe, int shift)
    if(symbol == NULL || symbol == "") symbol = Symbol();
    double val[];
    if(CopyHigh(symbol, MinutesToTimeframe(timeframe), shift, 1, val) > 0) return val[0];
+   LogCompatError("CopyHigh failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
    return 0;
 }
 
@@ -88,6 +102,7 @@ double iLow(string symbol, int timeframe, int shift)
    if(symbol == NULL || symbol == "") symbol = Symbol();
    double val[];
    if(CopyLow(symbol, MinutesToTimeframe(timeframe), shift, 1, val) > 0) return val[0];
+   LogCompatError("CopyLow failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
    return 0;
 }
 
@@ -96,6 +111,7 @@ double iClose(string symbol, int timeframe, int shift)
    if(symbol == NULL || symbol == "") symbol = Symbol();
    double val[];
    if(CopyClose(symbol, MinutesToTimeframe(timeframe), shift, 1, val) > 0) return val[0];
+   LogCompatError("CopyClose failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
    return 0;
 }
 
@@ -104,6 +120,7 @@ datetime iTime(string symbol, int timeframe, int shift)
    if(symbol == NULL || symbol == "") symbol = Symbol();
    datetime val[];
    if(CopyTime(symbol, MinutesToTimeframe(timeframe), shift, 1, val) > 0) return val[0];
+   LogCompatError("CopyTime failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
    return 0;
 }
 
@@ -133,6 +150,8 @@ int iBars(string symbol, int timeframe)
 //====================================================================
 // 3. INDICATOR CACHING FOR MT5 (Avoid Handle Leaks)
 //====================================================================
+extern int g_prevRatesTotal;
+
 struct IndicatorHandleCache
 {
    string key;
@@ -175,11 +194,18 @@ double iATR(string symbol, int timeframe, int period, int shift)
    ENUM_TIMEFRAMES tf = MinutesToTimeframe(timeframe);
    string key = "ATR_" + symbol + "_" + IntegerToString(tf) + "_" + IntegerToString(period);
    int handle = GetCachedIndicatorHandle(key, 1, symbol, tf, period);
-   if(handle == INVALID_HANDLE) return 0;
+   if(handle == INVALID_HANDLE)
+   {
+      g_prevRatesTotal = 0;
+      LogCompatError("iATR handle creation failed for " + symbol + " tf: " + IntegerToString(timeframe), GetLastError());
+      return EMPTY_VALUE;
+   }
    
    double val[];
    if(CopyBuffer(handle, 0, shift, 1, val) > 0) return val[0];
-   return 0;
+   g_prevRatesTotal = 0;
+   LogCompatError("iATR CopyBuffer failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
+   return EMPTY_VALUE;
 }
 
 double iRSI(string symbol, int timeframe, int period, int applied_price, int shift)
@@ -188,11 +214,18 @@ double iRSI(string symbol, int timeframe, int period, int applied_price, int shi
    ENUM_TIMEFRAMES tf = MinutesToTimeframe(timeframe);
    string key = "RSI_" + symbol + "_" + IntegerToString(tf) + "_" + IntegerToString(period) + "_" + IntegerToString(applied_price);
    int handle = GetCachedIndicatorHandle(key, 2, symbol, tf, period, applied_price);
-   if(handle == INVALID_HANDLE) return 0;
+   if(handle == INVALID_HANDLE)
+   {
+      g_prevRatesTotal = 0;
+      LogCompatError("iRSI handle creation failed for " + symbol + " tf: " + IntegerToString(timeframe), GetLastError());
+      return EMPTY_VALUE;
+   }
    
    double val[];
    if(CopyBuffer(handle, 0, shift, 1, val) > 0) return val[0];
-   return 0;
+   g_prevRatesTotal = 0;
+   LogCompatError("iRSI CopyBuffer failed for " + symbol + " tf: " + IntegerToString(timeframe) + " shift: " + IntegerToString(shift), GetLastError());
+   return EMPTY_VALUE;
 }
 
 //====================================================================
