@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                        ProbabilityEngine.mqh       |
 //|                         RSI Advanced - Probability Calculation      |
 //|                                                                    |
@@ -189,6 +189,25 @@ void ScanHistoricalATRBased(const SignalData &curSig,
       }
       if(!similar) continue;
 
+      // --- Angle-tier stratification (Spec: AngleStrength_Probability_Spec.md)
+      // Only compare bars with similar angle momentum to current signal.
+      // Divergence cases (2,3) rely on price structure, not angle → skip filter.
+      // Falls back to full pool when curSig.angleStrength is not computed (= 0).
+      if(curSig.angleStrength > 0.5 &&
+         curSig.caseNumber != 2 && curSig.caseNumber != 3)
+      {
+         // Proxy for historical bar's angle: RSI change over 2 bars / ATR-scaled
+         double rsiPrev2 = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs + 2);
+         double histAngle = 0.0;
+         if(rsiPrev2 > 0 && atr > 0)
+            histAngle = MathAbs(rsi - rsiPrev2) / MathMax(atr * 0.5, 0.01);
+
+         bool curStrong  = (curSig.angleStrength >= 1.0);
+         bool histStrong = (histAngle >= 1.0);
+         // Exclude bars from the opposite angle tier
+         if(curStrong != histStrong) continue;
+      }
+
       double ep = iClose(NULL, 0, bs);
       double s1, t1, t2, t3;
       double sd = atr * InpSLRatio;
@@ -344,6 +363,17 @@ void CalculateProbability(int currentSignalIndex)
    {
       double interAdj = GetIntermarketEdgeAdjustment(curSig.isBuySignal);
       edgeAdjustment += interAdj;
+   }
+
+   // --- Angle strength edge adjustment (Spec: AngleStrength_Probability_Spec.md)
+   // Z > 1.0 = stronger angle than average → +edge; Z < 1.0 = weaker → -edge
+   // Divergence cases (2,3) damped to 40% because structure matters more than angle
+   // Formula: adj = (Z - 1.0) × 0.03, clamped [-0.03, +0.04]
+   if(curSig.angleStrength > 0.1)
+   {
+      double caseDamp = (curSig.caseNumber == 2 || curSig.caseNumber == 3) ? 0.4 : 1.0;
+      double angleAdj = MathMax(-0.03, MathMin(0.04, (curSig.angleStrength - 1.0) * 0.03));
+      edgeAdjustment += angleAdj * caseDamp;
    }
 
    //Patch #2 — Mở Hard Clamp 70% → 85%

@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                            MarketRegime.mqh        |
 //|                         RSI Advanced - Market Regime Detection      |
 //+------------------------------------------------------------------+
@@ -61,6 +61,32 @@ double GetAdaptiveAngleThreshold(int barIndex)
    double variance = (sumSq / count) - ((sum / count) * (sum / count));
    double stddev = MathSqrt(MathMax(variance, 0));
    return(MathMax(stddev * 1.5, 2.0));
+}
+
+//+------------------------------------------------------------------+
+//| Angle Z-score of Green at crossover bar                           |
+//| Formula: |Green[i] - Green[i-2]| / adaptiveThresh                |
+//| Z > 1.5 = strong angle (12h-2h clock equivalent)                 |
+//| Z 1.0-1.5 = moderate (2h-3h)                                     |
+//| Z < 0.5  = weak/sideway (3h-6h) → low probability                |
+//| Returns 0.0 if insufficient data                                  |
+//+------------------------------------------------------------------+
+double CalculateAngleStrength(int barIndex)
+{
+   if(barIndex < 3) return(0.0);
+   if(BufferGreen[barIndex]   == EMPTY_VALUE) return(0.0);
+   if(BufferGreen[barIndex-2] == EMPTY_VALUE) return(0.0);
+
+   // Momentum over 2 bars — more stable than 1 bar, less lag than 3 bars
+   double greenDelta2 = MathAbs(BufferGreen[barIndex] - BufferGreen[barIndex-2]);
+
+   // Adaptive threshold (same denominator as GetAdaptiveAngleThreshold)
+   double adaptiveThresh = GetAdaptiveAngleThreshold(barIndex);
+   if(adaptiveThresh <= 0.0) return(0.0);
+
+   // Z-score: how many "standard deviations" above the recent average crossover
+   double zScore = greenDelta2 / adaptiveThresh;
+   return(MathMin(zScore, 5.0)); // Cap at 5.0 to prevent outlier distortion
 }
 
 #endif

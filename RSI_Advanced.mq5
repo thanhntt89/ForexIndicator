@@ -375,7 +375,8 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice - maxSLDist;
          slDist = MathAbs(entryPrice - sl);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
-         StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal);
+         double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
+         StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
       }
       if(sellSignal > 0)
@@ -396,7 +397,8 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice + maxSLDist;
          slDist = MathAbs(sl - entryPrice);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
-         StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal);
+         double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
+         StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
       }
 

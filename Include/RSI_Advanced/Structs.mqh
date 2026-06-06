@@ -1,4 +1,4 @@
-﻿#ifndef RSI_ADV_STRUCTS_MQH
+#ifndef RSI_ADV_STRUCTS_MQH
 #define RSI_ADV_STRUCTS_MQH
 #define SESSION_BLOCKS 4
 #define CASE_COUNT     8
@@ -15,6 +15,8 @@ struct SignalData
    double   takeProfit2;
    double   takeProfit3;
    double   atrValue;
+   double   angleStrength; // Z-score of Green momentum at crossover bar
+                           // 0.0 = not computed; >1.5 = strong (12h-2h); <0.5 = weak (sideway)
 };
 
 struct SignalScore

@@ -124,7 +124,7 @@ int OnInit()
    InitSessionStats();
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
-   LoggerInit(false); // KhÃƒÂ¡Ã‚Â»Ã…Â¸i tÃƒÂ¡Ã‚ÂºÃ‚Â¡o logger (khÃƒÆ’Ã‚Â´ng xoÃƒÆ’Ã‚Â¡ file nÃƒÂ¡Ã‚ÂºÃ‚Â¿u Ãƒâ€žÃ¢â‚¬ËœÃƒÆ’Ã‚Â£ cÃƒÆ’Ã‚Â³)
+   LoggerInit(false); // Init logger (keep existing file)
    return(INIT_SUCCEEDED);
 }
 //+------------------------------------------------------------------+
@@ -189,7 +189,7 @@ int OnCalculate(const int rates_total,
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
-      LoggerInit(true); // fullRecalc: reset file log, ghi lÃƒÂ¡Ã‚ÂºÃ‚Â¡i tÃƒÂ¡Ã‚Â»Ã‚Â« Ãƒâ€žÃ¢â‚¬ËœÃƒÂ¡Ã‚ÂºÃ‚Â§u
+      LoggerInit(true); // fullRecalc: reset file log, rewrite from scratch
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
@@ -312,7 +312,7 @@ int OnCalculate(const int rates_total,
       //--- Closed bars: create arrow + store signal
       if(buySignal > 0)
       {
-         //--- NÃƒÂ¡Ã‚ÂºÃ‚Â¿u prev signal lÃƒÆ’Ã‚Â  SELL cÃƒÆ’Ã‚Â²n pending ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ reversal
+         //--- If prev signal is SELL and still pending -> reversal
          if(g_signalCount > 0 && !g_signals[g_signalCount-1].isBuySignal)
          {
             SignalData prev = g_signals[g_signalCount-1];
@@ -340,16 +340,17 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice - maxSLDist;
          slDist = MathAbs(entryPrice - sl);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
-         StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal);
+         double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
+         StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
-         //--- Log signal mÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi + trÃƒÂ¡Ã‚ÂºÃ‚Â¡ng thÃƒÆ’Ã‚Â¡i pending
+         //--- Log signal new + pending status
          LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
                         GetSessionBlock(time[i]));
          LogOutcomePending(time[i], buySignal, true);
       }
       if(sellSignal > 0)
       {
-         //--- NÃƒÂ¡Ã‚ÂºÃ‚Â¿u prev signal lÃƒÆ’Ã‚Â  BUY cÃƒÆ’Ã‚Â²n pending ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ reversal
+         //--- If prev signal is BUY and still pending -> reversal
          if(g_signalCount > 0 && g_signals[g_signalCount-1].isBuySignal)
          {
             SignalData prev = g_signals[g_signalCount-1];
@@ -376,9 +377,10 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice + maxSLDist;
          slDist = MathAbs(sl - entryPrice);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
-         StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal);
+         double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
+         StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
-         //--- Log signal mÃƒÂ¡Ã‚Â»Ã¢â‚¬Âºi + trÃƒÂ¡Ã‚ÂºÃ‚Â¡ng thÃƒÆ’Ã‚Â¡i pending
+         //--- Log new signal + set pending state
          LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
                         GetSessionBlock(time[i]));
          LogOutcomePending(time[i], sellSignal, false);
@@ -414,7 +416,7 @@ int OnCalculate(const int rates_total,
    // Lightweight: every tick
    RefreshIntermarketData();
    CheckPendingOutcomes();
-   CheckAndLogNewlyResolved(); // Ghi outcome vÃƒÂ¡Ã‚Â»Ã‚Â«a Ãƒâ€žÃ¢â‚¬ËœÃƒâ€ Ã‚Â°ÃƒÂ¡Ã‚Â»Ã‚Â£c resolve vÃƒÆ’Ã‚Â o CSV
+   CheckAndLogNewlyResolved(); // Log resolved outcomes to CSV
    UpdateSpreadRegime();
    // Heavy: only per new bar
    if(isNewBar)

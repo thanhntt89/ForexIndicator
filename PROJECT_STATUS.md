@@ -37,6 +37,9 @@ AI phiên trước và User Thanh đã phối hợp rà soát toàn diện hệ 
 4. **Fix Timeout Data**: 
    Hàm `MeasureOptimalTPRatios` và `MeasureZoneReachProb` đã được sửa để dùng `timeBasedMax`, không bị rớt mất dữ liệu thống kê.
 
+5. **Quy tắc mã hóa (Encoding) và Viết comment ASCII**: 
+   Đã phát hiện và sửa lỗi vỡ font tiếng Việt (double-encoding mojibake) trong `RSI_Advanced.mq4` do xung đột bảng mã giữa công cụ soạn thảo UTF-8 của AI và cách đọc ANSI của MetaEditor. Toàn bộ comment tiếng Việt lỗi đã được chuyển sang tiếng Anh không dấu. **Bắt buộc AI sau này chỉ được phép viết comment bằng tiếng Anh hoặc tiếng Việt không dấu trong tất cả các file nguồn `.mq4`, `.mq5`, `.mqh`.** Chi tiết xem tại [Encoding_Guide.md](file:///d:/Thanh/Forex/RSI_Advanced/Documents/Encoding_Guide.md).
+
 ---
 
 ## 4. Định Hướng Công Việc Cho AI Phiên Tiếp Theo (Next Steps)

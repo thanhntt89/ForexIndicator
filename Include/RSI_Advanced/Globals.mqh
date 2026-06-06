@@ -89,21 +89,23 @@ void LoadPanelPosition()
 //| Signal storage functions                                           |
 //+------------------------------------------------------------------+
 void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
-                 double entry, double sl, double tp1, double tp2, double tp3, double atr)
+                 double entry, double sl, double tp1, double tp2, double tp3,
+                 double atr, double angleZ = 0.0)
 {
    g_signalCount++;
    ArrayResize(g_signals, g_signalCount);
    int idx = g_signalCount - 1;
-   g_signals[idx].signalTime  = t;
-   g_signals[idx].barIndex    = barIdx;
-   g_signals[idx].caseNumber  = caseNum;
-   g_signals[idx].isBuySignal = isBuy;
-   g_signals[idx].entryPrice  = entry;
-   g_signals[idx].stopLoss    = sl;
-   g_signals[idx].takeProfit1 = tp1;
-   g_signals[idx].takeProfit2 = tp2;
-   g_signals[idx].takeProfit3 = tp3;
-   g_signals[idx].atrValue    = atr;
+   g_signals[idx].signalTime    = t;
+   g_signals[idx].barIndex      = barIdx;
+   g_signals[idx].caseNumber    = caseNum;
+   g_signals[idx].isBuySignal   = isBuy;
+   g_signals[idx].entryPrice    = entry;
+   g_signals[idx].stopLoss      = sl;
+   g_signals[idx].takeProfit1   = tp1;
+   g_signals[idx].takeProfit2   = tp2;
+   g_signals[idx].takeProfit3   = tp3;
+   g_signals[idx].atrValue      = atr;
+   g_signals[idx].angleStrength = angleZ; // Z-score of Green momentum (0.0 = not computed)
 }
 
 int FindSignalByArrowName(string arrowName)
