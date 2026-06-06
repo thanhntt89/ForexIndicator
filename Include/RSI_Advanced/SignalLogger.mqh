@@ -2,7 +2,7 @@
 //|                                            SignalLogger.mqh        |
 //|                         RSI Advanced - Signal Logging to CSV       |
 //|                                                                    |
-//| Ghi 2 file CSV pipe-delimited vào MQL4/Files/<InpLogFolder>/:      |
+//| Ghi 2 file CSV comma-separated vào MQL4/Files/<InpLogFolder>/:      |
 //|   signals_SYMBOL_TF_YYYY.csv  — 1 dòng mỗi tín hiệu mới          |
 //|   outcomes_SYMBOL_TF_YYYY.csv — append khi outcome resolved        |
 //|                                                                    |
@@ -234,23 +234,23 @@ void LogSignalEntry(datetime signalTime,
    double tp1DistATR= (atr > 0) ? NormalizeDouble(tp1Dist / atr, 3) : -1;
    double rrRatio   = (slDist > 0) ? NormalizeDouble(tp1Dist / slDist, 3) : -1;
 
-   string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + "|"
-              + Symbol()                           + "|"
-              + SL_GetTFName()                     + "|"
-              + SL_FmtDT(signalTime)               + "|"
-              + SL_FmtDT(TimeCurrent())            + "|"
-              + (isBuy ? "BUY" : "SELL")           + "|"
-              + IntegerToString(caseNum)            + "|"
-              + SL_GetCaseName(caseNum)             + "|"
-              + DoubleToString(entry, _Digits)      + "|"
-              + DoubleToString(sl, _Digits)         + "|"
-              + DoubleToString(tp1, _Digits)        + "|"
-              + DoubleToString(tp2, _Digits)        + "|"
-              + DoubleToString(tp3, _Digits)        + "|"
-              + DoubleToString(atr, _Digits)        + "|"
-              + DoubleToString(slDistATR, 3)        + "|"
-              + DoubleToString(tp1DistATR, 3)       + "|"
-              + DoubleToString(rrRatio, 3)          + "|"
+   string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
+              + Symbol()                           + ","
+              + SL_GetTFName()                     + ","
+              + SL_FmtDT(signalTime)               + ","
+              + SL_FmtDT(TimeCurrent())            + ","
+              + (isBuy ? "BUY" : "SELL")           + ","
+              + IntegerToString(caseNum)            + ","
+              + SL_GetCaseName(caseNum)             + ","
+              + DoubleToString(entry, _Digits)      + ","
+              + DoubleToString(sl, _Digits)         + ","
+              + DoubleToString(tp1, _Digits)        + ","
+              + DoubleToString(tp2, _Digits)        + ","
+              + DoubleToString(tp3, _Digits)        + ","
+              + DoubleToString(atr, _Digits)        + ","
+              + DoubleToString(slDistATR, 3)        + ","
+              + DoubleToString(tp1DistATR, 3)       + ","
+              + DoubleToString(rrRatio, 3)          + ","
               + SL_GetSessionName(sessionBlock);
 
    QueueSignalRow(row);
@@ -264,10 +264,10 @@ void LogOutcomePending(datetime signalTime, int caseNum, bool isBuy)
 {
    if(!InpEnableSignalLog || !s_loggerReady) return;
 
-   string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + "|"
-              + Symbol()               + "|"
-              + SL_FmtDT(signalTime)   + "|"
-              + "PENDING|0|0|0|PENDING|0|0";
+   string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
+              + Symbol()               + ","
+              + SL_FmtDT(signalTime)   + ","
+              + "PENDING,0,0,0,PENDING,0,0";
 
    QueueOutcomeRow(row);
 }
@@ -294,15 +294,15 @@ void LogOutcomeResolved(datetime signalTime,
    else if(outcome == -2) { outcomeStr = "REVERSAL"; reason = "COUNTER_SIGNAL";}
    else                   { outcomeStr = "UNKNOWN";  reason = "UNKNOWN";       }
 
-   string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + "|"
-              + Symbol()                              + "|"
-              + SL_FmtDT(signalTime)                 + "|"
-              + outcomeStr                            + "|"
-              + SL_FmtDT(outcomeTime)                + "|"
-              + DoubleToString(exitPrice, _Digits)    + "|"
-              + IntegerToString(barsHeld)             + "|"
-              + reason                                + "|"
-              + DoubleToString(mfe, _Digits)          + "|"
+   string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
+              + Symbol()                              + ","
+              + SL_FmtDT(signalTime)                 + ","
+              + outcomeStr                            + ","
+              + SL_FmtDT(outcomeTime)                + ","
+              + DoubleToString(exitPrice, _Digits)    + ","
+              + IntegerToString(barsHeld)             + ","
+              + reason                                + ","
+              + DoubleToString(mfe, _Digits)          + ","
               + DoubleToString(mae, _Digits);
 
    QueueOutcomeRow(row);
@@ -366,8 +366,8 @@ void FlushLogQueues()
    // 1. Ghi và làm sạch Signal Queue
    if(s_signalQueueCount > 0)
    {
-      string header = "SIGNAL_ID|SYMBOL|TF|SIGNAL_TIME|LOG_TIME|DIR|CASE_NUM|CASE_NAME"
-                      "|ENTRY|SL|TP1|TP2|TP3|ATR|SL_DIST_ATR|TP1_DIST_ATR|RR_RATIO|SESSION";
+      string header = "SIGNAL_ID,SYMBOL,TF,SIGNAL_TIME,LOG_TIME,DIR,CASE_NUM,CASE_NAME"
+                      ",ENTRY,SL,TP1,TP2,TP3,ATR,SL_DIST_ATR,TP1_DIST_ATR,RR_RATIO,SESSION";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetSignalPath(), header, isNew);
       if(fh != INVALID_HANDLE)
@@ -385,8 +385,8 @@ void FlushLogQueues()
    // 2. Ghi và làm sạch Outcome Queue
    if(s_outcomeQueueCount > 0)
    {
-      string header = "SIGNAL_ID|SYMBOL|SIGNAL_TIME|OUTCOME|OUTCOME_TIME"
-                      "|EXIT_PRICE|BARS_HELD|REASON|MFE|MAE";
+      string header = "SIGNAL_ID,SYMBOL,SIGNAL_TIME,OUTCOME,OUTCOME_TIME"
+                      ",EXIT_PRICE,BARS_HELD,REASON,MFE,MAE";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetOutcomePath(), header, isNew);
       if(fh != INVALID_HANDLE)

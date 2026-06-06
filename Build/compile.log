@@ -1883,3 +1883,106 @@ D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10)
  : information: code generated
 Result: 0 errors, 1 warnings, 3036 ms elapsed, cpu='X64 Regular'
 
+
+==========================================
+[MT4 Build: RSI_Advanced_v10.20_20260607_003644.ex4] @ 06/07/2026 00:36:50
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq4 : information: compiling 'RSI_Advanced.mq4'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh : information: including 'Config.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh : information: including 'Structs.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh : information: including 'Globals.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh : information: including 'MathUtils.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh : information: including 'Normalize.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh : information: including 'RSICore.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh : information: including 'SwingDetection.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh : information: including 'SignalCases.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including 'SLTP.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh : information: including 'IntermarketAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh : information: including 'WalkForward.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh : information: including 'MTFEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionStatistics.mqh : information: including 'SessionStatistics.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh : information: including 'ProbabilityEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh : information: including 'ArrowManager.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh : information: including 'LineDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh : information: including 'PanelDrawing.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including 'ChartEvents.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including 'SignalEngine.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh : information: including 'MarketRegime.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh : information: including 'VolumeAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh : information: including 'VolatilityAnalysis.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh : information: including 'SessionFilter.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalLogger.mqh : information: including 'SignalLogger.mqh'
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10) : warning 31: variable 'trendClr' not used
+Result: 0 errors, 1 warnings, 210 msec elapsed
+
+
+==========================================
+[MT5 Build: RSI_Advanced_v10.20_20260607_003644.ex5] @ 06/07/2026 00:36:59
+==========================================
+
+
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: compiling D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MQLCompat.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Config.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Structs.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Globals.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MathUtils.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\Normalize.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\RSICore.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SwingDetection.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalCases.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SLTP.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\WalkForward.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MTFEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionStatistics.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ProbabilityEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ArrowManager.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\LineDrawing.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\PanelDrawing.mqh
+D:\Thanh\Forex\RSI_Advanced\RSI_Advanced.mq5 : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\ChartEvents.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\MarketRegime.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolumeAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\VolatilityAnalysis.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SignalEngine.mqh : information: including D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\SessionFilter.mqh
+D:\Thanh\Forex\RSI_Advanced\Include\RSI_Advanced\IntermarketAnalysis.mqh(180,10) : warning 31: variable 'trendClr' not used
+ : information: generating code
+ : information: generating code 3%
+ : information: generating code 6%
+ : information: generating code 9%
+ : information: generating code 12%
+ : information: generating code 15%
+ : information: generating code 18%
+ : information: generating code 21%
+ : information: generating code 24%
+ : information: generating code 27%
+ : information: generating code 30%
+ : information: generating code 33%
+ : information: generating code 36%
+ : information: generating code 39%
+ : information: generating code 42%
+ : information: generating code 45%
+ : information: generating code 48%
+ : information: generating code 51%
+ : information: generating code 54%
+ : information: generating code 57%
+ : information: generating code 60%
+ : information: generating code 63%
+ : information: generating code 66%
+ : information: generating code 69%
+ : information: generating code 72%
+ : information: generating code 75%
+ : information: generating code 78%
+ : information: generating code 81%
+ : information: generating code 84%
+ : information: generating code 87%
+ : information: generating code 90%
+ : information: generating code 93%
+ : information: generating code 95%
+ : information: generating code 100%
+ : information: code generated
+Result: 0 errors, 1 warnings, 3295 ms elapsed, cpu='X64 Regular'
+
