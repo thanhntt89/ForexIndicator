@@ -72,7 +72,7 @@ void InitSessionStats()
 void UpdateSessionStats()
 {
    InitSessionStats();
-
+   
    for(int i = 0; i < g_outcomeCount; i++)
    {
       if(g_outcomes[i].outcome == 0) continue;  // Pending, skip
@@ -81,21 +81,40 @@ void UpdateSessionStats()
       if(block < 0 || block > 3) continue;
 
       g_sessionStats.totalPerSession[block]++;
+       // --- PATCH #4 ---
+      int ci = MathMax(0, MathMin(g_outcomes[i].caseNumber - 1, CASE_COUNT - 1));
+      g_sessionStats.totalPerCase[block][ci]++;
 
       if(g_outcomes[i].outcome > 0)
-         g_sessionStats.wins[block]++;
+      {
+        g_sessionStats.wins[block]++;
+        g_sessionStats.winsPerCase[block][ci]++;
+      }   
       else
+      {
          g_sessionStats.losses[block]++;
+         g_sessionStats.lossesPerCase[block][ci]++;
+      }
    }
 
    // Calculate win rates
    for(int i = 0; i < 4; i++)
    {
-      if(g_sessionStats.totalPerSession[i] > 0)
-         g_sessionStats.winRate[i] = (double)g_sessionStats.wins[i] /
-                                      (double)g_sessionStats.totalPerSession[i];
-      else
-         g_sessionStats.winRate[i] = 0.5;  // Default neutral when no data
+        if(g_sessionStats.totalPerSession[i] > 0)
+            g_sessionStats.winRate[i] = (double)g_sessionStats.wins[i] /
+                                        (double)g_sessionStats.totalPerSession[i];
+        else
+            g_sessionStats.winRate[i] = 0.5;  // Default neutral when no data
+     
+        for(int ci = 0; ci < CASE_COUNT; ci++)
+        {
+            if(g_sessionStats.totalPerCase[i][ci] > 0)
+                g_sessionStats.winRatePerCase[i][ci] =
+                (double)g_sessionStats.winsPerCase[i][ci] /
+                (double)g_sessionStats.totalPerCase[i][ci];
+            else
+                g_sessionStats.winRatePerCase[i][ci] = -1.0;
+        }
    }
 }
 

@@ -130,15 +130,17 @@ void ScanStoredSignals(const SignalData &curSig, bool matchCase, int maxFwd,
       if(g_signals[s].signalTime == curSig.signalTime) continue;
       if(g_signals[s].isBuySignal != curSig.isBuySignal) continue;
       if(matchCase && g_signals[s].caseNumber != curSig.caseNumber) continue;
-      if(g_signals[s].barIndex + maxFwd >= Bars) continue;
-
+      
+      //Patch #1 — Fix Timeout
+      int timeBasedMax = 1440 / MathMax(Period(), 1);
+      timeBasedMax = MathMax(timeBasedMax, maxFwd);
+      if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
       int btr = 0;
       int out = SimulateSignalOutcome(
          g_signals[s].barIndex, g_signals[s].isBuySignal,
          g_signals[s].entryPrice, g_signals[s].stopLoss,
          g_signals[s].takeProfit1, g_signals[s].takeProfit2, g_signals[s].takeProfit3,
-         maxFwd, btr);
-
+         timeBasedMax, btr);
       if(out == 0) { timeout++; continue; }
       total++;
       if(out >= 1) { tp1++; bTP1 += btr; }
@@ -256,9 +258,10 @@ void CalculateProbability(int currentSignalIndex)
                              t3_1, t3_2, t3_3, t3_s, t3_b1, t3_bs, maxFwd);
 
    // Data-proportional tier weights
-   double w1 = (t1_t >= 3) ? MathSqrt((double)t1_t) * 1.0  : 0;
-   double w2 = (t2_t >= 3) ? MathSqrt((double)t2_t) * 0.5  : 0;
-   double w3 = (t3_t >= 3) ? MathSqrt((double)t3_t) * 0.25 : 0;
+   // Patch #3 — Tier 1 weight từ N^0.5 lên N^0.75
+   double w1 = (t1_t >= 3) ? MathPow((double)t1_t, 0.75) * 1.0  : 0;
+   double w2 = (t2_t >= 3) ? MathSqrt((double)t2_t)      * 0.5  : 0;
+   double w3 = (t3_t >= 3) ? MathSqrt((double)t3_t)      * 0.25 : 0;
 
    double tw = 0, wTP1 = 0, wTP2 = 0, wTP3 = 0, wSL = 0, wB1 = 0, wBS = 0;
    int totalUsed = 0;
@@ -343,7 +346,8 @@ void CalculateProbability(int currentSignalIndex)
       edgeAdjustment += interAdj;
    }
 
-   double adjustedEdge = MathMax(0.40, MathMin(0.70, measuredEdge + edgeAdjustment));
+   //Patch #2 — Mở Hard Clamp 70% → 85%
+   double adjustedEdge = MathMax(0.40, MathMin(0.85, measuredEdge + edgeAdjustment));
 
    //=================================================================
    // STEP 4: Theoretical probability using adjusted edge
@@ -447,39 +451,72 @@ void CalculateProbability(int currentSignalIndex)
    //=================================================================
    {
       int block = GetSessionBlock(curSig.signalTime);
+      int ci = MathMax(0, MathMin(curSig.caseNumber - 1, CASE_COUNT - 1));
 
-      if(g_sessionStats.totalPerSession[block] >= 20)
+      bool hasCaseData    = (g_sessionStats.totalPerCase[block][ci] >= 20 &&
+                             g_sessionStats.winRatePerCase[block][ci] >= 0.0);
+      bool hasSessionData = (g_sessionStats.totalPerSession[block] >= 20);
+
+      if(hasCaseData || hasSessionData)
       {
-         double measuredWR = g_sessionStats.winRate[block];
+         double measuredWR = hasCaseData
+            ? g_sessionStats.winRatePerCase[block][ci]
+            : g_sessionStats.winRate[block];
          double baselineWR = g_currentProb.probTP1 / 100.0;
 
+         // Chỉ blend khi 2 nguồn lệch nhau đáng kể.
+         // 0.10 = ngưỡng 10%: nếu model nói 60% mà data thực nói 65% → bỏ qua (noise).
+         // Nếu model nói 60% mà data thực nói 72% → blend (có thông tin thực sự).
+         // Tăng 0.10 → blend ít hơn, tin model nhiều hơn.
+         // Giảm 0.10 → blend nhiều hơn, nhạy hơn với data thực (dễ overfit nếu mẫu nhỏ).
          if(MathAbs(measuredWR - baselineWR) > 0.10)
          {
-            // ANTI-OVERFITTING: Inverse variance weighting
-            // Instead of fixed 70/30 blend
-            // Weight each source by inverse of its uncertainty
-            
-            // Model uncertainty: ~15% (Gambler's Ruin typical error)
+            // Độ không chắc chắn cố định của model lý thuyết (Gambler's Ruin).
+            // 0.15 = giả định model sai lệch trung bình ±15% so với thực tế.
+            // Tăng 0.15 → model bị tin ít hơn, data thực chiếm trọng số cao hơn.
+            // Giảm 0.15 → model bị tin nhiều hơn, data thực ít ảnh hưởng hơn.
             double modelSE = 0.15;
-            
-            // Measured uncertainty: Wilson SE
+
+            // p = win rate thực đo được, dùng để tính độ dao động nhị thức.
+            // Clamp [0.01, 0.99] tránh chia cho 0 khi p=0 hoặc p=1
+            // (xảy ra khi session toàn thắng hoặc toàn thua → không có ý nghĩa thống kê).
             double p = measuredWR;
             if(p <= 0) p = 0.01; if(p >= 1) p = 0.99;
-            double n = (double)g_sessionStats.totalPerSession[block];
-            double z2 = 3.84; // 1.96^2
+
+            // n = số mẫu thực tế dùng để đo win rate.
+            // n càng lớn → measuredSE càng nhỏ → data thực được tin nhiều hơn.
+            // n càng nhỏ → measuredSE càng lớn → model lý thuyết chiếm ưu thế.
+            double n = hasCaseData
+               ? (double)g_sessionStats.totalPerCase[block][ci]
+               : (double)g_sessionStats.totalPerSession[block];
+
+            // z2 = 1.96² = 3.84, ngưỡng của Wilson Score Interval tại confidence 95%.
+            // Không cần thay đổi trừ khi muốn đổi confidence level:
+            // 90% → z2 = 2.69 | 95% → z2 = 3.84 | 99% → z2 = 6.63
+            // Tăng z2 → interval rộng hơn → measuredSE lớn hơn → model được tin hơn.
+            double z2 = 3.84;
+
+            // Wilson Score SE: công thức chuẩn đo độ không chắc chắn của win rate thực.
+            // Khác binomial SE thuần (sqrt(p*(1-p)/n)) ở chỗ có hiệu chỉnh z2/(4n²)
+            // giúp chính xác hơn khi n nhỏ hoặc p gần 0/1.
+            // Kết quả: n=20, p=0.60 → SE≈0.107 | n=50 → SE≈0.068 | n=200 → SE≈0.034
             double measuredSE = MathSqrt((p * (1.0 - p) / n + z2 / (4.0 * n * n)) / (1.0 + z2 / n));
+
+            // Floor 0.05: dù n rất lớn, không bao giờ tin data thực tuyệt đối 100%.
+            // Giữ lại ít nhất SE=5% để model lý thuyết luôn có tiếng nói.
+            // Tăng 0.05 → giới hạn mức độ tin data thực dù có ngàn mẫu.
+            // Giảm 0.05 → cho phép data thực dominate hoàn toàn khi n rất lớn.
             measuredSE = MathMax(measuredSE, 0.05);
-            
-            // Inverse variance weights
-            double modelWeight = 1.0 / (modelSE * modelSE);
+
+            double modelWeight    = 1.0 / (modelSE * modelSE);
             double measuredWeight = 1.0 / (measuredSE * measuredSE);
             double totalW = modelWeight + measuredWeight;
-            
+
             if(totalW > 0)
             {
                double blended = (baselineWR * modelWeight + measuredWR * measuredWeight) / totalW;
                double ratio = blended / MathMax(baselineWR, 0.01);
-               
+
                g_currentProb.probTP1 *= ratio;
                g_currentProb.probTP2 *= ratio;
                g_currentProb.probTP3 *= ratio;

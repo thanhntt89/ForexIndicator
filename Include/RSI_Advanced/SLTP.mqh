@@ -21,11 +21,18 @@ double GetATRValue(int barShift)
 //|        SWING FINDING FOR FIBONACCI                                 |
 //+------------------------------------------------------------------+
 
-double FindNearestSwingLow(const double &lo[], int barIndex, int lookback)
+double FindNearestSwingLow(const double &lo[], int barIndex, int lookback, int totalBars)
 {
    double swingLow = lo[barIndex];
    int swingBar = barIndex;
-   int depth = 3;
+   
+   int bs = totalBars - 1 - barIndex;
+   if(bs <= 0) bs = 1;
+   double curATR = iATR(NULL, 0, InpATRPeriod, bs);
+   double avgATR = iATR(NULL, 0, InpATRPeriod * 3, bs); // proxy avg
+   int depth = (avgATR > 0 && curATR / avgATR > 1.3) ? 5 : 3;
+   // Khi thị trường volatile (ATR spike) → depth=5 → swing khó tạo hơn → SL ổn định hơn
+
    int start = MathMax(barIndex - lookback, depth);
    int end = barIndex - depth;
    if(end < start) return(lo[barIndex]);
@@ -49,11 +56,17 @@ double FindNearestSwingLow(const double &lo[], int barIndex, int lookback)
    return(swingLow);
 }
 
-double FindNearestSwingHigh(const double &hi[], int barIndex, int lookback)
+double FindNearestSwingHigh(const double &hi[], int barIndex, int lookback, int totalBars)
 {
    double swingHigh = hi[barIndex];
    int swingBar = barIndex;
-   int depth = 3;
+   
+   int bs = totalBars - 1 - barIndex;
+   if(bs <= 0) bs = 1;
+   double curATR = iATR(NULL, 0, InpATRPeriod, bs);
+   double avgATR = iATR(NULL, 0, InpATRPeriod * 3, bs); // proxy avg
+   int depth = (avgATR > 0 && curATR / avgATR > 1.3) ? 5 : 3;
+   
    int start = MathMax(barIndex - lookback, depth);
    int end = barIndex - depth;
    if(end < start) return(hi[barIndex]);
@@ -117,7 +130,7 @@ void CalculateSLTP_ATR(bool isBuy, int barNS, double entry,
    if(isBuy)
    {
       int slLookback = GetNormalizedSLLookback();
-      double swingSL = FindNearestSwingLow(lo, barNS, slLookback) - totalBuf;
+      double swingSL = FindNearestSwingLow(lo, barNS, slLookback, total) - totalBuf;
       outSL = MathMin(swingSL, entry - atrSL);
       if(entry - outSL < minSL) outSL = entry - minSL;
       outTP1 = entry + tp1D;
@@ -127,7 +140,7 @@ void CalculateSLTP_ATR(bool isBuy, int barNS, double entry,
    else
    {
       int slLookback = GetNormalizedSLLookback();
-      double swingSL = FindNearestSwingHigh(hi, barNS, slLookback) + totalBuf;
+      double swingSL = FindNearestSwingHigh(hi, barNS, slLookback, total) + totalBuf;
       outSL = MathMax(swingSL, entry + atrSL);
       if(outSL - entry < minSL) outSL = entry + minSL;
       outTP1 = entry - tp1D;
@@ -207,7 +220,7 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
       double fibSL = swingHigh - swingRange * 0.786 - spreadBuf;
       double atrSL = entry - atrSLDist;
       int slLookback = GetNormalizedSLLookback();
-      double swingSL = FindNearestSwingLow(lo, barNS, slLookback) - totalBuf;
+      double swingSL = FindNearestSwingLow(lo, barNS, slLookback, total) - totalBuf;
       outSL = MathMin(fibSL, MathMin(atrSL, swingSL));
       if(entry - outSL > maxSLDist) outSL = entry - maxSLDist;
       if(entry - outSL < minSL) outSL = entry - minSL;
@@ -223,7 +236,7 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
       double fibSL = swingLow + swingRange * 0.786 + spreadBuf;
       double atrSL = entry + atrSLDist;
       int slLookback = GetNormalizedSLLookback();
-      double swingSL = FindNearestSwingHigh(hi, barNS, slLookback) + totalBuf;
+      double swingSL = FindNearestSwingHigh(hi, barNS, slLookback, total) + totalBuf;
       outSL = MathMax(fibSL, MathMax(atrSL, swingSL));
       if(outSL - entry > maxSLDist) outSL = entry + maxSLDist;
       if(outSL - entry < minSL) outSL = entry + minSL;
@@ -254,12 +267,15 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
 
    double moveRatios[];
    int moveCount = 0;
+   int timeBasedMax = 1440 / MathMax(_Period, 1);
 
    //--- Phase 1: Actual signals
    for(int s = 0; s < g_signalCount; s++)
    {
       if(g_signals[s].isBuySignal != isBuy) continue;
-      if(g_signals[s].barIndex + maxFwd >= Bars) continue;
+      
+      timeBasedMax = MathMax(timeBasedMax, maxFwd);
+      if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
 
       double sigEntry = g_signals[s].entryPrice;
       double sigATR   = g_signals[s].atrValue;
@@ -268,7 +284,7 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
 
       double maxFav = 0;
       for(int b = g_signals[s].barIndex + 1;
-          b < g_signals[s].barIndex + maxFwd && b < Bars; b++)
+         b < g_signals[s].barIndex + timeBasedMax && b < Bars; b++)
       {
          int bs = Bars - 1 - b;
          if(bs < 0) break;
@@ -316,7 +332,7 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
       double slDist = atr * InpSLRatio;
       double maxFav = 0;
 
-      for(int b = i + 1; b < i + maxFwd && b < deepEnd; b++)
+      for(int b = i + 1; b < i + timeBasedMax && b < deepEnd; b++)
       {
          int fbs = totalBars - 1 - b;
          if(fbs < 0) break;
@@ -393,7 +409,8 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
 
    // Apply measured TP if significantly different from method TP
    // Use CLOSER TP (more achievable)
-   if(MathAbs(optTP1 - InpTPRatio) > 0.3)
+   // Ngưỡng tương đối 15% thay vì tuyệt đối
+   if(MathAbs(optTP1 - InpTPRatio) / MathMax(InpTPRatio, 0.1) > 0.15)
    {
       double mTP1 = entry + (isBuy ? 1 : -1) * outATR * optTP1;
       double mTP2 = entry + (isBuy ? 1 : -1) * outATR * optTP2;
@@ -401,17 +418,17 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
 
       if(isBuy)
       {
-         outTP1 = MathMin(outTP1, mTP1);
-         outTP2 = MathMin(outTP2, mTP2);
-         outTP3 = MathMin(outTP3, mTP3);
+         outTP1 = mTP1;
+         outTP2 = mTP2;
+         outTP3 = mTP3;
          if(outTP2 < outTP1) outTP2 = outTP1 + outATR * 0.5;
          if(outTP3 < outTP2) outTP3 = outTP2 + outATR * 0.5;
       }
       else
       {
-         outTP1 = MathMax(outTP1, mTP1);
-         outTP2 = MathMax(outTP2, mTP2);
-         outTP3 = MathMax(outTP3, mTP3);
+         outTP1 = mTP1;
+         outTP2 = mTP2;
+         outTP3 = mTP3;
          if(outTP2 > outTP1) outTP2 = outTP1 - outATR * 0.5;
          if(outTP3 > outTP2) outTP3 = outTP2 - outATR * 0.5;
       }
@@ -643,18 +660,20 @@ double MeasureZoneReachProb(bool isBuy, double entryPrice, double zonePrice,
    double retraceLevel = MathAbs(entryPrice - zonePrice) / moveHeight;
    int reachedCount = 0;
    int totalCount = 0;
+   int timeBasedMax = 1440 / MathMax(Period(), 1);
+   timeBasedMax = MathMax(timeBasedMax, maxForward);
 
    for(int s = 0; s < g_signalCount; s++)
    {
       if(g_signals[s].isBuySignal != isBuy) continue;
-      if(g_signals[s].barIndex + maxForward >= Bars) continue;
+      if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
       double sigEntry = g_signals[s].entryPrice;
       double sigMove = MathAbs(sigEntry - g_signals[s].stopLoss);
       if(sigMove <= 0) continue;
       double extremePrice = sigEntry;
 
       for(int b = g_signals[s].barIndex + 1;
-          b < g_signals[s].barIndex + maxForward && b < Bars; b++)
+          b < g_signals[s].barIndex + timeBasedMax && b < Bars; b++)
       {
          int bs = Bars - 1 - b;
          if(bs < 0) break;
@@ -759,7 +778,9 @@ void CalculateEntryZones(bool isBuy, int barIndex,
                              hi, lo, InpPriceDistLookback,
                              maxZones, pullbackPrices, pullbackProbs);
 
-   double curATR = iATR(NULL, 0, InpATRPeriod, totalBars - 1 - barIndex);
+   int bar = totalBars - 1 - barIndex;
+   if(bar <= 0) bar =1;                             
+   double curATR = iATR(NULL, 0, InpATRPeriod, bar);
    double avgATR = 0;
    int atrCnt = 0;
    for(int a = 1; a <= 50; a++)

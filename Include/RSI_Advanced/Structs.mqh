@@ -1,5 +1,7 @@
 ﻿#ifndef RSI_ADV_STRUCTS_MQH
 #define RSI_ADV_STRUCTS_MQH
+#define SESSION_BLOCKS 4
+#define CASE_COUNT     8
 
 struct SignalData
 {
@@ -89,10 +91,16 @@ struct IntermarketData
 
 struct SessionStats
 {
-   int    wins[4];            // Per session: Asian/London/Overlap/LateNY
-   int    losses[4];
-   double winRate[4];         // Calculated win rate per session
-   int    totalPerSession[4];
+   int    wins[SESSION_BLOCKS]; // Per session: Asian/London/Overlap/LateNY
+   int    losses[SESSION_BLOCKS];
+   double winRate[SESSION_BLOCKS]; // Calculated win rate per session
+   int    totalPerSession[SESSION_BLOCKS];
+
+   // 2D: per session × per case
+   int    winsPerCase[SESSION_BLOCKS][CASE_COUNT];
+   int    lossesPerCase[SESSION_BLOCKS][CASE_COUNT];
+   double winRatePerCase[SESSION_BLOCKS][CASE_COUNT];
+   int    totalPerCase[SESSION_BLOCKS][CASE_COUNT];
 };
 
 struct WalkForwardData
