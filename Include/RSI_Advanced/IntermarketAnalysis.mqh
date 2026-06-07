@@ -177,7 +177,6 @@ string GetIntermarketDisplayText()
       return("Intermarket: N/A (no DXY/EURUSD)");
 
    string trend;
-   color trendClr;
 
    if(g_intermarket.dxyTrend > 0.3)
       trend = "USD STRONG";

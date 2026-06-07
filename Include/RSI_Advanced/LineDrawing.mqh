@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                             LineDrawing.mqh        |
 //|                         RSI Advanced - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
@@ -77,11 +77,13 @@ void DrawProbabilityLabels()
 {
    DeleteObjectsByPrefix(PREFIX_PROB);
    if(!InpShowProbability || g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount) return;
-   if(g_currentProb.totalSamples < GetMinSamplesForTimeframe()) return;
+   if(g_currentProb.probTP1 <= 0 && g_currentProb.probSL <= 0) return;
    SignalData sig = g_signals[g_activeSignalIndex];
    int fs = InpProbFontSize;
    datetime dummy = 0;
-   string ni = " [n=" + IntegerToString(g_currentProb.totalSamples) + "]";
+   string ni = (g_currentProb.totalSamples > 0)
+      ? " [n=" + IntegerToString(g_currentProb.totalSamples) + "]"
+      : " [theo]";
    CreateProbLabel(PREFIX_PROB+"SL", "SL  "+DoubleToString(g_currentProb.probSL,1)+"%"+ni, sig.stopLoss, InpSLLineColor, dummy, fs);
    string t1 = "TP1  "+DoubleToString(g_currentProb.probTP1,1)+"%";
    if(g_currentProb.avgBarsToTP1 > 0) t1 += "  ~"+IntegerToString((int)g_currentProb.avgBarsToTP1)+" bars";
@@ -160,4 +162,5 @@ void DrawZoneLines(bool suppress = false)
       ObjectSetInteger(0, zName + "_P", OBJPROP_HIDDEN, true);
    }
 }
+
 #endif

@@ -100,6 +100,7 @@ double BufferSellSignal[];
 #include <RSI_Advanced/LineDrawing.mqh>
 #include <RSI_Advanced/PanelDrawing.mqh>
 #include <RSI_Advanced/ChartEvents.mqh>
+#include <RSI_Advanced/SignalLogger.mqh>
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -151,6 +152,7 @@ int OnInit()
    InitSessionStats();
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
+   LoggerInit(false);
 
    return(INIT_SUCCEEDED);
 }
@@ -158,6 +160,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   FlushLogQueues();
    ReleaseAllHandles();
 
    SavePanelPosition();
@@ -296,38 +299,45 @@ int OnCalculate(const int rates_total,
       bool strongAngleUp    = (greenDelta >= adaptiveThresh);
       bool strongAngleDown  = (greenDelta <= -adaptiveThresh);
 
+      // Cooldown: skip if too close to previous signal
+      if(InpCooldownBars > 0 && g_signalCount > 0)
+      {
+         int lastBar = g_signals[g_signalCount-1].barIndex;
+         if(i - lastBar < InpCooldownBars) continue;
+      }
+
       int buySignal  = 0;
       int sellSignal = 0;
-
-      if(InpEnableCase1 && buySignal == 0 && sellSignal == 0)
+      // Priority: Case 6→2→4→3→1→5→7 (optimized for M1/M5)
+      if(InpEnableCase6 && buySignal == 0 && sellSignal == 0)
       {
-         if(CheckCase1_Buy(i))  buySignal  = 1;
-         if(CheckCase1_Sell(i)) sellSignal = 1;
+         if(CheckCase6_Buy(i))  buySignal  = 6;
+         if(CheckCase6_Sell(i)) sellSignal = 6;
       }
       if(InpEnableCase2 && buySignal == 0 && sellSignal == 0)
       {
          if(greenCrossUp && strongAngleUp && CheckCase2_Buy(i, low)) buySignal = 2;
          if(greenCrossDown && strongAngleDown && CheckCase2_Sell(i, high)) sellSignal = 2;
       }
-      if(InpEnableCase3 && buySignal == 0 && sellSignal == 0)
-      {
-         if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low)) buySignal = 3;
-         if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high)) sellSignal = 3;
-      }
       if(InpEnableCase4 && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase4_Buy(i))  buySignal  = 4;
          if(CheckCase4_Sell(i)) sellSignal = 4;
       }
+      if(InpEnableCase3 && buySignal == 0 && sellSignal == 0)
+      {
+         if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low)) buySignal = 3;
+         if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high)) sellSignal = 3;
+      }
+      if(InpEnableCase1 && buySignal == 0 && sellSignal == 0)
+      {
+         if(CheckCase1_Buy(i))  buySignal  = 1;
+         if(CheckCase1_Sell(i)) sellSignal = 1;
+      }
       if(InpEnableCase5 && buySignal == 0 && sellSignal == 0)
       {
          if(greenCrossUp && strongAngleUp && CheckCase5_Buy(i)) buySignal = 5;
          if(greenCrossDown && strongAngleDown && CheckCase5_Sell(i)) sellSignal = 5;
-      }
-      if(InpEnableCase6 && buySignal == 0 && sellSignal == 0)
-      {
-         if(CheckCase6_Buy(i))  buySignal  = 6;
-         if(CheckCase6_Sell(i)) sellSignal = 6;
       }
       if(InpEnableCase7 && buySignal == 0 && sellSignal == 0)
       {
@@ -356,7 +366,22 @@ int OnCalculate(const int rates_total,
          continue;
       }
 
-      //--- Closed bars: create arrow + store signal
+      //--- MTF gate: suppress signal if higher TFs disagree (latest bar only)
+      if(InpMinMTFAgreement > 0 && InpShowMTF && g_mtfCount > 0 && i >= rates_total - 2)
+      {
+         int agreeCount = 0;
+         for(int t = 0; t < g_mtfCount; t++)
+         {
+            if(buySignal > 0 && g_mtfData[t].trend == 1) agreeCount++;
+            if(sellSignal > 0 && g_mtfData[t].trend == -1) agreeCount++;
+         }
+         int agreePct = (int)(((double)agreeCount / g_mtfCount) * 100);
+         if(agreePct < InpMinMTFAgreement)
+         {
+            buySignal = 0;
+            sellSignal = 0;
+         }
+      }
       if(buySignal > 0)
       {
          BufferBuySignal[i] = (double)buySignal;
@@ -431,12 +456,14 @@ int OnCalculate(const int rates_total,
    // Lightweight: every tick
    RefreshIntermarketData();
    CheckPendingOutcomes();
+   CheckAndLogNewlyResolved();
    UpdateSpreadRegime();
 
    // Heavy: only per new bar
    if(isNewBar)
    {
       s_lastBarTime = currentBarTime;
+      FlushLogQueues();
       UpdateSessionStats();
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
@@ -517,8 +544,7 @@ int OnCalculate(const int rates_total,
          if(g_intermarket.isAvailable)
             GetIntermarketScore(activeSig.isBuySignal);
 
-         // V11: Calculate suppressZones
-         bool suppressZones = false;
+         bool suppressDisplay = false;
          if(!signalInvalidated)
          {
             int mtfAgree = 0;
@@ -531,33 +557,64 @@ int OnCalculate(const int rates_total,
                g_currentProb.totalSamples, mtfAgree,
                slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
             if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
-               suppressZones = true;
+               suppressDisplay = true;
+
+            static datetime s_lastLoggedScoreTime = 0;
+            if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
+            {
+               s_lastLoggedScoreTime = activeSig.signalTime;
+               MqlDateTime sigDt;
+               TimeToStruct(activeSig.signalTime, sigDt);
+               int mtfAgreePctLog = (int)(rec.mtfAlignRatio * 100);
+               string mtfTrendStr = (mtfAgreePctLog > 50) ? "BULL" : (mtfAgreePctLog < -50 ? "BEAR" : "NEUTRAL");
+               double rrLog = (slDist > 0) ? tp1Dist / slDist : 0;
+               LogScoringSnapshot(
+                  activeSig.signalTime, activeSig.caseNumber, activeSig.isBuySignal,
+                  rec.confidence, rec.label,
+                  g_currentProb.probTP1, g_currentProb.probSL, g_currentProb.totalSamples,
+                  rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
+                  activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
+                  g_spreadRegime.spreadRatio, g_walkForward.isRobust);
+            }
          }
 
          DrawInfoPanel(g_activeSignalIndex);
 
          if(!signalInvalidated)
          {
-            // SL/TP lines: draw once, not every tick
-            if(!s_sltpDrawn || forceRedraw)
+            if(!suppressDisplay)
             {
-               DrawSLTPLines(g_activeSignalIndex);
-               s_sltpDrawn = true;
+               if(!s_sltpDrawn || forceRedraw)
+               {
+                  DrawSLTPLines(g_activeSignalIndex);
+                  s_sltpDrawn = true;
+               }
+            }
+            else
+            {
+               DeleteObjectsByPrefix(PREFIX_LINE);
+               DeleteObjectsByPrefix(PREFIX_PROB);
+               s_sltpDrawn = false;
             }
 
             CalculateEntryZones(
                activeSig.isBuySignal, activeSig.barIndex,
                activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
                activeSig.atrValue, high, low, rates_total);
-            DrawZoneLines(suppressZones);
+            DrawZoneLines(suppressDisplay);
 
-            if(InpShowProbability) DrawProbabilityLabels();
+            if(InpShowProbability && !suppressDisplay) DrawProbabilityLabels();
          }
          else
          {
             s_sltpDrawn = false;
          }
       }
+   }
+   else
+   {
+      if(InpShowMTF) RefreshMTFData();
+      DrawInfoPanel(-1);
    }
 
    return(rates_total);

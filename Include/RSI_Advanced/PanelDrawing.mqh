@@ -69,7 +69,138 @@ void CreateTextLabel(string name,int x,int y,string text,color clr,int fs,bool b
 void DrawInfoPanel(int signalIndex)
 {
    if(!InpShowPanel) return;
-   if(signalIndex < 0 || signalIndex >= g_signalCount) return;
+   if(signalIndex < 0 || signalIndex >= g_signalCount)
+   {
+      static int s_lastNoSigHeight = 0;
+      int px = g_panelPosX, py = g_panelPosY;
+      int pw = InpPanelWidth, fs = InpPanelFontSize;
+      int lh = fs + 6, pad = 8, titleBarH = lh + 6;
+      bool hasMTF = (InpShowMTF && g_mtfCount > 0);
+      bool hasV11 = (g_intermarket.isAvailable ||
+                     g_outcomeCount > 0 ||
+                     g_walkForward.isSamples > 0 ||
+                     InpUseSpreadRegime);
+      int calcY = titleBarH + 2 + lh;
+      if(hasMTF) { calcY += 3 + lh + g_mtfCount * lh + lh; }
+      if(hasV11)
+      {
+         calcY += 3 + lh;
+         if(g_intermarket.isAvailable) calcY += lh;
+         if(g_outcomeCount > 0) calcY += lh;
+         if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0) calcY += lh;
+         if(InpUseSpreadRegime) calcY += lh;
+         if(g_rollingPerf.totalTracked > 0) calcY += lh;
+      }
+      calcY += lh + 4;
+      int totalH = calcY;
+      if(!g_panelUserMoved)
+      {
+         int chartH = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
+         int chartW = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
+         if(chartH > 100 && chartW > 100)
+         {
+            if(py + totalH > chartH - 10) { py = MathMax(0, chartH - totalH - 10); g_panelPosY = py; }
+            if(px + pw > chartW - 10)     { px = MathMax(0, chartW - pw - 10);     g_panelPosX = px; }
+         }
+      }
+      if(totalH != s_lastNoSigHeight) { DeleteObjectsByPrefix(PREFIX_PANEL); s_lastNoSigHeight = totalH; }
+      CreateRectangleLabel(PREFIX_PANEL+"0_BG", px, py, pw, totalH, InpPanelBgColor, InpPanelBorderColor);
+      CreateRectangleLabel(PREFIX_PANEL+"0_TB", px, py, pw, titleBarH, InpPanelBorderColor, InpPanelBorderColor);
+      int cy = py + 3;
+      CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy,
+         "RSI Advanced - Monitoring", InpPanelTitleColor, fs+1, true);
+      cy += titleBarH + 2 - 3;
+      CreateTextLabel(PREFIX_PANEL+"2_SYM", px+pad, cy,
+         GetCleanSymbolName()+" | "+GetTimeframeString()+" | No active signal",
+         InpPanelTextColor, fs-1, false);
+      cy += lh;
+      if(hasMTF)
+      {
+         cy += 3;
+         CreateTextLabel(PREFIX_PANEL+"M_T", px+pad, cy,
+            "Multi-TF Signal Status", InpPanelTitleColor, fs-1, true);
+         cy += lh;
+         for(int t=0; t<g_mtfCount; t++)
+         {
+            color tfClr; string sigDir2;
+            if(g_mtfData[t].trend == 1)       { tfClr=InpMTF_BullColor;   sigDir2="BUY  "; }
+            else if(g_mtfData[t].trend == -1) { tfClr=InpMTF_BearColor;   sigDir2="SELL "; }
+            else                              { tfClr=InpMTF_NeutralColor; sigDir2="WAIT "; }
+            string tfName = g_mtfData[t].tfName;
+            while(StringLen(tfName) < 4) tfName += " ";
+            string caseInfo = "";
+            if(g_mtfData[t].lastSignalCase > 0) caseInfo = " C"+IntegerToString(g_mtfData[t].lastSignalCase);
+            double gv = g_mtfData[t].greenValue;
+            string zone2 = "";
+            if(gv > 68) zone2 = " OB"; else if(gv > 50) zone2 = " >>";
+            else if(gv > 32) zone2 = " <<"; else zone2 = " OS";
+            CreateTextLabel(PREFIX_PANEL+"M_"+IntegerToString(t), px+pad+3, cy,
+               tfName+" "+sigDir2+g_mtfData[t].statusText+caseInfo+" ["+DoubleToString(gv,1)+"]"+zone2,
+               tfClr, fs-2, false);
+            cy += lh;
+         }
+         int ag = CalculateMTFAgreement();
+         string agTxt; color agClr;
+         if(ag > 50)       { agTxt="STRONG BULL";  agClr=InpMTF_BullColor; }
+         else if(ag > 0)   { agTxt="WEAK BULL";    agClr=InpMTF_BullColor; }
+         else if(ag < -50) { agTxt="STRONG BEAR";  agClr=InpMTF_BearColor; }
+         else if(ag < 0)   { agTxt="WEAK BEAR";    agClr=InpMTF_BearColor; }
+         else              { agTxt="MIXED";         agClr=InpMTF_NeutralColor; }
+         CreateTextLabel(PREFIX_PANEL+"M_AG", px+pad, cy,
+            agTxt+" ("+IntegerToString(ag)+"%)",
+            agClr, fs-1, true);
+         cy += lh;
+      }
+      if(hasV11)
+      {
+         cy += 3;
+         CreateTextLabel(PREFIX_PANEL+"V_T", px+pad, cy,
+            "Market Status", InpPanelTitleColor, fs-1, true);
+         cy += lh;
+         if(g_intermarket.isAvailable)
+         {
+            string interText = GetIntermarketDisplayText();
+            color interClr = (g_intermarket.dxyTrend > 0.2) ? clrLime :
+                             (g_intermarket.dxyTrend < -0.2) ? clrOrange : clrGray;
+            CreateTextLabel(PREFIX_PANEL+"V_IM", px+pad+3, cy, interText, interClr, fs-2, false);
+            cy += lh;
+         }
+         if(g_outcomeCount > 0)
+         {
+            CreateTextLabel(PREFIX_PANEL+"V_SS", px+pad+3, cy,
+               GetCurrentSessionDisplay(), InpPanelDimColor, fs-2, false);
+            cy += lh;
+         }
+         if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0)
+         {
+            CreateTextLabel(PREFIX_PANEL+"V_WF", px+pad+3, cy,
+               GetWalkForwardDisplay(), GetWalkForwardColor(), fs-2, false);
+            cy += lh;
+         }
+         if(InpUseSpreadRegime)
+         {
+            string spreadText = GetSpreadDisplay();
+            string regimeText = CheckRegimeStability();
+            color spreadClr = GetSpreadColor();
+            color regimeClr = GetRegimeColor();
+            color combinedClr = (spreadClr==clrRed||regimeClr==clrRed) ? clrRed :
+                                (spreadClr==clrOrange||regimeClr==clrOrange) ? clrOrange : clrGray;
+            CreateTextLabel(PREFIX_PANEL+"V_SR", px+pad+3, cy,
+               spreadText+" | "+regimeText, combinedClr, fs-2, false);
+            cy += lh;
+         }
+         if(g_rollingPerf.totalTracked > 0)
+         {
+            CreateTextLabel(PREFIX_PANEL+"V_RP", px+pad+3, cy,
+               GetRollingPerfDisplay(), GetRollingPerfColor(), fs-2, false);
+            cy += lh;
+         }
+      }
+      CreateTextLabel(PREFIX_PANEL+"Z_F", px+pad, cy,
+         "Waiting for signal...", InpPanelDimColor, fs-2, false);
+      ChartRedraw();
+      return;
+   }
 
    // Track layout changes to avoid unnecessary delete/recreate
    static int  s_lastPanelHeight = 0;

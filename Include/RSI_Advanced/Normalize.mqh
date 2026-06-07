@@ -384,17 +384,17 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       if(rsi==0 || atr==0) continue;
       bool rel=false;
       if(isBuy) {
-         if((caseNum==1||caseNum==5) && rsi<35 && rsi>10) rel=true;
-         else if((caseNum==2||caseNum==3) && rsi<45 && rsi>15) rel=true;
-         else if((caseNum==4||caseNum==7) && rsi>45 && rsi<55) rel=true;
-         else if(caseNum==6 && rsi>40 && rsi<65) rel=true;
-         else if(caseNum<=0 && rsi<50 && rsi>10) rel=true;
+         if((caseNum==1||caseNum==5) && rsi<33 && rsi>12) rel=true;
+         else if((caseNum==2||caseNum==3) && rsi<42 && rsi>18) rel=true;
+         else if((caseNum==4||caseNum==7) && rsi>47 && rsi<53) rel=true;
+         else if(caseNum==6 && rsi>42 && rsi<62) rel=true;
+         else if(caseNum<=0 && rsi<48 && rsi>18) rel=true;
       } else {
-         if((caseNum==1||caseNum==5) && rsi>65 && rsi<90) rel=true;
-         else if((caseNum==2||caseNum==3) && rsi>55 && rsi<85) rel=true;
-         else if((caseNum==4||caseNum==7) && rsi>45 && rsi<55) rel=true;
-         else if(caseNum==6 && rsi>35 && rsi<60) rel=true;
-         else if(caseNum<=0 && rsi>50 && rsi<90) rel=true;
+         if((caseNum==1||caseNum==5) && rsi>67 && rsi<88) rel=true;
+         else if((caseNum==2||caseNum==3) && rsi>58 && rsi<82) rel=true;
+         else if((caseNum==4||caseNum==7) && rsi>47 && rsi<53) rel=true;
+         else if(caseNum==6 && rsi>38 && rsi<58) rel=true;
+         else if(caseNum<=0 && rsi>52 && rsi<82) rel=true;
       }
       if(!rel) continue;
       double rsiPrev=iRSI(NULL,0,InpRSIPeriod,InpPrice,bs+1);
@@ -417,7 +417,7 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
    double edge=(double)correctCount/(double)totalCount;
    double shrink=50.0/(50.0+(double)totalCount);
    edge=edge*(1.0-shrink)+0.50*shrink;
-   return(MathMax(0.45, MathMin(0.65, edge)));
+   return(MathMax(0.45, MathMin(0.70, edge)));
 }
 
 //+------------------------------------------------------------------+
@@ -481,6 +481,8 @@ struct TradeRecommendation
    color  labelColor;
    int    confidence;
    double suggestedRisk;
+   double ev;
+   double mtfAlignRatio;
 };
 
 TradeRecommendation GetTradeRecommendation(
@@ -535,14 +537,9 @@ TradeRecommendation GetTradeRecommendation(
    // SCORE COMPONENTS
    // ============================================
 
-   // EV score (0-50)
-   int evScore = 0;
-   if(ev > 0.3)       evScore = 50;
-   else if(ev > 0.15) evScore = 40;
-   else if(ev > 0.05) evScore = 30;
-   else if(ev > 0)    evScore = 20;
-   else if(ev > -0.1) evScore = 10;
-   else               evScore = 0;
+   // EV score (0-50): continuous mapping
+   double evNorm = MathMax(0.0, MathMin(1.0, (ev + 0.2) / 0.7));
+   int evScore = (int)MathRound(evNorm * 50.0);
 
    // Data confidence (0-25)
    int dataScore = (int)(dataConfidence * 25);
@@ -653,6 +650,8 @@ TradeRecommendation GetTradeRecommendation(
       if(StringLen(rLines[i]) > 0)
       { if(shown > 0) rec.reason += " | "; rec.reason += rLines[i]; shown++; }
 
+   rec.ev = ev;
+   rec.mtfAlignRatio = mtfAlignmentRatio;
    return(rec);
 }
 

@@ -32,7 +32,20 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
 {
    barsToResult = 0;
    bool tp1Hit = false, tp2Hit = false, tp3Hit = false;
-   double avgSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
+   double avgSpread = 0;
+   double simATR = iATR(NULL, 0, 14, Bars - 1 - signalBar);
+   if(simATR > 0)
+   {
+      ENUM_INSTRUMENT_TYPE inst = DetectInstrumentType();
+      double spreadPct = 0.05;
+      if(inst == INST_GOLD) spreadPct = 0.03;
+      else if(inst == INST_FOREX_MAJOR) spreadPct = 0.02;
+      else if(inst == INST_CRYPTO) spreadPct = 0.08;
+      else if(inst == INST_INDEX) spreadPct = 0.04;
+      avgSpread = simATR * spreadPct;
+   }
+   else
+      avgSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
 
    for(int j = signalBar + 1; j < MathMin(signalBar + maxBarsForward, Bars); j++)
    {
@@ -316,8 +329,9 @@ void CalculateProbability(int currentSignalIndex)
    g_currentProb.samplesTP3 = t1_3 + t2_3 + t3_3;
    g_currentProb.samplesSL  = t1_s + t2_s + t3_s;
 
+   int minBayesian = MathMax(10, GetMinSamplesForTimeframe() / 3);
    double histTP1=0, histTP2=0, histTP3=0, histSL=0;
-   if(tw > 0 && totalUsed >= 3)
+   if(tw > 0 && totalUsed >= minBayesian)
    {
       double rTP1=wTP1/tw*100, rTP2=wTP2/tw*100;
       double rTP3=wTP3/tw*100, rSL=wSL/tw*100;
@@ -394,7 +408,7 @@ void CalculateProbability(int currentSignalIndex)
    //=================================================================
    // STEP 5: Bayesian combine historical + theoretical
    //=================================================================
-   if(totalUsed >= 3 && tw > 0)
+   if(totalUsed >= minBayesian && tw > 0)
    {
       g_currentProb.probTP1 = CombineTheoreticalHistorical(theoTP1, histTP1, totalUsed, minSamples);
       g_currentProb.probTP2 = CombineTheoreticalHistorical(theoTP2, histTP2, totalUsed, minSamples);

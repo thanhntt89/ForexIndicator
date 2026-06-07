@@ -141,6 +141,7 @@ input bool   InpMTF_D1          = true;           // Show D1
 input color  InpMTF_BullColor   = clrLime;        // Bullish color
 input color  InpMTF_BearColor   = clrRed;         // Bearish color
 input color  InpMTF_NeutralColor= clrGray;        // Neutral color
+input int    InpMinMTFAgreement = 40;              // Min MTF agreement % to confirm signal (0=off)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Probability Engine                                    |
@@ -187,6 +188,7 @@ input double InpSpreadSpikeMulti = 2.0;           // Spread spike threshold (x a
 input string inp_grp_log        = "========== Signal Logging =========="; // ---
 input bool   InpEnableSignalLog = false;                  // Enable signal logging to CSV
 input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside MQL4/Files/)
+
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Debug                                                 |

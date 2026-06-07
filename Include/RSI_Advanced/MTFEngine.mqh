@@ -91,13 +91,19 @@ void RefreshMTFData()
 int CalculateMTFAgreement()
 {
    if(g_mtfCount == 0) return(0);
-   int bull = 0, bear = 0;
+   double bullW = 0, bearW = 0, totalW = 0;
    for(int i = 0; i < g_mtfCount; i++)
    {
-      if(g_mtfData[i].trend == 1) bull++;
-      if(g_mtfData[i].trend == -1) bear++;
+      double w = 1.0;
+      if(g_mtfData[i].timeframe >= PERIOD_H4) w = 3.0;
+      else if(g_mtfData[i].timeframe >= PERIOD_H1) w = 2.0;
+      else if(g_mtfData[i].timeframe >= PERIOD_M30) w = 1.5;
+      if(g_mtfData[i].trend == 1) bullW += w;
+      if(g_mtfData[i].trend == -1) bearW += w;
+      totalW += w;
    }
-   return((int)MathRound(((double)(bull - bear) / (double)g_mtfCount) * 100.0));
+   if(totalW == 0) return(0);
+   return((int)MathRound(((bullW - bearW) / totalW) * 100.0));
 }
 
 //+------------------------------------------------------------------+

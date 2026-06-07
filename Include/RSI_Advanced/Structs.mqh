@@ -134,4 +134,5 @@ struct SpreadRegime
    bool   isExtreme;          // > 3x average
 };
 
+
 #endif

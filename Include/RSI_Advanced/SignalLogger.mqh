@@ -2,12 +2,12 @@
 //|                                            SignalLogger.mqh        |
 //|                         RSI Advanced - Signal Logging to CSV       |
 //|                                                                    |
-//| Ghi 2 file CSV comma-separated vào MQL4/Files/<InpLogFolder>/:      |
+//| Ghi 3 file CSV comma-separated vào MQL4/Files/<InpLogFolder>/:      |
 //|   signals_SYMBOL_TF_YYYY.csv  — 1 dòng mỗi tín hiệu mới          |
+//|   scoring_SYMBOL_TF_YYYY.csv  — decision context per active signal |
 //|   outcomes_SYMBOL_TF_YYYY.csv — append khi outcome resolved        |
 //|                                                                    |
-//| AI đọc outcomes bằng: groupby(SIGNAL_ID).last() để lấy            |
-//| trạng thái mới nhất, sau đó JOIN với signals trên SIGNAL_ID.       |
+//| JOIN: signals ← scoring ← outcomes on SIGNAL_ID                    |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_SIGNALLOGGER_MQH
 #define RSI_ADV_SIGNALLOGGER_MQH
@@ -28,6 +28,9 @@ static int    s_signalQueueCount = 0;
 
 static string s_outcomeQueue[];
 static int    s_outcomeQueueCount = 0;
+
+static string s_scoringQueue[];
+static int    s_scoringQueueCount = 0;
 
 //+------------------------------------------------------------------+
 //| Helper: Push a signal log row to memory queue                     |
@@ -53,6 +56,16 @@ void QueueOutcomeRow(string row)
       ArrayResize(s_outcomeQueue, size + 128);
    }
    s_outcomeQueue[s_outcomeQueueCount++] = row;
+}
+
+void QueueScoringRow(string row)
+{
+   int size = ArraySize(s_scoringQueue);
+   if(s_scoringQueueCount >= size)
+   {
+      ArrayResize(s_scoringQueue, size + 128);
+   }
+   s_scoringQueue[s_scoringQueueCount++] = row;
 }
 
 //+------------------------------------------------------------------+
@@ -152,6 +165,15 @@ string SL_GetOutcomePath()
           + "_" + IntegerToString(dt.year) + ".csv");
 }
 
+string SL_GetScoringPath()
+{
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   return(InpLogFolder + "\\scoring_"
+          + Symbol() + "_" + SL_GetTFName()
+          + "_" + IntegerToString(dt.year) + ".csv");
+}
+
 //+------------------------------------------------------------------+
 //| Helper: Mở file append — trả về handle hoặc INVALID_HANDLE        |
 //| Tự tạo header nếu file chưa tồn tại                               |
@@ -196,17 +218,21 @@ void LoggerInit(bool fullReset)
       string sigPath = SL_GetSignalPath();
       string outPath = SL_GetOutcomePath();
 
+      string scrPath = SL_GetScoringPath();
+
       if(FileIsExist(sigPath))  FileDelete(sigPath);
       if(FileIsExist(outPath))  FileDelete(outPath);
+      if(FileIsExist(scrPath))  FileDelete(scrPath);
 
       s_signalHeaderOK  = false;
       s_outcomeHeaderOK = false;
 
-      // Reset queues
       s_signalQueueCount = 0;
       s_outcomeQueueCount = 0;
+      s_scoringQueueCount = 0;
       ArrayResize(s_signalQueue, 0);
       ArrayResize(s_outcomeQueue, 0);
+      ArrayResize(s_scoringQueue, 0);
    }
 }
 
@@ -223,16 +249,19 @@ void LogSignalEntry(datetime signalTime,
                     double   tp2,
                     double   tp3,
                     double   atr,
-                    int      sessionBlock)
+                    int      sessionBlock,
+                    double   angleZ = 0.0)
 {
    if(!InpEnableSignalLog || !s_loggerReady) return;
 
-   // Tính các chỉ số phái sinh
    double slDist    = MathAbs(entry - sl);
    double tp1Dist   = MathAbs(tp1 - entry);
    double slDistATR = (atr > 0) ? NormalizeDouble(slDist / atr, 3)  : -1;
    double tp1DistATR= (atr > 0) ? NormalizeDouble(tp1Dist / atr, 3) : -1;
    double rrRatio   = (slDist > 0) ? NormalizeDouble(tp1Dist / slDist, 3) : -1;
+
+   MqlDateTime sigDt;
+   TimeToStruct(signalTime, sigDt);
 
    string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
               + Symbol()                           + ","
@@ -251,7 +280,10 @@ void LogSignalEntry(datetime signalTime,
               + DoubleToString(slDistATR, 3)        + ","
               + DoubleToString(tp1DistATR, 3)       + ","
               + DoubleToString(rrRatio, 3)          + ","
-              + SL_GetSessionName(sessionBlock);
+              + SL_GetSessionName(sessionBlock)     + ","
+              + DoubleToString(angleZ, 2)           + ","
+              + IntegerToString(sigDt.hour)         + ","
+              + IntegerToString(sigDt.day_of_week);
 
    QueueSignalRow(row);
 }
@@ -326,7 +358,7 @@ void CheckAndLogNewlyResolved()
       if(g_outcomes[i].outcomeTime > 0 && g_outcomes[i].signalTime > 0)
          barsHeld = (int)MathRound(
             (double)(g_outcomes[i].outcomeTime - g_outcomes[i].signalTime)
-            / (double)PeriodSeconds(Period()));
+            / (double)PeriodSeconds(PERIOD_CURRENT));
 
       // Giá exit = giá tại outcomeTime
       double exitPrice = 0;
@@ -357,32 +389,81 @@ void CheckAndLogNewlyResolved()
 }
 
 //+------------------------------------------------------------------+
+//| Log scoring context for active signal (once per signal)           |
+//| JOIN key: SIGNAL_ID matches signals_*.csv and outcomes_*.csv      |
+//+------------------------------------------------------------------+
+void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
+                        int score, string recLevel,
+                        double probTP1, double probSL, int probSamples,
+                        double ev, double rr,
+                        int mtfAgreePct, string mtfTrend,
+                        double angleZ, int hour, int dow,
+                        double spreadRatio, bool wfRobust)
+{
+   if(!InpEnableSignalLog || !s_loggerReady) return;
+
+   string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
+              + IntegerToString(score)             + ","
+              + recLevel                           + ","
+              + DoubleToString(probTP1, 1)         + ","
+              + DoubleToString(probSL, 1)          + ","
+              + IntegerToString(probSamples)        + ","
+              + DoubleToString(ev, 3)              + ","
+              + DoubleToString(rr, 2)              + ","
+              + IntegerToString(mtfAgreePct)        + ","
+              + mtfTrend                           + ","
+              + DoubleToString(angleZ, 2)          + ","
+              + IntegerToString(hour)              + ","
+              + IntegerToString(dow)               + ","
+              + DoubleToString(spreadRatio, 2)     + ","
+              + (wfRobust ? "1" : "0");
+
+   QueueScoringRow(row);
+}
+
+//+------------------------------------------------------------------+
 //| Flush toàn bộ hàng đợi ghi log ra đĩa cứng                      |
 //+------------------------------------------------------------------+
 void FlushLogQueues()
 {
    if(!InpEnableSignalLog || !s_loggerReady) return;
 
-   // 1. Ghi và làm sạch Signal Queue
+   // 1. Signal Queue
    if(s_signalQueueCount > 0)
    {
       string header = "SIGNAL_ID,SYMBOL,TF,SIGNAL_TIME,LOG_TIME,DIR,CASE_NUM,CASE_NAME"
-                      ",ENTRY,SL,TP1,TP2,TP3,ATR,SL_DIST_ATR,TP1_DIST_ATR,RR_RATIO,SESSION";
+                      ",ENTRY,SL,TP1,TP2,TP3,ATR,SL_DIST_ATR,TP1_DIST_ATR,RR_RATIO"
+                      ",SESSION,ANGLE_Z,HOUR,DOW";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetSignalPath(), header, isNew);
       if(fh != INVALID_HANDLE)
       {
          for(int i = 0; i < s_signalQueueCount; i++)
-         {
             FileWriteString(fh, s_signalQueue[i] + "\n");
-         }
          FileClose(fh);
          s_signalQueueCount = 0;
          ArrayResize(s_signalQueue, 0);
       }
    }
 
-   // 2. Ghi và làm sạch Outcome Queue
+   // 2. Scoring Queue
+   if(s_scoringQueueCount > 0)
+   {
+      string header = "SIGNAL_ID,SCORE,REC_LEVEL,PROB_TP1,PROB_SL,PROB_N,EV,RR"
+                      ",MTF_AGREE_PCT,MTF_TREND,ANGLE_Z,HOUR,DOW,SPREAD_RATIO,WF_ROBUST";
+      bool isNew;
+      int fh = SL_OpenAppend(SL_GetScoringPath(), header, isNew);
+      if(fh != INVALID_HANDLE)
+      {
+         for(int i = 0; i < s_scoringQueueCount; i++)
+            FileWriteString(fh, s_scoringQueue[i] + "\n");
+         FileClose(fh);
+         s_scoringQueueCount = 0;
+         ArrayResize(s_scoringQueue, 0);
+      }
+   }
+
+   // 3. Outcome Queue
    if(s_outcomeQueueCount > 0)
    {
       string header = "SIGNAL_ID,SYMBOL,SIGNAL_TIME,OUTCOME,OUTCOME_TIME"
@@ -392,9 +473,7 @@ void FlushLogQueues()
       if(fh != INVALID_HANDLE)
       {
          for(int i = 0; i < s_outcomeQueueCount; i++)
-         {
             FileWriteString(fh, s_outcomeQueue[i] + "\n");
-         }
          FileClose(fh);
          s_outcomeQueueCount = 0;
          ArrayResize(s_outcomeQueue, 0);
