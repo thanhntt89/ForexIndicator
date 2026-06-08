@@ -53,11 +53,29 @@ void CreateProbLabel(string name, string text, double price, color clr, datetime
    ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
 }
 //+------------------------------------------------------------------+
-void DrawSLTPLines(int sigIdx)
+// dimMode=true: AVOID/WAIT — draw only entry line in dim color, hide SL/TP lines
+void DrawSLTPLines(int sigIdx, bool dimMode = false)
 {
-   DeleteObjectsByPrefix(PREFIX_ZONE);  // Clean zone lines when redrawing
+   DeleteObjectsByPrefix(PREFIX_ZONE);
    if(!InpShowSLTPLines || sigIdx < 0 || sigIdx >= g_signalCount) return;
    SignalData sig = g_signals[sigIdx];
+
+   if(dimMode)
+   {
+      // Full setup shown dim — trader sees risk/reward context without it being a trade signal
+      CreateHorizontalLine(PREFIX_LINE+"ENTRY", sig.entryPrice, InpPanelDimColor, STYLE_DOT, 1, "");
+      CreatePriceTag(PREFIX_LINE+"T_EN", "ENTRY "+DoubleToString(sig.entryPrice,_Digits), sig.entryPrice, InpPanelDimColor);
+      CreateHorizontalLine(PREFIX_LINE+"SL", sig.stopLoss, InpPanelDimColor, STYLE_DOT, 1, "");
+      CreatePriceTag(PREFIX_LINE+"T_SL", "SL "+DoubleToString(sig.stopLoss,_Digits), sig.stopLoss, InpPanelDimColor);
+      CreateHorizontalLine(PREFIX_LINE+"TP1", sig.takeProfit1, InpPanelDimColor, STYLE_DOT, 1, "");
+      CreatePriceTag(PREFIX_LINE+"T_T1", "TP1 "+DoubleToString(sig.takeProfit1,_Digits), sig.takeProfit1, InpPanelDimColor);
+      CreateHorizontalLine(PREFIX_LINE+"TP2", sig.takeProfit2, InpPanelDimColor, STYLE_DOT, 1, "");
+      CreatePriceTag(PREFIX_LINE+"T_T2", "TP2 "+DoubleToString(sig.takeProfit2,_Digits), sig.takeProfit2, InpPanelDimColor);
+      CreateHorizontalLine(PREFIX_LINE+"TP3", sig.takeProfit3, InpPanelDimColor, STYLE_DOT, 1, "");
+      CreatePriceTag(PREFIX_LINE+"T_T3", "TP3 "+DoubleToString(sig.takeProfit3,_Digits), sig.takeProfit3, InpPanelDimColor);
+      return;
+   }
+
    if(InpShowEntryLine)
    {
       CreateHorizontalLine(PREFIX_LINE+"ENTRY", sig.entryPrice, InpEntryLineColor, STYLE_DOT, 1, "ENTRY");
@@ -73,7 +91,8 @@ void DrawSLTPLines(int sigIdx)
    CreatePriceTag(PREFIX_LINE+"T_T3", "TP3 "+DoubleToString(sig.takeProfit3,_Digits), sig.takeProfit3, InpTP3LineColor);
 }
 //+------------------------------------------------------------------+
-void DrawProbabilityLabels()
+// dimMode=true: AVOID/WAIT — all labels shown near entry line, all in dim color
+void DrawProbabilityLabels(bool dimMode = false)
 {
    DeleteObjectsByPrefix(PREFIX_PROB);
    if(!InpShowProbability || g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount) return;
@@ -84,6 +103,16 @@ void DrawProbabilityLabels()
    string ni = (g_currentProb.totalSamples > 0)
       ? " [n=" + IntegerToString(g_currentProb.totalSamples) + "]"
       : " [theo]";
+
+   if(dimMode)
+   {
+      // All labels anchored to entry price level, dim color — no SL/TP price anchors needed
+      string dimTxt = "W:" + DoubleToString(g_currentProb.probTP1,1)
+                    + "% L:" + DoubleToString(g_currentProb.probSL,1) + "%" + ni;
+      CreateProbLabel(PREFIX_PROB+"EN", dimTxt, sig.entryPrice, InpPanelDimColor, dummy, fs);
+      return;
+   }
+
    CreateProbLabel(PREFIX_PROB+"SL", "SL  "+DoubleToString(g_currentProb.probSL,1)+"%"+ni, sig.stopLoss, InpSLLineColor, dummy, fs);
    string t1 = "TP1  "+DoubleToString(g_currentProb.probTP1,1)+"%";
    if(g_currentProb.avgBarsToTP1 > 0) t1 += "  ~"+IntegerToString((int)g_currentProb.avgBarsToTP1)+" bars";

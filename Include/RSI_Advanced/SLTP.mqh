@@ -774,7 +774,10 @@ void CalculateEntryZones(bool isBuy, int barIndex,
 
    double pullbackPrices[];
    double pullbackProbs[];
-   AnalyzePriceDistribution(isBuy, barIndex, marketEntry, effectiveSL,
+   // Use original sl (chart-drawn boundary) for zone placement so no zone appears
+   // beyond the visible SL line. effectiveSL may be expanded by ValidateSLAgainstVolume
+   // and is kept only for per-zone slDistance (lot sizing).
+   AnalyzePriceDistribution(isBuy, barIndex, marketEntry, sl,
                              hi, lo, InpPriceDistLookback,
                              maxZones, pullbackPrices, pullbackProbs);
 
@@ -828,14 +831,16 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       if(g_entryZones[z].price <= 0)
       { g_entryZones[z].isValid = false; continue; }
 
+      // Validate against original sl (chart-drawn line), not effectiveSL.
+      // A zone must lie strictly between marketEntry and the visible SL.
       if(isBuy)
       {
-         if(g_entryZones[z].price >= marketEntry || g_entryZones[z].price <= effectiveSL)
+         if(g_entryZones[z].price >= marketEntry || g_entryZones[z].price <= sl)
          { g_entryZones[z].isValid = false; continue; }
       }
       else
       {
-         if(g_entryZones[z].price <= marketEntry || g_entryZones[z].price >= effectiveSL)
+         if(g_entryZones[z].price <= marketEntry || g_entryZones[z].price >= sl)
          { g_entryZones[z].isValid = false; continue; }
       }
 
@@ -855,14 +860,16 @@ void CalculateEntryZones(bool isBuy, int barIndex,
    {
       if(!g_entryZones[z].isValid) continue;
 
+      // Use original sl for slDistance: this matches the actual SL order placed
+      // and makes R:R / lot size consistent with what the trader sees on chart.
       if(isBuy)
       {
-         g_entryZones[z].slDistance = g_entryZones[z].price - effectiveSL;
+         g_entryZones[z].slDistance = g_entryZones[z].price - sl;
          g_entryZones[z].tp1Distance = tp1 - g_entryZones[z].price;
       }
       else
       {
-         g_entryZones[z].slDistance = effectiveSL - g_entryZones[z].price;
+         g_entryZones[z].slDistance = sl - g_entryZones[z].price;
          g_entryZones[z].tp1Distance = g_entryZones[z].price - tp1;
       }
 

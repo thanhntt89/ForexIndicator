@@ -62,7 +62,7 @@ string GetMTFStatusText(int trend, double greenVal, double redVal, double orange
 //+------------------------------------------------------------------+
 void CheckAndAddMTF(int timeframe, string tfName, bool enabled, int currentTF)
 {
-   if(!enabled || timeframe <= currentTF || g_mtfCount >= 5) return;
+   if(!enabled || timeframe <= currentTF || g_mtfCount >= 6) return;
    if(iBars(NULL, timeframe) < InpBBPeriod + InpRSIPeriod + 5) return;
 
    int idx = g_mtfCount;
@@ -80,6 +80,7 @@ void RefreshMTFData()
 {
    g_mtfCount = 0;
    int currentTF = Period();
+   CheckAndAddMTF(PERIOD_M5,  "M5",  InpMTF_M5,  currentTF);
    CheckAndAddMTF(PERIOD_M15, "M15", InpMTF_M15, currentTF);
    CheckAndAddMTF(PERIOD_M30, "M30", InpMTF_M30, currentTF);
    CheckAndAddMTF(PERIOD_H1,  "H1",  InpMTF_H1,  currentTF);
@@ -98,6 +99,8 @@ int CalculateMTFAgreement()
       if(g_mtfData[i].timeframe >= PERIOD_H4) w = 3.0;
       else if(g_mtfData[i].timeframe >= PERIOD_H1) w = 2.0;
       else if(g_mtfData[i].timeframe >= PERIOD_M30) w = 1.5;
+      else if(g_mtfData[i].timeframe >= PERIOD_M15) w = 1.0;
+      // M5: w = 1.0 (default, immediate next TF for M1)
       if(g_mtfData[i].trend == 1) bullW += w;
       if(g_mtfData[i].trend == -1) bearW += w;
       totalW += w;
@@ -117,6 +120,8 @@ int GetMTFContextScore(bool isBuySignal)
       if(g_mtfData[i].timeframe >= PERIOD_H4) w = 3.0;
       else if(g_mtfData[i].timeframe >= PERIOD_H1) w = 2.0;
       else if(g_mtfData[i].timeframe >= PERIOD_M30) w = 1.5;
+      else if(g_mtfData[i].timeframe >= PERIOD_M15) w = 1.0;
+      // M5: w = 1.0 (default, immediate next TF for M1)
 
       double alignment = isBuySignal ? (double)g_mtfData[i].trend : -(double)g_mtfData[i].trend;
       double strength = MathAbs(g_mtfData[i].greenValue - 50.0) / 50.0;

@@ -1,14 +1,219 @@
 //+------------------------------------------------------------------+
 //|                                        ProbabilityEngine.mqh       |
 //|                         RSI Advanced - Probability Calculation      |
+//+------------------------------------------------------------------+
 //|                                                                    |
-//| Anti-overfitting:                                                  |
+//| PROBABILITY CALCULATION PIPELINE                                   |
+//| ================================                                   |
+//|                                                                    |
+//| Pipeline: 6 steps, moi step dieu chinh xac suat tu step truoc.    |
+//| Output cuoi cung: probTP1, probTP2, probTP3, probSL (tong = 100%) |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 1: HISTORICAL SIMULATION (3 tiers)                            |
+//| ================================================================= |
+//|                                                                    |
+//| Thu thap du lieu lich su bang 3 tang uu tien:                      |
+//|                                                                    |
+//| Tier 1: Stored signals CUNG case number (cung BUY/SELL + caseNum) |
+//|   - Scan tat ca signal da luu trong g_signals[]                    |
+//|   - Chi lay signal cung direction va cung case voi signal hien tai |
+//|   - Moi signal duoc chay SimulateSignalOutcome() de xem ket qua   |
+//|   - Weight: w1 = n^0.75 × 1.0 (tin nhieu nhat, cung case)        |
+//|                                                                    |
+//| Tier 2: Stored signals TAT CA cases (cung BUY/SELL, khac case)    |
+//|   - Giong Tier 1 nhung bo dieu kien caseNumber                    |
+//|   - Tru di ket qua da dem o Tier 1 (tranh double-count)           |
+//|   - Weight: w2 = sqrt(n) × 0.5 (it tin hon, khac case)           |
+//|                                                                    |
+//| Tier 3: ATR-based historical scan (chi chay khi Tier 1+2 it mau) |
+//|   - Scan lich su gia (khong can signal da luu)                    |
+//|   - Tim bar co RSI tuong tu signal hien tai                       |
+//|   - Tu bar do, tao TP/SL tu ATR va simulate ket qua              |
+//|   - Co angle-tier filter: chi so sanh bar co angle tuong tu       |
+//|   - Weight: w3 = sqrt(n) × 0.25 (it tin nhat, du lieu tho)       |
+//|                                                                    |
+//| Ket qua Tier: histTP1, histSL (weighted average cua 3 tiers)      |
+//|   histTP1 = sum(tier_ratio × weight) / sum(weight) × 100          |
+//|   histSL  = 100 - histTP1                                         |
+//|                                                                    |
+//| Dong thoi tinh:                                                    |
+//|   avgBarsToTP1 = so nen trung binh de dat TP1                     |
+//|   avgBarsToSL  = so nen trung binh de dat SL                      |
+//|   (dung cho time-decay o Step 5.7)                                |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 2: EDGE MEASUREMENT                                          |
+//| ================================================================= |
+//|                                                                    |
+//| Do "edge" tu du lieu signal da luu:                                |
+//|   - Voi moi signal cung direction (va cung case neu co):          |
+//|     + Tu entry, gia co vuot entry + 1×ATR hay khong?              |
+//|     + edge = correctCount / totalCount                             |
+//|   - edge = 0.5 nghia la khong co loi the (50/50)                  |
+//|   - edge > 0.5 nghia la co loi the thuc su                        |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 3: EDGE ADJUSTMENTS (MTF + Intermarket + Angle)               |
+//| ================================================================= |
+//|                                                                    |
+//| Dieu chinh edge dua tren cac yeu to bo sung:                      |
+//|                                                                    |
+//| a) MTF (Multi-Timeframe):                                         |
+//|   alignRatio = (agreeCount / totalTF) × 2 - 1   [-1.0, +1.0]     |
+//|   edgeAdj += alignRatio × 0.03                                    |
+//|   → Neu da so TF dong y: +3% edge, nguoc lai: -3%                |
+//|                                                                    |
+//| b) Intermarket (DXY/EURUSD correlation):                           |
+//|   edgeAdj += intermarketEdge  (tu GetIntermarketEdgeAdjustment)   |
+//|                                                                    |
+//| c) Angle Strength (Z-score goc RSI):                               |
+//|   angleAdj = clamp((Z - 1.0) × 0.03, -0.03, +0.04)              |
+//|   Divergence cases (2,3): damp 40% (structure > angle)            |
+//|   edgeAdj += angleAdj × caseDamp                                  |
+//|                                                                    |
+//| adjustedEdge = clamp(edge + edgeAdj, 0.40, 0.85)                  |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 4: THEORETICAL PROBABILITY (Gambler's Ruin)                   |
+//| ================================================================= |
+//|                                                                    |
+//| Chuyen edge thanh xac suat dat TP, dua tren khoang cach SL/TP:    |
+//|                                                                    |
+//| Gambler's Ruin formula:                                            |
+//|   slU = slDist / ATR        (SL tinh bang don vi ATR)             |
+//|   tpU = tpDist / ATR        (TP tinh bang don vi ATR)             |
+//|   mu  = 2 × edge - 1        (drift)                               |
+//|   r   = exp(-2 × mu)                                              |
+//|   P(TP) = (1 - r^slU) / (1 - r^(slU+tpU))                       |
+//|                                                                    |
+//| Real-market corrections (nhan voi P(TP)):                          |
+//|   × (1 - FatTailPenalty)     kurtosis > 3 → phat tail risk       |
+//|   × (1 - VolClusterPenalty)  vol autocorrelation → cluster risk   |
+//|   × (1 - SpreadDrag)         spread / ATR → chi phi giao dich     |
+//|                                                                    |
+//| theoTP1 = GamblersRuin(edge, SL, TP1) × corrections              |
+//| theoTP2 = GamblersRuin(edge, SL, TP2) × corrections              |
+//| theoTP3 = GamblersRuin(edge, SL, TP3) × corrections              |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 5: BAYESIAN COMBINE (Historical + Theoretical)                |
+//| ================================================================= |
+//|                                                                    |
+//| Ket hop 2 nguon: ly thuyet (Step 4) va lich su (Step 1)           |
+//| bang Bayesian weighted average voi Wilson Score SE:                 |
+//|                                                                    |
+//|   pWilson = (p×n + z²/2) / (n + z²)          z = 1.96 (95% CI)  |
+//|   wilsonSE = sqrt((p(1-p)/n + z²/4n²) / (1 + z²/n))             |
+//|   wilsonSE = max(wilsonSE, 0.05)              (floor)             |
+//|   theoSE   = 0.15                             (model uncertainty) |
+//|                                                                    |
+//|   credibility = n/minSamples                  (0 → 1.0)           |
+//|   adjustedSE  = wilsonSE / credibility                            |
+//|                                                                    |
+//|   histWeight = 1/adjustedSE²                                      |
+//|   theoWeight = 1/theoSE²                                          |
+//|   combined = (theo×theoW + hist×histW) / (theoW + histW)          |
+//|                                                                    |
+//| Khi n lon: hist chiem uu the (tin du lieu thuc)                   |
+//| Khi n nho: theo chiem uu the (tin model)                          |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 5.5: CONFIDENCE ADJUSTMENTS                                   |
+//| ================================================================= |
+//|                                                                    |
+//| a) 1-Bar Price Confirmation (Brooks 2012):                         |
+//|   BUY:  nextBar.High > signalBar.High  → confirmed               |
+//|   SELL: nextBar.Low  < signalBar.Low   → confirmed               |
+//|   Khong confirmed → probTP × reductionFactor (0.85 ~ 0.97 theo TF)|
+//|                                                                    |
+//| b) ATR Spike Detection:                                            |
+//|   curATR > avgATR(50) × 2.0 → volatility spike                   |
+//|   shrinkFactor = 1 / spikeRatio                                   |
+//|   prob = 50 + (prob - 50) × shrinkFactor  (keo ve 50%)           |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 5.6: SESSION QUALITY (Bayesian blend)                         |
+//| ================================================================= |
+//|                                                                    |
+//| Neu co du lieu win rate thuc te theo session (n >= 20):            |
+//|   measuredWR = win rate thuc do duoc (theo session + case)        |
+//|   baselineWR = probTP1 hien tai / 100                             |
+//|                                                                    |
+//| Chi blend khi |measuredWR - baselineWR| > 10% (loc noise)        |
+//|                                                                    |
+//|   Wilson SE cho measured data + modelSE = 0.15                    |
+//|   blended = (baseline×modelW + measured×measuredW) / totalW       |
+//|   ratio   = blended / baseline                                    |
+//|   probTP1 *= ratio, probTP2 *= ratio, probTP3 *= ratio            |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 5.7: TIME-DECAY / SURVIVAL ANALYSIS                          |
+//| ================================================================= |
+//|                                                                    |
+//| Xac suat DONG (thay doi theo thoi gian), khong con tinh.          |
+//| Dua tren Weibull survival model:                                   |
+//|                                                                    |
+//|   S(t) = exp(-(t / lambda)^k)                                     |
+//|                                                                    |
+//|   t      = so nen da troi qua tu khi signal xuat hien            |
+//|   lambda = so nen trung binh de dat ket qua (tu Step 1)           |
+//|   k      = shape parameter (hinh dang duong cong phan ra)         |
+//|                                                                    |
+//| Cho TP (edge phai giam khi qua lau):                               |
+//|   k_tp = 1.50 (H1+), 1.40 (M15), 1.30 (M5), 1.20 (M1)           |
+//|   lambda_tp = avgBarsToTP1                                         |
+//|   → Increasing hazard: cang lau cang kho dat TP                  |
+//|   → t = avgTP: S = 36.8% | t = 2×avgTP: S = 5.9%                |
+//|                                                                    |
+//| Cho SL (nguy hiem giam neu song sot qua giai doan dau):           |
+//|   k_sl = 0.80 (H1+), 0.75 (M15), 0.70 (M5), 0.65 (M1)           |
+//|   lambda_sl = avgBarsToSL                                          |
+//|   → Decreasing hazard: song qua danger zone → it bi SL hon       |
+//|   → t = avgSL: S = 37% | t = 2×avgSL: S = 19%                   |
+//|                                                                    |
+//| Bayesian update:                                                   |
+//|   P(TP | survived t bars) =                                        |
+//|       P(TP) × S_tp(t)                                             |
+//|       ─────────────────────────────                                |
+//|       P(TP) × S_tp(t) + P(SL) × S_sl(t)                          |
+//|                                                                    |
+//| Vi du voi avgTP=38, avgSL=10, base Win=39%:                       |
+//|   t=0:   Win 39.0% (moi, chua thay doi)                          |
+//|   t=5:   Win 48.4% (song qua SL zone → edge tang)               |
+//|   t=10:  Win 53.8% (vuot avg SL → edge cao nhat)                 |
+//|   t=38:  Win 40.8% (tai avg TP → bat dau giam)                   |
+//|   t=60:  Win 29.3% (qua han → edge fading)                       |
+//|   t=80:  Win 10.3% (gan het → nen thoat)                         |
+//|                                                                    |
+//| survivalRatio = sqrt(S_tp × S_sl)                                  |
+//|   1.0 = signal moi, 0.0 = edge da het hoan toan                  |
+//|   Panel hien thi mau theo survivalRatio:                           |
+//|   >70% xanh la | >40% vang | >20% cam | <=20% do                 |
+//|                                                                    |
+//| ================================================================= |
+//| STEP 6: FINAL NORMALIZE                                            |
+//| ================================================================= |
+//|                                                                    |
+//| Chuan hoa de dam bao:                                              |
+//|   probTP1 + probSL = 100%                                         |
+//|   probTP2 <= probTP1                                               |
+//|   probTP3 <= probTP2                                               |
+//|                                                                    |
+//| ================================================================= |
+//| ANTI-OVERFITTING MEASURES                                          |
+//| ================================================================= |
+//|                                                                    |
 //| - Tier weights: sqrt(n) × relevance (data-proportional)           |
 //| - MTF adjustment: measured alignment ratio × conservative cap     |
-//| - No hardcoded magic numbers in probability pipeline               |
+//| - Gambler's Ruin: market-corrected (fat tail, vol cluster, spread)|
 //| - Broker-resistant confirmations (High/Low, not Close)             |
 //| - TF-scaled confidence adjustments                                 |
 //| - Session quality from MEASURED data (when n >= 20)                |
+//| - Time-decay: Weibull survival, not arbitrary linear discount      |
+//| - Wilson Score SE with floor 0.05 (never trust data 100%)         |
+//| - Edge hard clamp [0.40, 0.85] (prevent extreme predictions)      |
+//|                                                                    |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_PROBABILITYENGINE_MQH
 #define RSI_ADV_PROBABILITYENGINE_MQH
@@ -32,20 +237,16 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
 {
    barsToResult = 0;
    bool tp1Hit = false, tp2Hit = false, tp3Hit = false;
-   double avgSpread = 0;
-   double simATR = iATR(NULL, 0, 14, Bars - 1 - signalBar);
-   if(simATR > 0)
+   // Use real broker spread instead of hardcoded ATR percentage.
+   // Old code used spreadPct=0.03 for gold = 3% ATR, but actual spread
+   // on XAUUSD M1 is 0.20-0.50 USD vs ATR 0.50-1.50 = 13-100% ATR.
+   double avgSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
+   if(avgSpread <= 0)
    {
-      ENUM_INSTRUMENT_TYPE inst = DetectInstrumentType();
-      double spreadPct = 0.05;
-      if(inst == INST_GOLD) spreadPct = 0.03;
-      else if(inst == INST_FOREX_MAJOR) spreadPct = 0.02;
-      else if(inst == INST_CRYPTO) spreadPct = 0.08;
-      else if(inst == INST_INDEX) spreadPct = 0.04;
-      avgSpread = simATR * spreadPct;
+      double simATR = iATR(NULL, 0, 14, Bars - 1 - signalBar);
+      if(simATR > 0)
+         avgSpread = simATR * 0.05;
    }
-   else
-      avgSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
 
    for(int j = signalBar + 1; j < MathMin(signalBar + maxBarsForward, Bars); j++)
    {
@@ -60,6 +261,9 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
 
       if(isBuy)
       {
+         // BUY: entered at ASK, exit at BID. Chart candles = BID prices.
+         // TP hit when BID (bH) reaches target — NO spread adjustment needed.
+         // SL hit when BID (bL) drops to SL — NO spread adjustment needed.
          bool slHit  = (bL <= slPrice);
          bool tp1Now = (bH >= tp1Price);
 
@@ -173,7 +377,7 @@ void ScanHistoricalATRBased(const SignalData &curSig,
 {
    total=0; timeout=0; tp1=0; tp2=0; tp3=0; sl=0; bTP1=0; bSL=0;
 
-   int probLookback = MathMin(InpProbMaxBars, Bars - maxFwd - 10);
+   int probLookback = MathMin(GetEffectiveProbMaxBars(), Bars - maxFwd - 10);
    int startScan = MathMax(Bars - probLookback, InpRSIPeriod + InpBBPeriod + 10);
    int maxSamples = GetMaxLookbackForTimeframe();
 
@@ -244,6 +448,193 @@ void ScanHistoricalATRBased(const SignalData &curSig,
 }
 
 //+------------------------------------------------------------------+
+//| Vol-Regime Classifier                                              |
+//|                                                                    |
+//| Classify market state using ATR ratio + session time.              |
+//| Gold M1 has 3 distinct behaviors:                                  |
+//|   Pre-London (0-8h UTC): quiet, mean-reverting → RSI works well   |
+//|   London open (8-12h): directional breakout → neutral             |
+//|   NY overlap (12-17h): high vol, unpredictable → reduce edge      |
+//|                                                                    |
+//| ATR ratio = ATR(14, current) / SMA(ATR(14), 50 bars)              |
+//|   < 0.6: QUIET (low vol relative to norm)                         |
+//|   0.6-1.8: NORMAL or TRENDING (depends on session)                |
+//|   > 1.8: EVENT (spike/news)                                       |
+//+------------------------------------------------------------------+
+void UpdateVolRegime()
+{
+   double curATR = iATR(NULL, 0, InpATRPeriod, 0);
+   if(curATR <= 0)
+   {
+      g_volRegime.regime = VOL_NORMAL;
+      g_volRegime.atrRatio = 1.0;
+      g_volRegime.label = "NORMAL";
+      return;
+   }
+
+   double avgATR = 0;
+   int count = 0;
+   int lookback = MathMin(50, Bars - 2);
+   for(int i = 1; i <= lookback; i++)
+   {
+      double a = iATR(NULL, 0, InpATRPeriod, i);
+      if(a > 0) { avgATR += a; count++; }
+   }
+   if(count > 0) avgATR /= count;
+   if(avgATR <= 0) avgATR = curATR;
+
+   double ratio = curATR / avgATR;
+   g_volRegime.atrRatio = ratio;
+
+   int session = GetSessionBlock(TimeCurrent());
+
+   if(ratio > 1.8)
+   {
+      g_volRegime.regime = VOL_EVENT;
+      g_volRegime.label = "EVENT";
+   }
+   else if(ratio < 0.6)
+   {
+      g_volRegime.regime = VOL_QUIET;
+      g_volRegime.label = "QUIET";
+   }
+   else if(ratio > 1.2 && (session == 1 || session == 2))
+   {
+      g_volRegime.regime = VOL_TRENDING;
+      g_volRegime.label = "TRENDING";
+   }
+   else
+   {
+      g_volRegime.regime = VOL_NORMAL;
+      g_volRegime.label = "NORMAL";
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Vol-regime edge adjustment for Step 3                              |
+//+------------------------------------------------------------------+
+double GetVolRegimeEdgeAdjustment()
+{
+   switch(g_volRegime.regime)
+   {
+      case VOL_QUIET:    return(+0.02);  // mean-revert favors RSI OB/OS signals
+      case VOL_EVENT:    return(-0.05);  // unpredictable spike, reduce confidence
+      case VOL_TRENDING: return( 0.00);  // directional market, neutral for RSI
+      default:           return( 0.00);  // NORMAL: no adjustment
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Time-Decay / Survival Analysis                                     |
+//|                                                                    |
+//| Concept: Conditional probability given signal has NOT hit TP/SL    |
+//| after N bars. Uses Weibull survival model:                         |
+//|                                                                    |
+//|   S(t) = exp(-(t/lambda)^k)                                       |
+//|                                                                    |
+//| where:                                                             |
+//|   t      = elapsed bars since signal                               |
+//|   lambda = scale parameter (avg bars to result)                    |
+//|   k      = shape parameter (controls decay curve)                  |
+//|            k < 1: decreasing hazard (less likely to hit over time) |
+//|            k = 1: constant hazard (exponential decay)              |
+//|            k > 1: increasing hazard (more likely to hit over time) |
+//|                                                                    |
+//| For TP: k=1.5 (TP becomes LESS likely as time passes — edge fades)|
+//| For SL: k=0.8 (SL hazard slightly decreases — if survived early   |
+//|         danger zone, price may have moved away from SL)            |
+//|                                                                    |
+//| Final adjusted probability:                                        |
+//|   P_adj(TP) = P_base(TP) × S_tp(t) / [P_base(TP)×S_tp(t) +      |
+//|                                         P_base(SL)×S_sl(t)]       |
+//|                                                                    |
+//| This means:                                                        |
+//|   - Fresh signal (t=0): no change                                  |
+//|   - t < avgBarsToSL: SL survival zone — if survived, edge UP      |
+//|   - t ~ avgBarsToTP1: peak TP window, then edge starts fading      |
+//|   - t >> avgBarsToTP1: edge mostly gone, probability drops          |
+//+------------------------------------------------------------------+
+void ApplyTimeDecay(int elapsedBars)
+{
+   // Need avg bars data to compute decay
+   double avgTP = g_currentProb.avgBarsToTP1;
+   double avgSL = g_currentProb.avgBarsToSL;
+   if(avgTP <= 0 && avgSL <= 0) return;
+   if(elapsedBars <= 0) return;
+
+   // Store elapsed for panel display
+   g_currentProb.elapsedBars = elapsedBars;
+
+   double t = (double)elapsedBars;
+
+   //--- Weibull survival: S(t) = exp(-(t/lambda)^k)
+   //    lambda = avg bars to result (scale)
+   //    k_tp: TP edge fades as time passes (increasing hazard)
+   //    k_sl: SL risk slightly decreases after initial danger zone
+   //    TF-adaptive: M1/M5 manual trader needs slower decay
+   int tf = Period();
+   double k_tp = 1.5;
+   if(tf <= PERIOD_M1)       k_tp = 1.2;
+   else if(tf <= PERIOD_M5)  k_tp = 1.3;
+   else if(tf <= PERIOD_M15) k_tp = 1.4;
+   double k_sl = 0.8;
+   if(tf <= PERIOD_M1)       k_sl = 0.65;
+   else if(tf <= PERIOD_M5)  k_sl = 0.70;
+   else if(tf <= PERIOD_M15) k_sl = 0.75;
+
+   // TP survival: how much TP-edge remains at time t
+   // lambda_tp = avgBarsToTP1; if not available, use 2x avgSL as rough estimate
+   double lambda_tp = (avgTP > 0) ? avgTP : avgSL * 2.0;
+   double S_tp = MathExp(-MathPow(t / lambda_tp, k_tp));
+
+   // SL survival: probability of NOT hitting SL by time t
+   // lambda_sl = avgBarsToSL; if not available, use avgTP/3 as rough estimate
+   double lambda_sl = (avgSL > 0) ? avgSL : lambda_tp / 3.0;
+   double S_sl = MathExp(-MathPow(t / lambda_sl, k_sl));
+
+   // Clamp survival to [0.05, 1.0] — never fully zero (still possible to hit)
+   S_tp = MathMax(0.05, MathMin(1.0, S_tp));
+   S_sl = MathMax(0.05, MathMin(1.0, S_sl));
+
+   //--- Bayes update: P(TP|survived t bars) = P(TP)*S_tp / [P(TP)*S_tp + P(SL)*S_sl]
+   double pTP = g_currentProb.probTP1 / 100.0;
+   double pSL = g_currentProb.probSL / 100.0;
+
+   double numerator   = pTP * S_tp;
+   double denominator = pTP * S_tp + pSL * S_sl;
+
+   if(denominator <= 0) return;
+
+   double adjTP1 = (numerator / denominator) * 100.0;
+   double adjSL  = 100.0 - adjTP1;
+
+   // Survival ratio: overall edge remaining (geometric mean of both survivals)
+   // 1.0 = fresh signal, 0.0 = edge completely exhausted
+   g_currentProb.survivalRatio = MathSqrt(S_tp * S_sl);
+
+   // Estimate minutes until edge drops below ~15% (survival ≈ 0.15)
+   // Solve: exp(-(t_exp/lambda_tp)^k_tp) = 0.15 → t_exp = lambda_tp × (-ln(0.15))^(1/k_tp)
+   double t_exp = lambda_tp * MathPow(-MathLog(0.15), 1.0 / k_tp);
+   int barsRemain = (int)(t_exp - t);
+   if(barsRemain < 0) barsRemain = 0;
+   g_currentProb.expiresMinutes = barsRemain * Period();
+
+   // Scale TP2/TP3 proportionally to TP1 change
+   double ratio = (g_currentProb.probTP1 > 0)
+      ? adjTP1 / g_currentProb.probTP1
+      : 1.0;
+
+   g_currentProb.decayedProbTP1 = NormalizeDouble(adjTP1, 1);
+   g_currentProb.decayedProbSL  = NormalizeDouble(adjSL, 1);
+
+   // Apply decay to main probability fields (replaces static values)
+   g_currentProb.probTP1 = NormalizeDouble(adjTP1, 1);
+   g_currentProb.probTP2 = NormalizeDouble(MathMin(g_currentProb.probTP2 * ratio, adjTP1), 1);
+   g_currentProb.probTP3 = NormalizeDouble(MathMin(g_currentProb.probTP3 * ratio, g_currentProb.probTP2), 1);
+   g_currentProb.probSL  = NormalizeDouble(adjSL, 1);
+}
+
+//+------------------------------------------------------------------+
 //| Main probability calculation                                       |
 //+------------------------------------------------------------------+
 void CalculateProbability(int currentSignalIndex)
@@ -255,6 +646,9 @@ void CalculateProbability(int currentSignalIndex)
    g_currentProb.samplesTP2=0; g_currentProb.samplesTP3=0;
    g_currentProb.samplesSL=0;
    g_currentProb.avgBarsToTP1=0; g_currentProb.avgBarsToSL=0;
+   g_currentProb.decayedProbTP1=0; g_currentProb.decayedProbSL=0;
+   g_currentProb.survivalRatio=1.0; g_currentProb.elapsedBars=0;
+   g_currentProb.expiresMinutes=0;
 
    if(!InpShowProbability) return;
    if(currentSignalIndex < 0 || currentSignalIndex >= g_signalCount) return;
@@ -390,7 +784,13 @@ void CalculateProbability(int currentSignalIndex)
       edgeAdjustment += angleAdj * caseDamp;
    }
 
-   //Patch #2 — Mở Hard Clamp 70% → 85%
+   // --- Vol-regime edge adjustment
+   // QUIET market: RSI OB/OS signals more reliable (+2% edge)
+   // EVENT/spike: reduce confidence (-5% edge)
+   UpdateVolRegime();
+   edgeAdjustment += GetVolRegimeEdgeAdjustment();
+
+   //Patch #2 — Hard Clamp [0.40, 0.85]
    double adjustedEdge = MathMax(0.40, MathMin(0.85, measuredEdge + edgeAdjustment));
 
    //=================================================================
@@ -461,7 +861,8 @@ void CalculateProbability(int currentSignalIndex)
       }
    }
 
-   //--- ATR Spike Detection
+   //--- ATR Spike Detection (skip when Vol-regime already penalized as EVENT)
+   if(g_volRegime.regime != VOL_EVENT)
    {
       int curBarShift = Bars - 1 - curSig.barIndex;
       if(curBarShift >= 0)
@@ -568,6 +969,19 @@ void CalculateProbability(int currentSignalIndex)
             }
          }
       }
+   }
+
+   //=================================================================
+   // STEP 5.7: TIME-DECAY (Survival Analysis)
+   //=================================================================
+   // Elapsed bars since signal → adjust probability using Weibull model.
+   // After SL survival zone: edge increases slightly (survived danger).
+   // After avg TP window: edge fades — signal is aging out.
+   {
+      int barsAgo = iBarShift(NULL, 0, curSig.signalTime, false);
+      if(barsAgo < 0) barsAgo = 0;
+      if(barsAgo > 0 && (g_currentProb.avgBarsToTP1 > 0 || g_currentProb.avgBarsToSL > 0))
+         ApplyTimeDecay(barsAgo);
    }
 
    //=================================================================

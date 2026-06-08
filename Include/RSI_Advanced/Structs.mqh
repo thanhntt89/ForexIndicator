@@ -60,6 +60,12 @@ struct ProbabilityData
    int    samplesSL;
    double avgBarsToTP1;
    double avgBarsToSL;
+   // Time-decay (survival analysis): probability adjusted by elapsed bars
+   double decayedProbTP1;    // probTP1 after time-decay adjustment
+   double decayedProbSL;     // probSL after time-decay adjustment
+   double survivalRatio;     // 0.0-1.0: how much edge remains (1.0 = fresh, 0.0 = expired)
+   int    elapsedBars;       // bars since signal appeared
+   int    expiresMinutes;    // estimated minutes until edge drops below 15%
 };
 
 struct EntryZone
@@ -132,6 +138,26 @@ struct SpreadRegime
    double spreadRatio;
    bool   isSpike;            // > 2x average
    bool   isExtreme;          // > 3x average
+};
+
+// Vol-regime: ATR ratio classifies market state for edge adjustment
+// QUIET: ATR < 60% of avg → mean-reverting, RSI signals stronger
+// NORMAL: ATR between 60-180% → standard conditions
+// TRENDING: ATR high + London/NY session → directional breakout
+// EVENT: ATR > 180% → spike/news, unpredictable
+enum ENUM_VOL_REGIME
+{
+   VOL_QUIET    = 0,
+   VOL_NORMAL   = 1,
+   VOL_TRENDING = 2,
+   VOL_EVENT    = 3
+};
+
+struct VolRegimeData
+{
+   ENUM_VOL_REGIME regime;
+   double          atrRatio;   // current ATR / avg ATR(50)
+   string          label;      // display text
 };
 
 

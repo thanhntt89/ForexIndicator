@@ -124,12 +124,15 @@ int OnInit()
    InitSessionStats();
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
-   LoggerInit(false); // Init logger (keep existing file)
+   LoggerInit(false);
+   if(!LoadSessionStatsBinary())
+      LoadSessionStatsFromOutcomesCSV();
    return(INIT_SUCCEEDED);
 }
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   SaveSessionStatsBinary();
    FlushLogQueues();
    SavePanelPosition();
    DeleteObjectsByPrefix(PREFIX_ARROW);
@@ -175,12 +178,13 @@ int OnCalculate(const int rates_total,
    int minBars = GetMinBarsRequired();
    if(rates_total < minBars) return(0);
    //--- Array management
-   bool fullRecalc = false;
-   if(prev_calculated <= 0 || rates_total != g_prevRatesTotal)
+   // fullRecalc only on first load or when history is shortened (bar indices would shift).
+   // New bar added (rates_total increased) keeps cached signals — incremental path handles it.
+   bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
+   if(fullRecalc)
    {
       ArrayResize(g_rawRSI, rates_total);
       ArrayInitialize(g_rawRSI, EMPTY_VALUE);
-      fullRecalc = true;
       DeleteObjectsByPrefix(PREFIX_ARROW);
       DeleteObjectsByPrefix(PREFIX_LINE);
       DeleteObjectsByPrefix(PREFIX_PANEL);
@@ -189,7 +193,14 @@ int OnCalculate(const int rates_total,
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
-      LoggerInit(true); // fullRecalc: reset file log, rewrite from scratch
+      LoggerInit(true);
+   }
+   else if(rates_total > g_prevRatesTotal)
+   {
+      int oldSize = ArraySize(g_rawRSI);
+      ArrayResize(g_rawRSI, rates_total);
+      for(int k = oldSize; k < rates_total; k++)
+         g_rawRSI[k] = EMPTY_VALUE;
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
@@ -476,7 +487,6 @@ int OnCalculate(const int rates_total,
          if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
             suppressDisplay = true;
 
-         static datetime s_lastLoggedScoreTime = 0;
          if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
          {
             s_lastLoggedScoreTime = activeSig.signalTime;
@@ -498,19 +508,14 @@ int OnCalculate(const int rates_total,
       DrawInfoPanel(g_activeSignalIndex);
       if(!signalInvalidated)
       {
-         if(!suppressDisplay)
-            DrawSLTPLines(g_activeSignalIndex);
-         else
-         {
-            DeleteObjectsByPrefix(PREFIX_LINE);
-            DeleteObjectsByPrefix(PREFIX_PROB);
-         }
+         // dimMode=true: dim entry line + prob summary for AVOID/WAIT; full draw otherwise
+         DrawSLTPLines(g_activeSignalIndex, suppressDisplay);
          CalculateEntryZones(
             activeSig.isBuySignal, activeSig.barIndex,
             activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
             activeSig.atrValue, high, low, rates_total);
          DrawZoneLines(suppressDisplay);
-         if(InpShowProbability && !suppressDisplay) DrawProbabilityLabels();
+         if(InpShowProbability) DrawProbabilityLabels(suppressDisplay);
       }
    }
    else
@@ -518,6 +523,12 @@ int OnCalculate(const int rates_total,
       if(InpShowMTF) RefreshMTFData();
       DrawInfoPanel(-1);
    }
+
+   // Flush scoring queue immediately — LogScoringSnapshot() runs after both new-bar
+   // and fullRecalc FlushLogQueues() calls, so scoring rows would otherwise wait
+   // until the next bar. Scoring is at most 1 row per signal so disk cost is minimal.
+   if(s_scoringQueueCount > 0) FlushLogQueues();
+
    return(rates_total);
 }
 //+------------------------------------------------------------------+

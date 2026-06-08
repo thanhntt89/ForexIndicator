@@ -133,6 +133,7 @@ input int    InpPanelFontSize   = 9;              // Font size
 //+------------------------------------------------------------------+
 input string inp_grp_mtf        = "========== Multi-Timeframe =========="; // ---
 input bool   InpShowMTF         = true;           // Show MTF status
+input bool   InpMTF_M5          = true;           // Show M5 (M1 only)
 input bool   InpMTF_M15         = true;           // Show M15
 input bool   InpMTF_M30         = true;           // Show M30
 input bool   InpMTF_H1          = true;           // Show H1
@@ -196,5 +197,15 @@ input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside 
 input string inp_grp_debug      = "========== Debug =========="; // ---
 input bool   InpDebugMode       = false;        // Print debug info to Experts tab
 input bool   InpStrictDuplicate = false;        // Block duplicate direction signals
+
+// Cross-platform backtest detection macro
+#ifndef ISBACKTESTMODE_DEFINED
+   #ifdef __MQL5__
+      #define IsBacktestMode() ((bool)MQLInfoInteger(MQL_TESTER))
+   #else
+      #define IsBacktestMode() IsTesting()
+   #endif
+   #define ISBACKTESTMODE_DEFINED
+#endif
 
 #endif

@@ -153,13 +153,15 @@ int OnInit()
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
-
+   if(!LoadSessionStatsBinary())
+      LoadSessionStatsFromOutcomesCSV();
    return(INIT_SUCCEEDED);
 }
 
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   SaveSessionStatsBinary();
    FlushLogQueues();
    ReleaseAllHandles();
 
@@ -212,12 +214,13 @@ int OnCalculate(const int rates_total,
    if(rates_total < minBars) return(0);
 
    //--- Array management
-   bool fullRecalc = false;
-   if(prev_calculated <= 0 || rates_total != g_prevRatesTotal)
+   // fullRecalc only on first load or when history is shortened (bar indices would shift).
+   // New bar added (rates_total increased) keeps cached signals — incremental path handles it.
+   bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
+   if(fullRecalc)
    {
       ArrayResize(g_rawRSI, rates_total);
       ArrayInitialize(g_rawRSI, EMPTY_VALUE);
-      fullRecalc = true;
       DeleteObjectsByPrefix(PREFIX_ARROW);
       DeleteObjectsByPrefix(PREFIX_LINE);
       DeleteObjectsByPrefix(PREFIX_PANEL);
@@ -226,6 +229,13 @@ int OnCalculate(const int rates_total,
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
+   }
+   else if(rates_total > g_prevRatesTotal)
+   {
+      int oldSize = ArraySize(g_rawRSI);
+      ArrayResize(g_rawRSI, rates_total);
+      for(int k = oldSize; k < rates_total; k++)
+         g_rawRSI[k] = EMPTY_VALUE;
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
@@ -484,6 +494,15 @@ int OnCalculate(const int rates_total,
    //=================================================================
    if(g_signalCount > 0)
    {
+      // Declare all display-state statics first so they're in scope for the whole block
+      static uint    s_lastDrawTick = 0;
+      static double  s_lastDrawPrice = 0;
+      static int     s_lastDrawSignalIdx = -1;
+      static bool    s_lastInvalidated = false;
+      static bool    s_sltpDrawn = false;
+      static bool    s_zonesDrawn = false;
+      static bool    s_lastSuppressMode = false;
+
       g_activeSignalIndex = g_signalCount - 1;
       SignalData activeSig = g_signals[g_activeSignalIndex];
       double curPrice = iClose(NULL, 0, 0);
@@ -500,14 +519,11 @@ int OnCalculate(const int rates_total,
          DeleteObjectsByPrefix(PREFIX_ZONE);
          g_validZoneCount = 0;
          g_recommendedZoneCount = 0;
+         s_sltpDrawn  = false;
+         s_zonesDrawn = false;
       }
 
       //--- Throttle: only redraw display at controlled intervals
-      static uint    s_lastDrawTick = 0;
-      static double  s_lastDrawPrice = 0;
-      static int     s_lastDrawSignalIdx = -1;
-      static bool    s_lastInvalidated = false;
-      static bool    s_sltpDrawn = false;
 
       uint currentTick = GetTickCount();
       bool forceRedraw = false;
@@ -522,9 +538,9 @@ int OnCalculate(const int rates_total,
       // 3. New bar (isNewBar already calculated above)
       if(isNewBar)
          forceRedraw = true;
-      // 4. Price moved significantly (> 0.5 * ATR * 0.01)
+      // 4. Price moved > 10% ATR — threshold was 0.5% (0.005) which fired every tick
       double priceDelta = MathAbs(curPrice - s_lastDrawPrice);
-      if(activeSig.atrValue > 0 && priceDelta > activeSig.atrValue * 0.005)
+      if(activeSig.atrValue > 0 && priceDelta > activeSig.atrValue * 0.1)
          forceRedraw = true;
       // 5. Minimum time between redraws: 200ms
       if(!forceRedraw && (currentTick - s_lastDrawTick) < 200)
@@ -559,7 +575,6 @@ int OnCalculate(const int rates_total,
             if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
                suppressDisplay = true;
 
-            static datetime s_lastLoggedScoreTime = 0;
             if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
             {
                s_lastLoggedScoreTime = activeSig.signalTime;
@@ -580,34 +595,43 @@ int OnCalculate(const int rates_total,
 
          DrawInfoPanel(g_activeSignalIndex);
 
+         bool modeChanged = (suppressDisplay != s_lastSuppressMode);
+         s_lastSuppressMode = suppressDisplay;
+
          if(!signalInvalidated)
          {
-            if(!suppressDisplay)
+            // Redraw entry line when: first draw, forced, or dim/full mode toggled
+            if(!s_sltpDrawn || forceRedraw || modeChanged)
             {
-               if(!s_sltpDrawn || forceRedraw)
-               {
-                  DrawSLTPLines(g_activeSignalIndex);
-                  s_sltpDrawn = true;
-               }
-            }
-            else
-            {
-               DeleteObjectsByPrefix(PREFIX_LINE);
-               DeleteObjectsByPrefix(PREFIX_PROB);
-               s_sltpDrawn = false;
+               DrawSLTPLines(g_activeSignalIndex, suppressDisplay);
+               s_sltpDrawn = true;
             }
 
-            CalculateEntryZones(
-               activeSig.isBuySignal, activeSig.barIndex,
-               activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
-               activeSig.atrValue, high, low, rates_total);
-            DrawZoneLines(suppressDisplay);
+            // Zones only drawn in full mode (ENTRY/STRONG); hidden in dim mode (AVOID/WAIT)
+            bool needZoneRedraw = !s_zonesDrawn
+                                  || g_activeSignalIndex != s_lastDrawSignalIdx
+                                  || isNewBar;
+            if(!suppressDisplay && needZoneRedraw)
+            {
+               CalculateEntryZones(
+                  activeSig.isBuySignal, activeSig.barIndex,
+                  activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
+                  activeSig.atrValue, high, low, rates_total);
+               DrawZoneLines(false);
+               s_zonesDrawn = true;
+            }
+            else if(suppressDisplay && s_zonesDrawn)
+            {
+               DeleteObjectsByPrefix(PREFIX_ZONE);
+               s_zonesDrawn = false;
+            }
 
-            if(InpShowProbability && !suppressDisplay) DrawProbabilityLabels();
+            if(InpShowProbability) DrawProbabilityLabels(suppressDisplay);
          }
          else
          {
             s_sltpDrawn = false;
+            s_zonesDrawn = false;
          }
       }
    }
@@ -616,6 +640,8 @@ int OnCalculate(const int rates_total,
       if(InpShowMTF) RefreshMTFData();
       DrawInfoPanel(-1);
    }
+
+   if(s_scoringQueueCount > 0) FlushLogQueues();
 
    return(rates_total);
 }

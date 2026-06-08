@@ -90,6 +90,7 @@ void DrawInfoPanel(int signalIndex)
          if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0) calcY += lh;
          if(InpUseSpreadRegime) calcY += lh;
          if(g_rollingPerf.totalTracked > 0) calcY += lh;
+         calcY += lh;  // vol-regime line (always shown)
       }
       calcY += lh + 4;
       int totalH = calcY;
@@ -163,6 +164,17 @@ void DrawInfoPanel(int signalIndex)
             color interClr = (g_intermarket.dxyTrend > 0.2) ? clrLime :
                              (g_intermarket.dxyTrend < -0.2) ? clrOrange : clrGray;
             CreateTextLabel(PREFIX_PANEL+"V_IM", px+pad+3, cy, interText, interClr, fs-2, false);
+            cy += lh;
+         }
+         // Vol-regime display
+         {
+            color vrClr = clrGray;
+            if(g_volRegime.regime == VOL_QUIET)         vrClr = clrLime;
+            else if(g_volRegime.regime == VOL_EVENT)     vrClr = clrRed;
+            else if(g_volRegime.regime == VOL_TRENDING)  vrClr = clrYellow;
+            CreateTextLabel(PREFIX_PANEL+"V_VR", px+pad+3, cy,
+               "Vol:"+g_volRegime.label+" (ATR:"+DoubleToString(g_volRegime.atrRatio, 2)+"x)",
+               vrClr, fs-2, false);
             cy += lh;
          }
          if(g_outcomeCount > 0)
@@ -330,6 +342,7 @@ void DrawInfoPanel(int signalIndex)
       calcY += 3;
       calcY += lh; calcY += lh; calcY += lh;
       calcY += lh; calcY += lh; calcY += lh; calcY += lh;
+      calcY += lh; // time-decay line
    }
    if(hasMTF)
    {
@@ -348,6 +361,7 @@ void DrawInfoPanel(int signalIndex)
       if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0) calcY += lh;
       if(InpUseSpreadRegime) calcY += lh;
       if(g_rollingPerf.totalTracked > 0) calcY += lh;
+      calcY += lh;  // vol-regime line (always shown)
    }
    calcY += lh + 4;
    int totalH = calcY;
@@ -558,6 +572,33 @@ void DrawInfoPanel(int signalIndex)
       avgEdge += "Edge:"+DoubleToString(edge*100,1)+"%";
       CreateTextLabel(PREFIX_PANEL+"P_AE", px+pad, cy, " "+avgEdge, InpPanelDimColor, fs-2, false);
       cy += lh;
+
+      // Time-decay survival line: shows elapsed bars vs avg and remaining edge %
+      if(g_currentProb.elapsedBars > 0 && g_currentProb.survivalRatio < 1.0)
+      {
+         string decayLine = " Elapsed:"+IntegerToString(g_currentProb.elapsedBars)+"bars";
+         double survPct = g_currentProb.survivalRatio * 100.0;
+         decayLine += " | Edge-left:"+DoubleToString(survPct, 0)+"%";
+         if(g_currentProb.expiresMinutes > 0)
+         {
+            if(g_currentProb.expiresMinutes >= 60)
+               decayLine += " | Expires ~"+IntegerToString(g_currentProb.expiresMinutes/60)+"h"+IntegerToString(g_currentProb.expiresMinutes%60)+"m";
+            else
+               decayLine += " | Expires ~"+IntegerToString(g_currentProb.expiresMinutes)+"m";
+         }
+         else
+            decayLine += " | EXPIRED";
+
+         // Color: green = fresh, yellow = fading, orange = weak, red = expired
+         color decayClr;
+         if(survPct > 70)      decayClr = clrLime;
+         else if(survPct > 40) decayClr = clrYellow;
+         else if(survPct > 20) decayClr = clrOrange;
+         else                  decayClr = clrRed;
+
+         CreateTextLabel(PREFIX_PANEL+"P_TD", px+pad, cy, decayLine, decayClr, fs-2, false);
+         cy += lh;
+      }
       string accMtf = " Acc:~72-78%";
       if(hasMTF)
       {
@@ -634,6 +675,17 @@ void DrawInfoPanel(int signalIndex)
          string interText = GetIntermarketDisplayText();
          color interClr = GetIntermarketColor(isBuy);
          CreateTextLabel(PREFIX_PANEL+"V_IM", px+pad+3, cy, interText, interClr, fs-2, false);
+         cy += lh;
+      }
+      // Vol-regime display
+      {
+         color vrClr = clrGray;
+         if(g_volRegime.regime == VOL_QUIET)         vrClr = clrLime;
+         else if(g_volRegime.regime == VOL_EVENT)     vrClr = clrRed;
+         else if(g_volRegime.regime == VOL_TRENDING)  vrClr = clrYellow;
+         CreateTextLabel(PREFIX_PANEL+"V_VR", px+pad+3, cy,
+            "Vol:"+g_volRegime.label+" (ATR:"+DoubleToString(g_volRegime.atrRatio, 2)+"x)",
+            vrClr, fs-2, false);
          cy += lh;
       }
       if(g_outcomeCount > 0)

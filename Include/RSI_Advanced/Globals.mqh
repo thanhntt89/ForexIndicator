@@ -28,7 +28,7 @@ int        g_activeSignalIndex = -1;
 //+------------------------------------------------------------------+
 //| MTF data                                                           |
 //+------------------------------------------------------------------+
-MTFStatus       g_mtfData[5];
+MTFStatus       g_mtfData[6];
 int             g_mtfCount = 0;
 
 //+------------------------------------------------------------------+
@@ -133,6 +133,7 @@ SessionStats      g_sessionStats;
 WalkForwardData   g_walkForward;
 RollingPerformance g_rollingPerf;
 SpreadRegime      g_spreadRegime;
+VolRegimeData     g_volRegime;
 
 //--- Signal outcome tracking for rolling performance
 struct SignalOutcome

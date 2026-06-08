@@ -126,13 +126,28 @@ int GetMaxForwardBarsForTimeframe()
 int GetMaxLookbackForTimeframe()
 {
    int tf = Period();
-   if(tf <= PERIOD_M1)  return(300);
-   if(tf <= PERIOD_M5)  return(250);
-   if(tf <= PERIOD_M15) return(200);
-   if(tf <= PERIOD_M30) return(200);
-   if(tf <= PERIOD_H1)  return(150);
-   if(tf <= PERIOD_H4)  return(120);
-   return(100);
+   int baseCap;
+   if(tf <= PERIOD_M1)       baseCap = 300;
+   else if(tf <= PERIOD_M5)  baseCap = 250;
+   else if(tf <= PERIOD_M15) baseCap = 200;
+   else if(tf <= PERIOD_M30) baseCap = 200;
+   else if(tf <= PERIOD_H1)  baseCap = 150;
+   else if(tf <= PERIOD_H4)  baseCap = 120;
+   else                      baseCap = 100;
+
+   int available = Bars - GetMaxForwardBarsForTimeframe() - 50;
+   if(available <= 0) return(baseCap);
+   double scale = MathSqrt((double)available / 5000.0);
+   scale = MathMax(1.0, MathMin(scale, 2.5));
+   return((int)(baseCap * scale));
+}
+
+int GetEffectiveProbMaxBars()
+{
+   int available = Bars - GetMaxForwardBarsForTimeframe() - 50;
+   if(available <= 0) return(InpProbMaxBars);
+   int autoMax = (int)(available * 0.8);
+   return(MathMax(InpProbMaxBars, MathMin(autoMax, 30000)));
 }
 
 //+------------------------------------------------------------------+

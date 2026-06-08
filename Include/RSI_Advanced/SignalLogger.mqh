@@ -15,12 +15,22 @@
 #include "Config.mqh"
 #include "Globals.mqh"
 
+#ifndef ISBACKTESTMODE_DEFINED
+   #ifdef __MQL5__
+      #define IsBacktestMode() ((bool)MQLInfoInteger(MQL_TESTER))
+   #else
+      #define IsBacktestMode() IsTesting()
+   #endif
+   #define ISBACKTESTMODE_DEFINED
+#endif
+
 //+------------------------------------------------------------------+
 //| State: tránh reinit header nhiều lần                               |
 //+------------------------------------------------------------------+
-static bool s_loggerReady     = false;
-static bool s_signalHeaderOK  = false;
-static bool s_outcomeHeaderOK = false;
+static bool     s_loggerReady        = false;
+static bool     s_signalHeaderOK     = false;
+static bool     s_outcomeHeaderOK    = false;
+static datetime s_lastLoggedScoreTime = 0;  // module-level: can be reset by LoggerInit(true)
 
 // Memory buffer for logs (Non-blocking queue)
 static string s_signalQueue[];
@@ -208,29 +218,29 @@ int SL_OpenAppend(string path, string header, bool &isNew)
 void LoggerInit(bool fullReset)
 {
    if(!InpEnableSignalLog) return;
+   if(IsBacktestMode()) return;
 
-   // Tạo folder nếu chưa tồn tại (MQL4 tự tạo khi FileOpen)
+   FolderCreate(InpLogFolder);  // create subfolder inside MQL4/Files/ if absent
    s_loggerReady = true;
 
    if(fullReset)
    {
-      // Xoá file cũ → indicator recalc = ghi lại từ đầu, không duplicate
       string sigPath = SL_GetSignalPath();
       string outPath = SL_GetOutcomePath();
-
       string scrPath = SL_GetScoringPath();
 
       if(FileIsExist(sigPath))  FileDelete(sigPath);
       if(FileIsExist(outPath))  FileDelete(outPath);
       if(FileIsExist(scrPath))  FileDelete(scrPath);
 
-      s_signalHeaderOK  = false;
-      s_outcomeHeaderOK = false;
+      s_signalHeaderOK    = false;
+      s_outcomeHeaderOK   = false;
+      s_lastLoggedScoreTime = 0;  // allow current active signal to be re-scored
 
-      s_signalQueueCount = 0;
+      s_signalQueueCount  = 0;
       s_outcomeQueueCount = 0;
       s_scoringQueueCount = 0;
-      ArrayResize(s_signalQueue, 0);
+      ArrayResize(s_signalQueue,  0);
       ArrayResize(s_outcomeQueue, 0);
       ArrayResize(s_scoringQueue, 0);
    }
@@ -252,7 +262,7 @@ void LogSignalEntry(datetime signalTime,
                     int      sessionBlock,
                     double   angleZ = 0.0)
 {
-   if(!InpEnableSignalLog || !s_loggerReady) return;
+   if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
    double slDist    = MathAbs(entry - sl);
    double tp1Dist   = MathAbs(tp1 - entry);
@@ -294,7 +304,7 @@ void LogSignalEntry(datetime signalTime,
 //+------------------------------------------------------------------+
 void LogOutcomePending(datetime signalTime, int caseNum, bool isBuy)
 {
-   if(!InpEnableSignalLog || !s_loggerReady) return;
+   if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
    string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
               + Symbol()               + ","
@@ -318,7 +328,7 @@ void LogOutcomeResolved(datetime signalTime,
                         double   mfe,
                         double   mae)
 {
-   if(!InpEnableSignalLog || !s_loggerReady) return;
+   if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
    string outcomeStr, reason;
    if(outcome == 1)       { outcomeStr = "TP1";      reason = "TP1_HIT";       }
@@ -400,7 +410,7 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
                         double angleZ, int hour, int dow,
                         double spreadRatio, bool wfRobust)
 {
-   if(!InpEnableSignalLog || !s_loggerReady) return;
+   if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
    string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
               + IntegerToString(score)             + ","
@@ -426,7 +436,7 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
 //+------------------------------------------------------------------+
 void FlushLogQueues()
 {
-   if(!InpEnableSignalLog || !s_loggerReady) return;
+   if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
    // 1. Signal Queue
    if(s_signalQueueCount > 0)

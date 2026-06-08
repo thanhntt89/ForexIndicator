@@ -11,6 +11,15 @@
 
 #include "Config.mqh"
 #include "Structs.mqh"
+
+#ifndef ISBACKTESTMODE_DEFINED
+   #ifdef __MQL5__
+      #define IsBacktestMode() ((bool)MQLInfoInteger(MQL_TESTER))
+   #else
+      #define IsBacktestMode() IsTesting()
+   #endif
+   #define ISBACKTESTMODE_DEFINED
+#endif
 #include "Globals.mqh"
 #include "Normalize.mqh"
 #include "IntermarketAnalysis.mqh"
@@ -71,8 +80,17 @@ void InitSessionStats()
 //+------------------------------------------------------------------+
 void UpdateSessionStats()
 {
+   static int s_lastProcessedCount = 0;
+
+   int resolvedNow = 0;
+   for(int i = 0; i < g_outcomeCount; i++)
+      if(g_outcomes[i].outcome != 0) resolvedNow++;
+
+   if(resolvedNow == s_lastProcessedCount) return;
+   s_lastProcessedCount = resolvedNow;
+
    InitSessionStats();
-   
+
    for(int i = 0; i < g_outcomeCount; i++)
    {
       if(g_outcomes[i].outcome == 0) continue;  // Pending, skip
@@ -147,6 +165,13 @@ double GetMeasuredSessionQuality(int caseNum, datetime signalTime)
 void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
                             double entryPrice, double sl, double tp1)
 {
+   // Skip if already tracked (e.g., loaded from CSV on startup — prevents double-counting)
+   for(int i = 0; i < g_outcomeCount; i++)
+      if(g_outcomes[i].signalTime == signalTime &&
+         g_outcomes[i].caseNumber == caseNum &&
+         g_outcomes[i].isBuy == isBuy)
+         return;
+
    g_outcomeCount++;
    ArrayResize(g_outcomes, g_outcomeCount);
 
@@ -279,6 +304,186 @@ string GetCurrentSessionDisplay()
       return("Session: " + name + " WR:" + DoubleToString(wr * 100, 1) + "% (n=" + IntegerToString(n) + ")");
    else
       return("Session: " + name + " (insufficient data, n=" + IntegerToString(n) + ")");
+}
+
+//+------------------------------------------------------------------+
+//| Local TF name helper (avoids cross-include with SignalLogger.mqh) |
+//+------------------------------------------------------------------+
+string SS_GetTFName()
+{
+   switch(Period())
+   {
+      case 1:    return("M1");
+      case 5:    return("M5");
+      case 15:   return("M15");
+      case 30:   return("M30");
+      case 60:   return("H1");
+      case 240:  return("H4");
+      case 1440: return("D1");
+      case 10080:return("W1");
+      case 43200:return("MN");
+   }
+   return("TF" + IntegerToString(Period()));
+}
+
+//+------------------------------------------------------------------+
+//| Parse SIGNAL_ID → caseNum, sessionBlock, isBuy, sigTime           |
+//| Format: SYMBOL_TF_BUY3_1717574400                                 |
+//+------------------------------------------------------------------+
+bool ParseOutcomeSignalID(string sid, int &caseNum, int &sessionBlock,
+                           bool &isBuy, datetime &sigTime)
+{
+   int len = StringLen(sid);
+
+   // Find last underscore → epoch part
+   int lastUs = -1;
+   for(int i = len-1; i >= 0; i--)
+      if(StringGetCharacter(sid, i) == '_') { lastUs = i; break; }
+   if(lastUs < 0) return(false);
+
+   sigTime = (datetime)StringToInteger(StringSubstr(sid, lastUs+1));
+   if(sigTime <= 0) return(false);
+   sessionBlock = GetSessionBlock(sigTime);
+
+   string rest = StringSubstr(sid, 0, lastUs);  // e.g. "XAUUSD_H1_BUY3"
+
+   // Find second-to-last underscore → dirCase part
+   int secUs = -1;
+   int rlen = StringLen(rest);
+   for(int i = rlen-1; i >= 0; i--)
+      if(StringGetCharacter(rest, i) == '_') { secUs = i; break; }
+   if(secUs < 0) return(false);
+
+   string dirCase = StringSubstr(rest, secUs+1);  // e.g. "BUY3" or "SELL12"
+
+   if(StringFind(dirCase, "BUY") == 0)
+   {
+      isBuy   = true;
+      caseNum = (int)StringToInteger(StringSubstr(dirCase, 3));
+   }
+   else if(StringFind(dirCase, "SELL") == 0)
+   {
+      isBuy   = false;
+      caseNum = (int)StringToInteger(StringSubstr(dirCase, 4));
+   }
+   else
+      return(false);
+
+   return(caseNum >= 1 && caseNum <= CASE_COUNT);
+}
+
+//+------------------------------------------------------------------+
+//| Read outcomes_*.csv → populate g_outcomes[] as pre-resolved entries|
+//| Reads current year + previous year files.                          |
+//| Must be called AFTER InitSessionStats() and LoggerInit().          |
+//| Calls UpdateSessionStats() internally to rebuild g_sessionStats.   |
+//+------------------------------------------------------------------+
+void LoadSessionStatsFromOutcomesCSV()
+{
+   if(!InpEnableSignalLog || IsBacktestMode()) return;
+
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   string tfName = SS_GetTFName();
+
+   for(int y = 0; y < 2; y++)
+   {
+      int year = dt.year - y;
+      string path = InpLogFolder + "\\outcomes_" + Symbol()
+                    + "_" + tfName + "_" + IntegerToString(year) + ".csv";
+
+      int fh = FileOpen(path, FILE_READ|FILE_CSV|FILE_ANSI, ',');
+      if(fh == INVALID_HANDLE) continue;
+
+      // Skip header line
+      do { FileReadString(fh); } while(!FileIsLineEnding(fh) && !FileIsEnding(fh));
+
+      while(!FileIsEnding(fh))
+      {
+         // outcomes CSV columns (0-indexed):
+         // 0:SIGNAL_ID  1:SYMBOL  2:SIGNAL_TIME  3:OUTCOME  4:OUTCOME_TIME
+         // 5:EXIT_PRICE  6:BARS_HELD  7:REASON  8:MFE  9:MAE
+         string signalId   = FileReadString(fh);   // 0
+         if(signalId == "" || FileIsEnding(fh)) break;
+         FileReadString(fh);                        // 1: SYMBOL (skip)
+         FileReadString(fh);                        // 2: SIGNAL_TIME (skip)
+         string outcome    = FileReadString(fh);    // 3: OUTCOME
+         string outTimeStr = FileReadString(fh);    // 4: OUTCOME_TIME
+         FileReadString(fh);                        // 5: EXIT_PRICE (skip)
+         FileReadString(fh);                        // 6: BARS_HELD (skip)
+         FileReadString(fh);                        // 7: REASON (skip)
+         string mfeStr     = FileReadString(fh);    // 8: MFE
+         string maeStr     = FileReadString(fh);    // 9: MAE
+         while(!FileIsLineEnding(fh) && !FileIsEnding(fh)) FileReadString(fh);
+
+         if(outcome == "PENDING" || outcome == "UNKNOWN" || outcome == "") continue;
+
+         int outcomeCode = 0;
+         if(outcome == "TP1" || outcome == "TP2" || outcome == "TP3") outcomeCode = 1;
+         else if(outcome == "SL")       outcomeCode = -1;
+         else if(outcome == "REVERSAL") outcomeCode = -2;
+         else continue;
+
+         int cn = 0, blk = 0;
+         bool ib = false;
+         datetime st = 0;
+         if(!ParseOutcomeSignalID(signalId, cn, blk, ib, st)) continue;
+
+         // Append as pre-resolved entry (dedup in TrackSignalForSession prevents double-count)
+         g_outcomeCount++;
+         ArrayResize(g_outcomes, g_outcomeCount);
+         int idx = g_outcomeCount - 1;
+         g_outcomes[idx].signalTime   = st;
+         g_outcomes[idx].caseNumber   = cn;
+         g_outcomes[idx].isBuy        = ib;
+         g_outcomes[idx].sessionBlock = blk;
+         g_outcomes[idx].entryPrice   = 0;
+         g_outcomes[idx].stopLoss     = 0;
+         g_outcomes[idx].takeProfit1  = 0;
+         g_outcomes[idx].outcome      = outcomeCode;
+         g_outcomes[idx].outcomeTime  = StringToTime(outTimeStr);
+         g_outcomes[idx].mfe          = StringToDouble(mfeStr);
+         g_outcomes[idx].mae          = StringToDouble(maeStr);
+         g_outcomes[idx].loggedToFile = true;   // already in CSV — skip re-logging
+      }
+      FileClose(fh);
+   }
+
+   UpdateSessionStats();  // Rebuild g_sessionStats from all loaded outcomes
+}
+
+//+------------------------------------------------------------------+
+//| Binary snapshot path: one file per symbol+TF                      |
+//+------------------------------------------------------------------+
+string SS_GetBinaryPath()
+{
+   return(InpLogFolder + "\\RSI_SESS_" + Symbol() + "_" + SS_GetTFName() + ".bin");
+}
+
+//+------------------------------------------------------------------+
+//| Save g_sessionStats to binary file — called from OnDeinit only    |
+//+------------------------------------------------------------------+
+void SaveSessionStatsBinary()
+{
+   if(IsBacktestMode()) return;
+   int fh = FileOpen(SS_GetBinaryPath(), FILE_WRITE|FILE_BIN);
+   if(fh == INVALID_HANDLE) return;
+   FileWriteStruct(fh, g_sessionStats);
+   FileClose(fh);
+}
+
+//+------------------------------------------------------------------+
+//| Load g_sessionStats from binary file — microseconds vs CSV seconds |
+//| Returns true if loaded successfully                                |
+//+------------------------------------------------------------------+
+bool LoadSessionStatsBinary()
+{
+   if(IsBacktestMode()) return(false);
+   int fh = FileOpen(SS_GetBinaryPath(), FILE_READ|FILE_BIN);
+   if(fh == INVALID_HANDLE) return(false);
+   bool ok = (FileReadStruct(fh, g_sessionStats) == sizeof(g_sessionStats));
+   FileClose(fh);
+   return(ok);
 }
 
 #endif
