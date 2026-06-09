@@ -562,6 +562,13 @@ void ApplyTimeDecay(int elapsedBars)
    if(avgTP <= 0 && avgSL <= 0) return;
    if(elapsedBars <= 0) return;
 
+   if(g_currentProb.originalProbTP1 <= 0)
+   {
+      g_currentProb.originalProbTP1 = g_currentProb.probTP1;
+      g_currentProb.originalProbTP2 = g_currentProb.probTP2;
+      g_currentProb.originalProbTP3 = g_currentProb.probTP3;
+   }
+
    // Store elapsed for panel display
    g_currentProb.elapsedBars = elapsedBars;
 
@@ -649,6 +656,7 @@ void CalculateProbability(int currentSignalIndex)
    g_currentProb.decayedProbTP1=0; g_currentProb.decayedProbSL=0;
    g_currentProb.survivalRatio=1.0; g_currentProb.elapsedBars=0;
    g_currentProb.expiresMinutes=0;
+   g_currentProb.originalProbTP1=0; g_currentProb.originalProbTP2=0; g_currentProb.originalProbTP3=0;
 
    if(!InpShowProbability) return;
    if(currentSignalIndex < 0 || currentSignalIndex >= g_signalCount) return;

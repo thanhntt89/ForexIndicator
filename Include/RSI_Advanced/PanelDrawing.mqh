@@ -546,9 +546,13 @@ void DrawInfoPanel(int signalIndex)
       cy += lh;
       double winP = g_currentProb.probTP1, lossP = g_currentProb.probSL;
       color wlClr = winP >= lossP ? clrLime : clrOrange;
-      CreateTextLabel(PREFIX_PANEL+"P_WL", px+pad, cy,
-         "Win:"+DoubleToString(winP,1)+"%  |  Loss:"+DoubleToString(lossP,1)+"%",
-         wlClr, fs, true);
+      string wlText;
+      if(g_currentProb.originalProbTP1 > 0 && g_currentProb.elapsedBars > 0)
+         wlText = "Win:"+DoubleToString(g_currentProb.originalProbTP1,1)+
+                  "%->"+DoubleToString(winP,1)+"%  |  Loss:"+DoubleToString(lossP,1)+"%";
+      else
+         wlText = "Win:"+DoubleToString(winP,1)+"%  |  Loss:"+DoubleToString(lossP,1)+"%";
+      CreateTextLabel(PREFIX_PANEL+"P_WL", px+pad, cy, wlText, wlClr, fs, true);
       cy += lh;
       CreateTextLabel(PREFIX_PANEL+"P_1", px+pad, cy,
          " TP1:"+DoubleToString(g_currentProb.probTP1,1)+"%"+ProbBar(g_currentProb.probTP1)+

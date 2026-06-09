@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                             LineDrawing.mqh        |
 //|                         RSI Advanced - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
@@ -78,8 +78,17 @@ void DrawSLTPLines(int sigIdx, bool dimMode = false)
 
    if(InpShowEntryLine)
    {
-      CreateHorizontalLine(PREFIX_LINE+"ENTRY", sig.entryPrice, InpEntryLineColor, STYLE_DOT, 1, "ENTRY");
-      CreatePriceTag(PREFIX_LINE+"T_EN", "ENTRY "+DoubleToString(sig.entryPrice,_Digits), sig.entryPrice, InpEntryLineColor);
+      color entryClr = InpEntryLineColor;
+      if(g_currentProb.elapsedBars > 0 && g_currentProb.survivalRatio < 1.0)
+      {
+         double edgePct = g_currentProb.survivalRatio * 100.0;
+         if(edgePct > 70)      entryClr = clrLime;
+         else if(edgePct > 40) entryClr = clrYellow;
+         else if(edgePct > 20) entryClr = clrOrange;
+         else                  entryClr = clrRed;
+      }
+      CreateHorizontalLine(PREFIX_LINE+"ENTRY", sig.entryPrice, entryClr, STYLE_DOT, 1, "ENTRY");
+      CreatePriceTag(PREFIX_LINE+"T_EN", "ENTRY "+DoubleToString(sig.entryPrice,_Digits), sig.entryPrice, entryClr);
    }
    CreateHorizontalLine(PREFIX_LINE+"SL", sig.stopLoss, InpSLLineColor, InpSLTPLineStyle, InpSLTPLineWidth, "SL");
    CreatePriceTag(PREFIX_LINE+"T_SL", "SL "+DoubleToString(sig.stopLoss,_Digits), sig.stopLoss, InpSLLineColor);
@@ -98,28 +107,106 @@ void DrawProbabilityLabels(bool dimMode = false)
    if(!InpShowProbability || g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount) return;
    if(g_currentProb.probTP1 <= 0 && g_currentProb.probSL <= 0) return;
    SignalData sig = g_signals[g_activeSignalIndex];
-   int fs = InpProbFontSize;
-   datetime dummy = 0;
    string ni = (g_currentProb.totalSamples > 0)
       ? " [n=" + IntegerToString(g_currentProb.totalSamples) + "]"
       : " [theo]";
 
    if(dimMode)
    {
-      // All labels anchored to entry price level, dim color — no SL/TP price anchors needed
-      string dimTxt = "W:" + DoubleToString(g_currentProb.probTP1,1)
+      string dimTxt = "ENTRY " + DoubleToString(sig.entryPrice,_Digits)
+                    + "  W:" + DoubleToString(g_currentProb.probTP1,1)
                     + "% L:" + DoubleToString(g_currentProb.probSL,1) + "%" + ni;
-      CreateProbLabel(PREFIX_PROB+"EN", dimTxt, sig.entryPrice, InpPanelDimColor, dummy, fs);
+      ObjectSetString(0, PREFIX_LINE+"T_EN", OBJPROP_TEXT, dimTxt);
       return;
    }
 
-   CreateProbLabel(PREFIX_PROB+"SL", "SL  "+DoubleToString(g_currentProb.probSL,1)+"%"+ni, sig.stopLoss, InpSLLineColor, dummy, fs);
-   string t1 = "TP1  "+DoubleToString(g_currentProb.probTP1,1)+"%";
-   if(g_currentProb.avgBarsToTP1 > 0) t1 += "  ~"+IntegerToString((int)g_currentProb.avgBarsToTP1)+" bars";
-   CreateProbLabel(PREFIX_PROB+"TP1", t1, sig.takeProfit1, InpTP1LineColor, dummy, fs);
-   CreateProbLabel(PREFIX_PROB+"TP2", "TP2  "+DoubleToString(g_currentProb.probTP2,1)+"%", sig.takeProfit2, InpTP2LineColor, dummy, fs);
-   CreateProbLabel(PREFIX_PROB+"TP3", "TP3  "+DoubleToString(g_currentProb.probTP3,1)+"%", sig.takeProfit3, InpTP3LineColor, dummy, fs);
-   CreateProbLabel(PREFIX_PROB+"EN", "Win: "+DoubleToString(g_currentProb.probTP1,1)+"% | Loss: "+DoubleToString(g_currentProb.probSL,1)+"%", sig.entryPrice, clrWhite, dummy, fs);
+   // SL: append prob to price tag
+   ObjectSetString(0, PREFIX_LINE+"T_SL", OBJPROP_TEXT,
+      "SL " + DoubleToString(sig.stopLoss,_Digits) + "  " +
+      DoubleToString(g_currentProb.probSL,1) + "%" + ni);
+
+   UpdateTPHitStatus(g_activeSignalIndex);
+
+   int activeTP = 0;
+   if(!g_tpHit[0])      activeTP = 1;
+   else if(!g_tpHit[1]) activeTP = 2;
+   else if(!g_tpHit[2]) activeTP = 3;
+
+   bool hasDecay = (g_currentProb.originalProbTP1 > 0 && g_currentProb.elapsedBars > 0);
+   double edgePct = g_currentProb.survivalRatio * 100.0;
+
+   // TP1
+   string p1 = "";
+   color  c1 = InpTP1LineColor;
+   if(g_tpHit[0])
+   {
+      p1 = "HIT " + DoubleToString(g_currentProb.probTP1,1) + "%";
+      c1 = clrLime;
+   }
+   else if(hasDecay && activeTP == 1)
+   {
+      p1 = DoubleToString(g_currentProb.originalProbTP1,1) + "%->" + DoubleToString(g_currentProb.probTP1,1) + "%";
+      if(g_currentProb.avgBarsToTP1 > 0)
+         p1 += " ~" + IntegerToString((int)g_currentProb.avgBarsToTP1) + "bars";
+      p1 += " Edge:" + DoubleToString(edgePct, 0) + "%";
+      c1 = (g_currentProb.probTP1 >= g_currentProb.originalProbTP1) ? clrLime : clrOrange;
+   }
+   else
+   {
+      p1 = DoubleToString(g_currentProb.probTP1,1) + "%";
+      if(g_currentProb.avgBarsToTP1 > 0)
+         p1 += " ~" + IntegerToString((int)g_currentProb.avgBarsToTP1) + "bars";
+   }
+   ObjectSetString(0, PREFIX_LINE+"T_T1", OBJPROP_TEXT,
+      "TP1 " + DoubleToString(sig.takeProfit1,_Digits) + "  " + p1);
+   ObjectSetInteger(0, PREFIX_LINE+"T_T1", OBJPROP_COLOR, c1);
+
+   // TP2
+   string p2 = "";
+   color  c2 = InpTP2LineColor;
+   if(g_tpHit[1])
+   {
+      p2 = "HIT " + DoubleToString(g_currentProb.probTP2,1) + "%";
+      c2 = clrLime;
+   }
+   else if(hasDecay && activeTP == 2)
+   {
+      p2 = DoubleToString(g_currentProb.originalProbTP2,1) + "%->" + DoubleToString(g_currentProb.probTP2,1) + "%";
+      p2 += " Edge:" + DoubleToString(edgePct, 0) + "%";
+      c2 = (g_currentProb.probTP2 >= g_currentProb.originalProbTP2) ? clrLime : clrOrange;
+   }
+   else
+      p2 = DoubleToString(g_currentProb.probTP2,1) + "%";
+   ObjectSetString(0, PREFIX_LINE+"T_T2", OBJPROP_TEXT,
+      "TP2 " + DoubleToString(sig.takeProfit2,_Digits) + "  " + p2);
+   ObjectSetInteger(0, PREFIX_LINE+"T_T2", OBJPROP_COLOR, c2);
+
+   // TP3
+   string p3 = "";
+   color  c3 = InpTP3LineColor;
+   if(g_tpHit[2])
+   {
+      p3 = "HIT " + DoubleToString(g_currentProb.probTP3,1) + "%";
+      c3 = clrLime;
+   }
+   else if(hasDecay && activeTP == 3)
+   {
+      p3 = DoubleToString(g_currentProb.originalProbTP3,1) + "%->" + DoubleToString(g_currentProb.probTP3,1) + "%";
+      p3 += " Edge:" + DoubleToString(edgePct, 0) + "%";
+      c3 = (g_currentProb.probTP3 >= g_currentProb.originalProbTP3) ? clrLime : clrOrange;
+   }
+   else
+      p3 = DoubleToString(g_currentProb.probTP3,1) + "%";
+   ObjectSetString(0, PREFIX_LINE+"T_T3", OBJPROP_TEXT,
+      "TP3 " + DoubleToString(sig.takeProfit3,_Digits) + "  " + p3);
+   ObjectSetInteger(0, PREFIX_LINE+"T_T3", OBJPROP_COLOR, c3);
+
+   // ENTRY: win/loss
+   ObjectSetString(0, PREFIX_LINE+"T_EN", OBJPROP_TEXT,
+      "ENTRY " + DoubleToString(sig.entryPrice,_Digits) +
+      "  Win:" + DoubleToString(g_currentProb.probTP1,1) +
+      "% | Loss:" + DoubleToString(g_currentProb.probSL,1) + "%");
+   ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_COLOR, clrWhite);
 }
 //+------------------------------------------------------------------+
 //|     ██  ENTRY ZONE LINES  ██                                       |
@@ -140,31 +227,32 @@ void DrawZoneLines(bool suppress = false)
    if(g_validZoneCount < 1) return;
    double offset = iATR(NULL, 0, 14, 0) * 0.2;
    datetime tagTime = GetTimeFromBarPlusPixels(30);
-   datetime probTime = GetTimeFromBarPlusPixels(200);
    for(int z = 0; z < 5; z++)
    {
       if(!g_entryZones[z].isValid) continue;
       if(g_entryZones[z].price <= 0) continue;
-      // Skip Zone 1 if entry line already drawn by DrawSLTPLines
       if(z == 0 && InpShowEntryLine) continue;
       string zName = PREFIX_ZONE + IntegerToString(z);
       color zColor = GetZoneColor(z);
       int zStyle = g_entryZones[z].isRecommended ? STYLE_DASH : STYLE_DOT;
-      // Dim color for non-recommended zones
       if(!g_entryZones[z].isRecommended)
          zColor = InpPanelDimColor;
-      //--- Zone horizontal line
       CreateHorizontalLine(zName + "_L", g_entryZones[z].price,
          zColor, zStyle, 1,
          g_entryZones[z].zoneName + " " +
          DoubleToString(g_entryZones[z].price, _Digits));
-      //--- Zone price tag (left side, near current bar)
+      //--- Zone label: tag + prob in ONE object
       string tagText = "Z" + IntegerToString(z + 1) + " " +
                         DoubleToString(g_entryZones[z].price, _Digits);
       if(g_entryZones[z].lotSize > 0)
          tagText += " " + DoubleToString(g_entryZones[z].lotSize, 2) + "lot";
       if(g_entryZones[z].isRecommended && g_entryZones[z].rrRatio > 0)
          tagText += " R:R1:" + DoubleToString(g_entryZones[z].rrRatio, 1);
+      tagText += "  P:" + DoubleToString(g_entryZones[z].probReach * 100, 0) + "%";
+      if(g_entryZones[z].expectedValue > 0)
+         tagText += " EV+" + DoubleToString(g_entryZones[z].expectedValue, 2) + "R *";
+      else if(g_entryZones[z].expectedValue != 0)
+         tagText += " EV" + DoubleToString(g_entryZones[z].expectedValue, 2) + "R";
       if(ObjectFind(zName + "_T") >= 0) ObjectDelete(zName + "_T");
       ObjectCreate(zName + "_T", OBJ_TEXT, 0, tagTime, g_entryZones[z].price + offset);
       ObjectSetString(0, zName + "_T", OBJPROP_TEXT, tagText);
@@ -174,21 +262,6 @@ void DrawZoneLines(bool suppress = false)
       ObjectSetInteger(0, zName + "_T", OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
       ObjectSetInteger(0, zName + "_T", OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, zName + "_T", OBJPROP_HIDDEN, true);
-      //--- Zone probability tag (right side, further from bar)
-      string probText = "P:" + DoubleToString(g_entryZones[z].probReach * 100, 0) + "%";
-      if(g_entryZones[z].expectedValue > 0)
-         probText += " EV+" + DoubleToString(g_entryZones[z].expectedValue, 2) + "R *";
-      else if(g_entryZones[z].expectedValue != 0)
-         probText += " EV" + DoubleToString(g_entryZones[z].expectedValue, 2) + "R";
-      if(ObjectFind(zName + "_P") >= 0) ObjectDelete(zName + "_P");
-      ObjectCreate(zName + "_P", OBJ_TEXT, 0, probTime, g_entryZones[z].price + offset);
-      ObjectSetString(0, zName + "_P", OBJPROP_TEXT, probText);
-      ObjectSetInteger(0, zName + "_P", OBJPROP_COLOR, zColor);
-      ObjectSetString(0, zName + "_P", OBJPROP_FONT, "Arial");
-      ObjectSetInteger(0, zName + "_P", OBJPROP_FONTSIZE, 7);
-      ObjectSetInteger(0, zName + "_P", OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
-      ObjectSetInteger(0, zName + "_P", OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, zName + "_P", OBJPROP_HIDDEN, true);
    }
 }
 

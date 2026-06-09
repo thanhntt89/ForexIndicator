@@ -66,6 +66,9 @@ struct ProbabilityData
    double survivalRatio;     // 0.0-1.0: how much edge remains (1.0 = fresh, 0.0 = expired)
    int    elapsedBars;       // bars since signal appeared
    int    expiresMinutes;    // estimated minutes until edge drops below 15%
+   double originalProbTP1;  // pre-decay probabilities (for display: "68%<-72%")
+   double originalProbTP2;
+   double originalProbTP3;
 };
 
 struct EntryZone

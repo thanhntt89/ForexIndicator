@@ -155,5 +155,41 @@ struct SignalOutcome
 SignalOutcome g_outcomes[];
 int           g_outcomeCount = 0;
 
+//+------------------------------------------------------------------+
+//| Active signal TP hit tracking (locked once touched)                |
+//+------------------------------------------------------------------+
+bool     g_tpHit[3]     = {false, false, false};  // TP1, TP2, TP3
+datetime g_tpHitTime[3] = {0, 0, 0};
+int      g_tpTrackingSigIndex = -1;                // reset when signal changes
+
+void ResetTPTracking(int newSigIndex)
+{
+   g_tpTrackingSigIndex = newSigIndex;
+   for(int i = 0; i < 3; i++) { g_tpHit[i] = false; g_tpHitTime[i] = 0; }
+}
+
+void UpdateTPHitStatus(int sigIdx)
+{
+   if(sigIdx < 0 || sigIdx >= g_signalCount) return;
+   if(sigIdx != g_tpTrackingSigIndex) ResetTPTracking(sigIdx);
+
+   SignalData sig = g_signals[sigIdx];
+   double curPrice = (sig.isBuySignal)
+      ? MarketInfo(Symbol(), MODE_BID)
+      : MarketInfo(Symbol(), MODE_ASK);
+
+   if(sig.isBuySignal)
+   {
+      if(!g_tpHit[0] && curPrice >= sig.takeProfit1) { g_tpHit[0] = true; g_tpHitTime[0] = TimeCurrent(); }
+      if(!g_tpHit[1] && curPrice >= sig.takeProfit2) { g_tpHit[1] = true; g_tpHitTime[1] = TimeCurrent(); }
+      if(!g_tpHit[2] && curPrice >= sig.takeProfit3) { g_tpHit[2] = true; g_tpHitTime[2] = TimeCurrent(); }
+   }
+   else
+   {
+      if(!g_tpHit[0] && curPrice <= sig.takeProfit1) { g_tpHit[0] = true; g_tpHitTime[0] = TimeCurrent(); }
+      if(!g_tpHit[1] && curPrice <= sig.takeProfit2) { g_tpHit[1] = true; g_tpHitTime[1] = TimeCurrent(); }
+      if(!g_tpHit[2] && curPrice <= sig.takeProfit3) { g_tpHit[2] = true; g_tpHitTime[2] = TimeCurrent(); }
+   }
+}
 
 #endif
