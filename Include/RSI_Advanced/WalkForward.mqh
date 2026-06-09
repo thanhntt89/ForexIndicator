@@ -68,23 +68,13 @@ void CalculateWalkForwardMetrics()
    int isWins = 0, isLosses = 0;
    int oosWins = 0, oosLosses = 0;
 
+   datetime splitTime = (splitIndex < g_signalCount) ?
+      g_signals[splitIndex].signalTime : (datetime)0;
+
    for(int i = 0; i < g_outcomeCount; i++)
    {
-      if(g_outcomes[i].outcome == 0) continue;  // Pending
-
-      // Determine if this outcome belongs to IS or OOS
-      // Match by signal time against signal array split
-      bool isInSample = true;
-
-      // Find matching signal index
-      for(int s = 0; s < g_signalCount; s++)
-      {
-         if(g_signals[s].signalTime == g_outcomes[i].signalTime)
-         {
-            isInSample = (s < splitIndex);
-            break;
-         }
-      }
+      if(g_outcomes[i].outcome == 0) continue;
+      bool isInSample = (g_outcomes[i].signalTime < splitTime);
 
       if(isInSample)
       {

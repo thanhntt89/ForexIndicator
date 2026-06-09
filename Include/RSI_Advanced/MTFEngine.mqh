@@ -60,12 +60,30 @@ string GetMTFStatusText(int trend, double greenVal, double redVal, double orange
 }
 
 //+------------------------------------------------------------------+
+datetime g_mtfLastBarTime[6];
+bool     g_mtfCacheValid[6];
+
+void InitMTFCache()
+{
+   for(int i = 0; i < 6; i++)
+   { g_mtfLastBarTime[i] = 0; g_mtfCacheValid[i] = false; }
+}
+
 void CheckAndAddMTF(int timeframe, string tfName, bool enabled, int currentTF)
 {
    if(!enabled || timeframe <= currentTF || g_mtfCount >= 6) return;
    if(iBars(NULL, timeframe) < InpBBPeriod + InpRSIPeriod + 5) return;
 
    int idx = g_mtfCount;
+   datetime htfBarTime = iTime(NULL, timeframe, 0);
+   if(g_mtfCacheValid[idx] && htfBarTime == g_mtfLastBarTime[idx])
+   {
+      g_mtfCount++;
+      return;
+   }
+   g_mtfLastBarTime[idx] = htfBarTime;
+   g_mtfCacheValid[idx]  = true;
+
    g_mtfData[idx].timeframe   = timeframe;
    g_mtfData[idx].tfName      = tfName;
    g_mtfData[idx].greenValue  = CalculateMTF_SMA_RSI(timeframe, InpFastMAPeriod);

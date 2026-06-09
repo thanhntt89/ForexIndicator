@@ -33,6 +33,15 @@ double GetBBWidthPercentile(int barIndex, int lookback)
 //+------------------------------------------------------------------+
 double GetATRState(int barShift)
 {
+   static double   s_atrResult = 1.0;
+   static int       s_atrCachedShift = -1;
+   static datetime  s_atrCachedBar = 0;
+   datetime curBar = iTime(NULL, 0, 0);
+   if(barShift == s_atrCachedShift && curBar == s_atrCachedBar)
+      return(s_atrResult);
+   s_atrCachedShift = barShift;
+   s_atrCachedBar = curBar;
+
    double curATR = iATR(NULL, 0, InpATRPeriod, barShift);
    double avgATR = 0;
    int cnt = 0;
@@ -41,8 +50,9 @@ double GetATRState(int barShift)
       avgATR += iATR(NULL, 0, InpATRPeriod, j);
       cnt++;
    }
-   if(cnt == 0 || avgATR == 0) return(1.0);
-   return(curATR / (avgATR / cnt));
+   if(cnt == 0 || avgATR == 0) { s_atrResult = 1.0; return(1.0); }
+   s_atrResult = curATR / (avgATR / cnt);
+   return(s_atrResult);
 }
 
 //+------------------------------------------------------------------+

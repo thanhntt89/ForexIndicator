@@ -413,6 +413,9 @@ int OnCalculate(const int rates_total,
          double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
+         LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
+                        GetSessionBlock(time[i]), angleZ);
+         LogOutcomePending(time[i], buySignal, true);
       }
       if(sellSignal > 0)
       {
@@ -435,6 +438,9 @@ int OnCalculate(const int rates_total,
          double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
+         LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
+                        GetSessionBlock(time[i]), angleZ);
+         LogOutcomePending(time[i], sellSignal, false);
       }
 
       //--- Alert on newly closed bar
@@ -467,11 +473,11 @@ int OnCalculate(const int rates_total,
    RefreshIntermarketData();
    CheckPendingOutcomes();
    CheckAndLogNewlyResolved();
-   UpdateSpreadRegime();
 
    // Heavy: only per new bar
    if(isNewBar)
    {
+      UpdateSpreadRegime();
       s_lastBarTime = currentBarTime;
       FlushLogQueues();
       UpdateSessionStats();

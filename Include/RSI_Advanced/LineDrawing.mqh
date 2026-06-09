@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                             LineDrawing.mqh        |
 //|                         RSI Advanced - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
@@ -8,6 +8,19 @@
 #include "Structs.mqh"
 #include "Globals.mqh"
 #include "MathUtils.mqh"
+
+double GetCachedATROffset()
+{
+   static double  s_cachedOffset = 0;
+   static datetime s_cachedBar   = 0;
+   datetime curBar = iTime(NULL, 0, 0);
+   if(curBar != s_cachedBar)
+   {
+      s_cachedBar = curBar;
+      s_cachedOffset = iATR(NULL, 0, 14, 0) * 0.2;
+   }
+   return(s_cachedOffset);
+}
 #include "SLTP.mqh"
 //+------------------------------------------------------------------+
 void CreateHorizontalLine(string name, double price, color clr, int style, int width, string tip)
@@ -26,7 +39,7 @@ void CreateHorizontalLine(string name, double price, color clr, int style, int w
 void CreatePriceTag(string name, string text, double price, color clr)
 {
    if(ObjectFind(name) >= 0) ObjectDelete(name);
-   double offset = iATR(NULL, 0, 14, 0) * 0.2;
+   double offset = GetCachedATROffset();
    datetime tagTime = GetTimeFromBarPlusPixels(30);
    ObjectCreate(name, OBJ_TEXT, 0, tagTime, price + offset);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
@@ -41,7 +54,7 @@ void CreatePriceTag(string name, string text, double price, color clr)
 void CreateProbLabel(string name, string text, double price, color clr, datetime dummy, int fs)
 {
    if(ObjectFind(name) >= 0) ObjectDelete(name);
-   double offset = iATR(NULL, 0, 14, 0) * 0.2;
+   double offset = GetCachedATROffset();
    datetime probTime = GetTimeFromBarPlusPixels(180);
    ObjectCreate(name, OBJ_TEXT, 0, probTime, price + offset);
    ObjectSetString(0, name, OBJPROP_TEXT, "  " + text);
@@ -225,7 +238,7 @@ void DrawZoneLines(bool suppress = false)
 
    if(InpEntryZoneCount < 2) return;
    if(g_validZoneCount < 1) return;
-   double offset = iATR(NULL, 0, 14, 0) * 0.2;
+   double offset = GetCachedATROffset();
    datetime tagTime = GetTimeFromBarPlusPixels(30);
    for(int z = 0; z < 5; z++)
    {

@@ -646,6 +646,14 @@ void ApplyTimeDecay(int elapsedBars)
 //+------------------------------------------------------------------+
 void CalculateProbability(int currentSignalIndex)
 {
+   static int      s_probCachedSigIdx  = -1;
+   static datetime s_probCachedBarTime = 0;
+   datetime curBar = iTime(NULL, 0, 0);
+   if(currentSignalIndex == s_probCachedSigIdx && curBar == s_probCachedBarTime)
+      return;
+   s_probCachedSigIdx  = currentSignalIndex;
+   s_probCachedBarTime = curBar;
+
    // Reset
    g_currentProb.probTP1=0; g_currentProb.probTP2=0;
    g_currentProb.probTP3=0; g_currentProb.probSL=0;
@@ -757,6 +765,7 @@ void CalculateProbability(int currentSignalIndex)
    //=================================================================
    double measuredEdge = MeasureEdgeFromHistory(
       curSig.caseNumber, curSig.isBuySignal, maxFwd);
+   g_cachedEdge = measuredEdge;
 
    //=================================================================
    // STEP 3: MTF + Intermarket adjusted edge

@@ -216,13 +216,17 @@ void RefreshIntermarketData()
       return;
    }
 
-   // Detect symbol on first call or if lost connection
    if(!g_intermarket.isAvailable || StringLen(g_intermarket.sourceSymbol) == 0)
       DetectIntermarketSymbol();
 
-   // Calculate trend
    if(g_intermarket.isAvailable)
+   {
+      static datetime s_imLastBarTime = 0;
+      datetime curBar = iTime(NULL, 0, 0);
+      if(curBar == s_imLastBarTime) return;
+      s_imLastBarTime = curBar;
       CalculateIntermarketTrend();
+   }
 }
 
 #endif

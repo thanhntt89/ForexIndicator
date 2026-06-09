@@ -197,21 +197,52 @@ void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
 //+------------------------------------------------------------------+
 void CheckPendingOutcomes()
 {
+   static datetime s_cpLastBarTime = 0;
+   datetime curBarTime = iTime(NULL, 0, 0);
+   bool cpNewBar = (curBarTime != s_cpLastBarTime);
+   if(cpNewBar) s_cpLastBarTime = curBarTime;
+
    for(int i = 0; i < g_outcomeCount; i++)
    {
-      if(g_outcomes[i].outcome != 0) continue;  // Already resolved
+      if(g_outcomes[i].outcome != 0) continue;
 
-      // Find signal bar index
+      if(!cpNewBar)
+      {
+         double barHigh = iHigh(NULL, 0, 0);
+         double barLow  = iLow(NULL, 0, 0);
+         if(g_outcomes[i].isBuy)
+         {
+            double favor = barHigh - g_outcomes[i].entryPrice;
+            double advers= g_outcomes[i].entryPrice - barLow;
+            if(favor  > g_outcomes[i].mfe) g_outcomes[i].mfe = favor;
+            if(advers > g_outcomes[i].mae) g_outcomes[i].mae = advers;
+            if(barLow <= g_outcomes[i].stopLoss)
+            { g_outcomes[i].outcome = -1; g_outcomes[i].outcomeTime = curBarTime; }
+            else if(barHigh >= g_outcomes[i].takeProfit1)
+            { g_outcomes[i].outcome = 1; g_outcomes[i].outcomeTime = curBarTime; }
+         }
+         else
+         {
+            double favor = g_outcomes[i].entryPrice - barLow;
+            double advers= barHigh - g_outcomes[i].entryPrice;
+            if(favor  > g_outcomes[i].mfe) g_outcomes[i].mfe = favor;
+            if(advers > g_outcomes[i].mae) g_outcomes[i].mae = advers;
+            if(barHigh >= g_outcomes[i].stopLoss)
+            { g_outcomes[i].outcome = -1; g_outcomes[i].outcomeTime = curBarTime; }
+            else if(barLow <= g_outcomes[i].takeProfit1)
+            { g_outcomes[i].outcome = 1; g_outcomes[i].outcomeTime = curBarTime; }
+         }
+         continue;
+      }
+
       int sigBarShift = iBarShift(NULL, 0, g_outcomes[i].signalTime, false);
       if(sigBarShift < 0) continue;
 
-      // Scan bars from signal to current
       for(int b = sigBarShift - 1; b >= 0; b--)
       {
          double barHigh = iHigh(NULL, 0, b);
          double barLow  = iLow(NULL, 0, b);
 
-         // Track MFE / MAE while pending
          if(g_outcomes[i].isBuy)
          {
             double favor = barHigh - g_outcomes[i].entryPrice;
@@ -229,37 +260,17 @@ void CheckPendingOutcomes()
 
          if(g_outcomes[i].isBuy)
          {
-            // BUY: SL hit when low <= SL
             if(barLow <= g_outcomes[i].stopLoss)
-            {
-               g_outcomes[i].outcome = -1;
-               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
-               break;
-            }
-            // BUY: TP1 hit when high >= TP1
+            { g_outcomes[i].outcome = -1; g_outcomes[i].outcomeTime = iTime(NULL, 0, b); break; }
             if(barHigh >= g_outcomes[i].takeProfit1)
-            {
-               g_outcomes[i].outcome = 1;
-               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
-               break;
-            }
+            { g_outcomes[i].outcome = 1; g_outcomes[i].outcomeTime = iTime(NULL, 0, b); break; }
          }
          else
          {
-            // SELL: SL hit when high >= SL
             if(barHigh >= g_outcomes[i].stopLoss)
-            {
-               g_outcomes[i].outcome = -1;
-               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
-               break;
-            }
-            // SELL: TP1 hit when low <= TP1
+            { g_outcomes[i].outcome = -1; g_outcomes[i].outcomeTime = iTime(NULL, 0, b); break; }
             if(barLow <= g_outcomes[i].takeProfit1)
-            {
-               g_outcomes[i].outcome = 1;
-               g_outcomes[i].outcomeTime = iTime(NULL, 0, b);
-               break;
-            }
+            { g_outcomes[i].outcome = 1; g_outcomes[i].outcomeTime = iTime(NULL, 0, b); break; }
          }
       }
    }

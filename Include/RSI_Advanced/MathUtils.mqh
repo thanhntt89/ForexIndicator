@@ -64,12 +64,7 @@ string GetTimeframeString()
 #ifndef __MQL5__
 void DeleteObjectsByPrefix(string prefix)
 {
-   for(int i = ObjectsTotal() - 1; i >= 0; i--)
-   {
-      string name = ObjectName(i);
-      if(StringFind(name, prefix) == 0)
-         ObjectDelete(name);
-   }
+   ObjectsDeleteAll(0, prefix);
 }
 #endif
 

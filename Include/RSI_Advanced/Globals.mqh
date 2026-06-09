@@ -35,6 +35,7 @@ int             g_mtfCount = 0;
 //| Probability data                                                   |
 //+------------------------------------------------------------------+
 ProbabilityData g_currentProb;
+double          g_cachedEdge = 0.51;
 
 //+------------------------------------------------------------------+
 //| Entry Zone data                                                    |
@@ -93,7 +94,7 @@ void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
                  double atr, double angleZ = 0.0)
 {
    g_signalCount++;
-   ArrayResize(g_signals, g_signalCount);
+   ArrayResize(g_signals, g_signalCount, 128);
    int idx = g_signalCount - 1;
    g_signals[idx].signalTime    = t;
    g_signals[idx].barIndex      = barIdx;

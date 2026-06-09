@@ -249,9 +249,19 @@ void DrawInfoPanel(int signalIndex)
    double tp1R = PriceToRMultiple(tp1Dist, slDist);
    double tp2R = PriceToRMultiple(tp2Dist, slDist);
    double tp3R = PriceToRMultiple(tp3Dist, slDist);
-   bool isInvalidated = false;
-   if(isBuy && curPrice <= sig.stopLoss) isInvalidated = true;
-   if(!isBuy && curPrice >= sig.stopLoss) isInvalidated = true;
+   static bool s_panelInvalidSticky = false;
+   if(signalIndex != s_lastSignalIndex) s_panelInvalidSticky = false;
+   bool rawInvalid = false;
+   if(isBuy && curPrice <= sig.stopLoss) rawInvalid = true;
+   if(!isBuy && curPrice >= sig.stopLoss) rawInvalid = true;
+   bool isInvalidated = rawInvalid;
+   if(s_panelInvalidSticky && !rawInvalid)
+   {
+      double margin = sig.atrValue * 0.1;
+      if(isBuy && curPrice < sig.stopLoss + margin) isInvalidated = true;
+      if(!isBuy && curPrice > sig.stopLoss - margin) isInvalidated = true;
+   }
+   s_panelInvalidSticky = isInvalidated;
    bool hasProb = (InpShowProbability && g_currentProb.totalSamples >= GetMinSamplesForTimeframe());
    bool hasMTF = (InpShowMTF && g_mtfCount > 0);
    bool hasZones = (InpEntryZoneCount >= 2 && g_validZoneCount >= 1 && !isInvalidated);
@@ -569,7 +579,7 @@ void DrawInfoPanel(int signalIndex)
          "("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
          InpTP3LineColor, fs-2, false);
       cy += lh;
-      double edge = MeasureEdgeFromHistory(sig.caseNumber, isBuy, GetMaxForwardBarsForTimeframe());
+      double edge = g_cachedEdge;
       string avgEdge = "";
       if(g_currentProb.avgBarsToTP1 > 0) avgEdge += "TP1~"+IntegerToString((int)g_currentProb.avgBarsToTP1)+"bars ";
       if(g_currentProb.avgBarsToSL > 0) avgEdge += "SL~"+IntegerToString((int)g_currentProb.avgBarsToSL)+"bars ";

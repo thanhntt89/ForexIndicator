@@ -427,11 +427,11 @@ int OnCalculate(const int rates_total,
    RefreshIntermarketData();
    CheckPendingOutcomes();
    CheckAndLogNewlyResolved(); // Log resolved outcomes to CSV
-   UpdateSpreadRegime();
-   
+
    // Heavy: only per new bar
    if(isNewBar)
    {
+      UpdateSpreadRegime();
       s_lastBarTime = currentBarTime;
       FlushLogQueues(); // Flush any live-queued signals/outcomes to CSV
       UpdateSessionStats();
@@ -448,10 +448,18 @@ int OnCalculate(const int rates_total,
       }
    }
    //=================================================================
-   // UPDATE DISPLAY
+   // UPDATE DISPLAY (throttled — ported from MQ5)
    //=================================================================
    if(g_signalCount > 0)
    {
+      static uint    s_lastDrawTick = 0;
+      static double  s_lastDrawPrice = 0;
+      static int     s_lastDrawSignalIdx = -1;
+      static bool    s_lastInvalidated = false;
+      static bool    s_sltpDrawn = false;
+      static bool    s_zonesDrawn = false;
+      static bool    s_lastSuppressMode = false;
+
       g_activeSignalIndex = g_signalCount - 1;
       SignalData activeSig = g_signals[g_activeSignalIndex];
       double curPrice = iClose(NULL, 0, 0);
@@ -460,6 +468,7 @@ int OnCalculate(const int rates_total,
          signalInvalidated = true;
       if(!activeSig.isBuySignal && curPrice >= activeSig.stopLoss)
          signalInvalidated = true;
+
       if(signalInvalidated)
       {
          DeleteObjectsByPrefix(PREFIX_LINE);
@@ -467,55 +476,103 @@ int OnCalculate(const int rates_total,
          DeleteObjectsByPrefix(PREFIX_ZONE);
          g_validZoneCount = 0;
          g_recommendedZoneCount = 0;
+         s_sltpDrawn  = false;
+         s_zonesDrawn = false;
       }
-      if(InpShowMTF) RefreshMTFData();
-      if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
-      if(g_intermarket.isAvailable)
-         GetIntermarketScore(activeSig.isBuySignal);
-      bool suppressDisplay = false;
-      if(!signalInvalidated)
-      {
-         int mtfAgree = 0;
-         if(InpShowMTF && g_mtfCount > 0) mtfAgree = CalculateMTFAgreement();
-         double slDist  = MathAbs(activeSig.entryPrice - activeSig.stopLoss);
-         double tp1Dist = MathAbs(activeSig.takeProfit1 - activeSig.entryPrice);
-         TradeRecommendation rec = GetTradeRecommendation(
-            activeSig.caseNumber, activeSig.isBuySignal,
-            g_currentProb.probTP1, g_currentProb.probSL,
-            g_currentProb.totalSamples, mtfAgree,
-            slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
-         if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
-            suppressDisplay = true;
 
-         if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
+      uint currentTick = GetTickCount();
+      bool forceRedraw = false;
+      if(g_activeSignalIndex != s_lastDrawSignalIdx) forceRedraw = true;
+      if(signalInvalidated != s_lastInvalidated) forceRedraw = true;
+      if(isNewBar) forceRedraw = true;
+      double priceDelta = MathAbs(curPrice - s_lastDrawPrice);
+      if(activeSig.atrValue > 0 && priceDelta > activeSig.atrValue * 0.1) forceRedraw = true;
+
+      if(!forceRedraw && (currentTick - s_lastDrawTick) < 200)
+      {
+         // Skip redraw this tick
+      }
+      else
+      {
+         s_lastDrawTick = currentTick;
+         s_lastDrawPrice = curPrice;
+         s_lastDrawSignalIdx = g_activeSignalIndex;
+         s_lastInvalidated = signalInvalidated;
+
+         if(InpShowMTF && (isNewBar || forceRedraw)) RefreshMTFData();
+         if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
+         if(g_intermarket.isAvailable)
+            GetIntermarketScore(activeSig.isBuySignal);
+
+         bool suppressDisplay = false;
+         if(!signalInvalidated)
          {
-            s_lastLoggedScoreTime = activeSig.signalTime;
-            MqlDateTime sigDt;
-            TimeToStruct(activeSig.signalTime, sigDt);
-            int mtfAgreePctLog = (int)(rec.mtfAlignRatio * 100);
-            string mtfTrendStr = (mtfAgreePctLog > 50) ? "BULL" : (mtfAgreePctLog < -50 ? "BEAR" : "NEUTRAL");
-            double rrLog = (slDist > 0) ? tp1Dist / slDist : 0;
-            LogScoringSnapshot(
-               activeSig.signalTime, activeSig.caseNumber, activeSig.isBuySignal,
-               rec.confidence, rec.label,
-               g_currentProb.probTP1, g_currentProb.probSL, g_currentProb.totalSamples,
-               rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
-               activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
-               g_spreadRegime.spreadRatio, g_walkForward.isRobust);
-         }
-      }
+            int mtfAgree = 0;
+            if(InpShowMTF && g_mtfCount > 0) mtfAgree = CalculateMTFAgreement();
+            double slDist  = MathAbs(activeSig.entryPrice - activeSig.stopLoss);
+            double tp1Dist = MathAbs(activeSig.takeProfit1 - activeSig.entryPrice);
+            TradeRecommendation rec = GetTradeRecommendation(
+               activeSig.caseNumber, activeSig.isBuySignal,
+               g_currentProb.probTP1, g_currentProb.probSL,
+               g_currentProb.totalSamples, mtfAgree,
+               slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
+            if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
+               suppressDisplay = true;
 
-      DrawInfoPanel(g_activeSignalIndex);
-      if(!signalInvalidated)
-      {
-         // dimMode=true: dim entry line + prob summary for AVOID/WAIT; full draw otherwise
-         DrawSLTPLines(g_activeSignalIndex, suppressDisplay);
-         CalculateEntryZones(
-            activeSig.isBuySignal, activeSig.barIndex,
-            activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
-            activeSig.atrValue, high, low, rates_total);
-         DrawZoneLines(suppressDisplay);
-         if(InpShowProbability) DrawProbabilityLabels(suppressDisplay);
+            if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
+            {
+               s_lastLoggedScoreTime = activeSig.signalTime;
+               MqlDateTime sigDt;
+               TimeToStruct(activeSig.signalTime, sigDt);
+               int mtfAgreePctLog = (int)(rec.mtfAlignRatio * 100);
+               string mtfTrendStr = (mtfAgreePctLog > 50) ? "BULL" : (mtfAgreePctLog < -50 ? "BEAR" : "NEUTRAL");
+               double rrLog = (slDist > 0) ? tp1Dist / slDist : 0;
+               LogScoringSnapshot(
+                  activeSig.signalTime, activeSig.caseNumber, activeSig.isBuySignal,
+                  rec.confidence, rec.label,
+                  g_currentProb.probTP1, g_currentProb.probSL, g_currentProb.totalSamples,
+                  rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
+                  activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
+                  g_spreadRegime.spreadRatio, g_walkForward.isRobust);
+            }
+         }
+
+         DrawInfoPanel(g_activeSignalIndex);
+
+         bool modeChanged = (suppressDisplay != s_lastSuppressMode);
+         s_lastSuppressMode = suppressDisplay;
+
+         if(!signalInvalidated)
+         {
+            if(!s_sltpDrawn || forceRedraw || modeChanged)
+            {
+               DrawSLTPLines(g_activeSignalIndex, suppressDisplay);
+               s_sltpDrawn = true;
+            }
+            bool needZoneRedraw = !s_zonesDrawn
+                                   || g_activeSignalIndex != s_lastDrawSignalIdx
+                                   || isNewBar;
+            if(!suppressDisplay && needZoneRedraw)
+            {
+               CalculateEntryZones(
+                  activeSig.isBuySignal, activeSig.barIndex,
+                  activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
+                  activeSig.atrValue, high, low, rates_total);
+               DrawZoneLines(false);
+               s_zonesDrawn = true;
+            }
+            else if(suppressDisplay && s_zonesDrawn)
+            {
+               DeleteObjectsByPrefix(PREFIX_ZONE);
+               s_zonesDrawn = false;
+            }
+            if(InpShowProbability) DrawProbabilityLabels(suppressDisplay);
+         }
+         else
+         {
+            s_sltpDrawn = false;
+            s_zonesDrawn = false;
+         }
       }
    }
    else

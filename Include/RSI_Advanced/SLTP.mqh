@@ -354,23 +354,29 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
 
    if(moveCount < 30) return;
 
-   // Sort
-   for(int a = 0; a < moveCount - 1; a++)
-      for(int b = a + 1; b < moveCount; b++)
-         if(moveRatios[b] < moveRatios[a])
-         {
-            double temp = moveRatios[a];
-            moveRatios[a] = moveRatios[b];
-            moveRatios[b] = temp;
-         }
+   int targets[3];
+   targets[0] = MathMax(0, MathMin((int)(moveCount * 0.50), moveCount - 1));
+   targets[1] = MathMax(0, MathMin((int)(moveCount * 0.75), moveCount - 1));
+   targets[2] = MathMax(0, MathMin((int)(moveCount * 0.90), moveCount - 1));
+   double results[3] = {0, 0, 0};
 
-   int idx50 = MathMax(0, MathMin((int)(moveCount * 0.50), moveCount - 1));
-   int idx75 = MathMax(0, MathMin((int)(moveCount * 0.75), moveCount - 1));
-   int idx90 = MathMax(0, MathMin((int)(moveCount * 0.90), moveCount - 1));
+   for(int t = 0; t < 3; t++)
+   {
+      int k = targets[t];
+      for(int a = 0; a <= k; a++)
+      {
+         int minIdx = a;
+         for(int b2 = a + 1; b2 < moveCount; b2++)
+            if(moveRatios[b2] < moveRatios[minIdx]) minIdx = b2;
+         if(minIdx != a)
+         { double tmp = moveRatios[a]; moveRatios[a] = moveRatios[minIdx]; moveRatios[minIdx] = tmp; }
+      }
+      results[t] = moveRatios[k];
+   }
 
-   tp1Ratio = moveRatios[idx50];
-   tp2Ratio = moveRatios[idx75];
-   tp3Ratio = moveRatios[idx90];
+   tp1Ratio = results[0];
+   tp2Ratio = results[1];
+   tp3Ratio = results[2];
 
    tp1Ratio = MathMax(tp1Ratio, InpSLRatio);
    if(tp2Ratio <= tp1Ratio) tp2Ratio = tp1Ratio * 1.5;
