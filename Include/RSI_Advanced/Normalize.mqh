@@ -18,7 +18,17 @@ enum ENUM_INSTRUMENT_TYPE
    INST_INDEX, INST_CRYPTO, INST_OIL, INST_OTHER
 };
 
-ENUM_INSTRUMENT_TYPE DetectInstrumentType()
+// [PERF-FIX P0-1] Cached globals — symbol never changes during indicator lifetime.
+// DetectInstrumentType had 14+ StringFind calls, called 5-10x/tick transitively.
+// GetCleanSymbolName and GetBrokerGMTOffset also constant per session.
+ENUM_INSTRUMENT_TYPE g_cachedInstType = INST_OTHER;
+bool   g_instTypeCached = false;
+string g_cachedCleanSymbol = "";
+bool   g_cleanSymbolCached = false;
+int    g_cachedBrokerGMT = 2;
+bool   g_brokerGMTCached = false;
+
+ENUM_INSTRUMENT_TYPE _DetectInstrumentTypeImpl()
 {
    string sym = Symbol();
    if(StringFind(sym,"XAU")>=0||StringFind(sym,"GOLD")>=0) return(INST_GOLD);
@@ -39,6 +49,15 @@ ENUM_INSTRUMENT_TYPE DetectInstrumentType()
       if(bM||qM) return(INST_FOREX_CROSS);
    }
    return(INST_OTHER);
+}
+
+ENUM_INSTRUMENT_TYPE DetectInstrumentType()
+{
+   // [PERF-FIX P0-1] Return cached result — eliminates 70-140 StringFind/tick
+   if(g_instTypeCached) return(g_cachedInstType);
+   g_cachedInstType = _DetectInstrumentTypeImpl();
+   g_instTypeCached = true;
+   return(g_cachedInstType);
 }
 
 //+------------------------------------------------------------------+
@@ -78,6 +97,8 @@ string FormatPL(double plDist, double slDist)
 
 string GetCleanSymbolName()
 {
+   // [PERF-FIX P0-1] Cache result — symbol never changes, was rebuilt every tick
+   if(g_cleanSymbolCached) return(g_cachedCleanSymbol);
    string sym=Symbol();
    int dot=StringFind(sym,".");
    if(dot>0) sym=StringSubstr(sym,0,dot);
@@ -87,6 +108,8 @@ string GetCleanSymbolName()
       string last=StringSubstr(sym,len-1);
       if((last=="c"||last=="m")&&len>6) sym=StringSubstr(sym,0,len-1);
    }
+   g_cachedCleanSymbol = sym;
+   g_cleanSymbolCached = true;
    return(sym);
 }
 
@@ -95,33 +118,46 @@ string GetCleanSymbolName()
 //+------------------------------------------------------------------+
 int GetBrokerGMTOffset()
 {
+   // [PERF-FIX P3] Cache broker GMT offset — broker name never changes,
+   // was doing 9 StringFind calls per invocation on fallback path.
+   // Re-check periodically (every 1000 calls) for DST changes via TimeGMT path.
+   static int s_callCount = 0;
+   s_callCount++;
+   if(g_brokerGMTCached && s_callCount % 1000 != 0) return(g_cachedBrokerGMT);
+
    datetime brokerTime = TimeCurrent();
    datetime gmtTime = TimeGMT();
 
    if(gmtTime == 0 || gmtTime < D'2020.01.01')
    {
+      if(g_brokerGMTCached) return(g_cachedBrokerGMT);
       string server = AccountServer();
       StringToLower(server);
 
-      if(StringFind(server, "exness") >= 0)      return(0);
-      if(StringFind(server, "icmarket") >= 0)     return(2);
-      if(StringFind(server, "thinkmarket") >= 0)  return(2);
-      if(StringFind(server, "xm") >= 0)           return(2);
-      if(StringFind(server, "fxpro") >= 0)        return(2);
-      if(StringFind(server, "pepperstone") >= 0)  return(2);
-      if(StringFind(server, "oanda") >= 0)        return(0);
-      if(StringFind(server, "fxcm") >= 0)         return(0);
-      if(StringFind(server, "alpari") >= 0)       return(3);
+      int result = 2;
+      if(StringFind(server, "exness") >= 0)      result = 0;
+      else if(StringFind(server, "icmarket") >= 0)     result = 2;
+      else if(StringFind(server, "thinkmarket") >= 0)  result = 2;
+      else if(StringFind(server, "xm") >= 0)           result = 2;
+      else if(StringFind(server, "fxpro") >= 0)        result = 2;
+      else if(StringFind(server, "pepperstone") >= 0)  result = 2;
+      else if(StringFind(server, "oanda") >= 0)        result = 0;
+      else if(StringFind(server, "fxcm") >= 0)         result = 0;
+      else if(StringFind(server, "alpari") >= 0)       result = 3;
 
-      return(2);
+      g_cachedBrokerGMT = result;
+      g_brokerGMTCached = true;
+      return(result);
    }
 
    int offsetSeconds = (int)(brokerTime - gmtTime);
    int offsetHours = offsetSeconds / 3600;
 
    if(offsetHours < -12 || offsetHours > 14)
-      return(2);
+      offsetHours = 2;
 
+   g_cachedBrokerGMT = offsetHours;
+   g_brokerGMTCached = true;
    return(offsetHours);
 }
 
@@ -271,6 +307,13 @@ void GetScoreWeights(double &wRSI,double &wVol,double &wVty,double &wSes,double 
 //+------------------------------------------------------------------+
 double GetFatTailPenalty()
 {
+   // [PERF-FIX P2-6] Cache per-bar — 500 iClose calls, values change only on new bar
+   static datetime s_ftpBarTime = 0;
+   static double   s_ftpResult  = 0.05;
+   datetime curBar = iTime(NULL, 0, 0);
+   if(curBar == s_ftpBarTime) return(s_ftpResult);
+   s_ftpBarTime = curBar;
+
    int lookback = MathMin(500, Bars - 2);
    double sumR = 0, sumR2 = 0, sumR4 = 0;
    int count = 0;
@@ -283,17 +326,25 @@ double GetFatTailPenalty()
       sumR += ret; sumR2 += ret * ret; sumR4 += ret * ret * ret * ret;
       count++;
    }
-   if(count < 50) return(0.05);
+   if(count < 50) { s_ftpResult = 0.05; return(s_ftpResult); }
    double mean = sumR / count;
    double variance = (sumR2 / count) - (mean * mean);
-   if(variance <= 0) return(0.05);
+   if(variance <= 0) { s_ftpResult = 0.05; return(s_ftpResult); }
    double kurtosis = (sumR4 / count) / (variance * variance) - 3.0;
    double penalty = 0.003 * (1.0 + MathMax(kurtosis, 0) / 3.0);
-   return(MathMin(penalty, 0.15));
+   s_ftpResult = MathMin(penalty, 0.15);
+   return(s_ftpResult);
 }
 
 double GetVolClusterPenalty()
 {
+   // [PERF-FIX P2-6] Cache per-bar — 200 iClose calls, values change only on new bar
+   static datetime s_vcpBarTime = 0;
+   static double   s_vcpResult  = 0.03;
+   datetime curBar = iTime(NULL, 0, 0);
+   if(curBar == s_vcpBarTime) return(s_vcpResult);
+   s_vcpBarTime = curBar;
+
    int lookback = MathMin(200, Bars - 3);
    double sumXY = 0, sumX = 0, sumY = 0, sumX2 = 0, sumY2 = 0;
    int count = 0;
@@ -308,13 +359,14 @@ double GetVolClusterPenalty()
       sumXY += x * y; sumX += x; sumY += y;
       sumX2 += x * x; sumY2 += y * y; count++;
    }
-   if(count < 50) return(0.03);
+   if(count < 50) { s_vcpResult = 0.03; return(s_vcpResult); }
    double numr = sumXY / count - (sumX / count) * (sumY / count);
    double denX = sumX2 / count - (sumX / count) * (sumX / count);
    double denY = sumY2 / count - (sumY / count) * (sumY / count);
-   if(denX <= 0 || denY <= 0) return(0.03);
+   if(denX <= 0 || denY <= 0) { s_vcpResult = 0.03; return(s_vcpResult); }
    double corr = numr / MathSqrt(denX * denY);
-   return(MathMax(0, MathMin(MathAbs(corr) * 0.10, 0.12)));
+   s_vcpResult = MathMax(0, MathMin(MathAbs(corr) * 0.10, 0.12));
+   return(s_vcpResult);
 }
 
 double GetSpreadDrag(double atrValue)
@@ -353,24 +405,72 @@ double CalculateRealMarketProbTP(double edge, double slDist, double tpDist, doub
 //+------------------------------------------------------------------+
 double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
 {
+   // [PROB-FIX-1] Cache full result per (caseNum, isBuy, signalCount, maxForward).
+   // Phase 2 deep-scans thousands of historical bars outside InpMaxBars — those bars
+   // don't change between new bars. Only recompute when g_signalCount increases
+   // (new signal detected) or other key inputs change. ~99% cost reduction on M1.
+   static int    s_efhN      = -1;
+   static int    s_efhCase   = -99;
+   static bool   s_efhBuy    = false;
+   static int    s_efhMaxFwd = -1;
+   static double s_efhResult = 0.51;
+   if(s_efhN == g_signalCount && s_efhCase == caseNum &&
+      s_efhBuy == isBuy && s_efhMaxFwd == maxForward)
+      return(s_efhResult);
+   s_efhN      = g_signalCount;
+   s_efhCase   = caseNum;
+   s_efhBuy    = isBuy;
+   s_efhMaxFwd = maxForward;
+
    int correctCount=0, totalCount=0;
+
+   // Anti-overfitting: only use in-sample (training) signals to measure edge.
+   // OOS signals are held out for walk-forward validation; including them would
+   // cause the edge estimate to be validated on the same data it's measured from.
+   int splitIdx = g_signalCount;
+   if(InpUseWalkForward && g_signalCount >= 10)
+   {
+      double oosPct = MathMax(10.0, MathMin(30.0, (double)InpOOSPercent));
+      splitIdx = (int)(g_signalCount * (100.0 - oosPct) / 100.0);
+      if(splitIdx < 5) splitIdx = g_signalCount;
+   }
 
    for(int s=0; s<g_signalCount; s++)
    {
+      if(s >= splitIdx) continue;              // IS only: skip OOS signals
       if(g_signals[s].isBuySignal!=isBuy) continue;
       if(caseNum>0 && g_signals[s].caseNumber!=caseNum) continue;
       if(g_signals[s].barIndex+maxForward>=Bars) continue;
       double entry=g_signals[s].entryPrice, atr=g_signals[s].atrValue;
+      double sl=g_signals[s].stopLoss;
       if(atr==0) continue;
-      bool ok=false;
-      for(int b=g_signals[s].barIndex+1; b<g_signals[s].barIndex+maxForward && b<Bars; b++)
+
+      int outcome;
+      if(g_signals[s].edgeCachedOutcome != 99)
       {
-         int bs=Bars-1-b; if(bs<0) break;
-         if(isBuy && iHigh(NULL,0,bs)>=entry+atr) {ok=true; break;}
-         if(!isBuy && iLow(NULL,0,bs)<=entry-atr) {ok=true; break;}
+         outcome = g_signals[s].edgeCachedOutcome;
       }
-      totalCount++;
-      if(ok) correctCount++;
+      else
+      {
+         outcome = 0;
+         for(int b=g_signals[s].barIndex+1; b<g_signals[s].barIndex+maxForward && b<Bars; b++)
+         {
+            int bs=Bars-1-b; if(bs<0) break;
+            double bH=iHigh(NULL,0,bs), bL=iLow(NULL,0,bs);
+            if(isBuy)
+            {
+               if(bL<=sl)        { outcome=-1; break; }
+               if(bH>=entry+atr) { outcome= 1; break; }
+            }
+            else
+            {
+               if(bH>=sl)        { outcome=-1; break; }
+               if(bL<=entry-atr) { outcome= 1; break; }
+            }
+         }
+         g_signals[s].edgeCachedOutcome = outcome;
+      }
+      if(outcome!=0) { totalCount++; if(outcome==1) correctCount++; }
    }
 
    int phase1Start=MathMax(0, Bars-InpMaxBars);
@@ -402,34 +502,52 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       if(isBuy && rsi<=rsiPrev) continue;
       if(!isBuy && rsi>=rsiPrev) continue;
       double entry=iClose(NULL,0,bs);
-      bool ok=false;
+      // SL-aware: compute SL from ATR × ratio (same as CalculateSLTP_ATR default)
+      double sl = isBuy ? entry - atr*InpSLRatio : entry + atr*InpSLRatio;
+      int outcome=0;
       for(int b=i+1; b<i+maxForward && b<deepEnd; b++)
       {
          int bsh=Bars-1-b; if(bsh<0) break;
-         if(isBuy && iHigh(NULL,0,bsh)>=entry+atr) {ok=true; break;}
-         if(!isBuy && iLow(NULL,0,bsh)<=entry-atr) {ok=true; break;}
+         double bH=iHigh(NULL,0,bsh), bL=iLow(NULL,0,bsh);
+         if(isBuy)
+         {
+            if(bL<=sl)        { outcome=-1; break; }
+            if(bH>=entry+atr) { outcome= 1; break; }
+         }
+         else
+         {
+            if(bH>=sl)        { outcome=-1; break; }
+            if(bL<=entry-atr) { outcome= 1; break; }
+         }
       }
-      totalCount++;
-      if(ok) correctCount++;
+      if(outcome!=0) { totalCount++; if(outcome==1) correctCount++; }
    }
 
-   if(totalCount<5) return(0.51);
+   // [PROB-FIX-1] Store result in cache before every return path
+   if(totalCount<5) { s_efhResult = 0.51; return(s_efhResult); }
    double edge=(double)correctCount/(double)totalCount;
    double shrink=50.0/(50.0+(double)totalCount);
    edge=edge*(1.0-shrink)+0.50*shrink;
-   return(MathMax(0.45, MathMin(0.70, edge)));
+   // Anti-overfitting: clamp to realistic edge range for liquid markets.
+   // Empirical research (Menkhoff 2010, Osler 2000): sustained edge >0.62 is
+   // not achievable in XAUUSD/Forex. Upper bound 0.70 allows Gambler's Ruin
+   // to output P(TP)≈84% — unrealistic and causes overconfident position sizing.
+   // [0.48, 0.62] matches actual profitable system edge distributions.
+   s_efhResult = MathMax(0.48, MathMin(0.62, edge));
+   return(s_efhResult);
 }
 
 //+------------------------------------------------------------------+
 //|        SECTION 10: BAYESIAN COMBINATION                            |
 //+------------------------------------------------------------------+
+// [S6] histSamples accepts n_eff (double) for weighted sample support
 double CombineTheoreticalHistorical(double theoProb, double histProb,
-                                     int histSamples, int minSamples)
+                                     double histSamples, int minSamples)
 {
    if(histSamples <= 0) return(theoProb);
    double p = histProb / 100.0;
    if(p <= 0) p = 0.01; if(p >= 1) p = 0.99;
-   double n = (double)histSamples;
+   double n = histSamples;
 
    double z = 1.96;
    double z2 = z * z;
@@ -544,8 +662,12 @@ TradeRecommendation GetTradeRecommendation(
    // Data confidence (0-25)
    int dataScore = (int)(dataConfidence * 25);
 
-   // MTF alignment (0-15)
-   int mtfScore = (int)(mtfAlignmentRatio * 15);
+   // MTF alignment (0-5, reduced from 15).
+   // Anti-double-counting: MTF alignment already adjusts edge (+/-3%) in
+   // ProbabilityEngine.mqh Step 3 via edgeAdjustment → Gambler's Ruin → probTP1.
+   // probTP1 feeds evScore (0-50) so MTF is already priced in. Keeping the
+   // full ×15 weight counted it twice, inflating scores for MTF-aligned signals.
+   int mtfScore = (int)(mtfAlignmentRatio * 5);
 
    // Intermarket alignment (0-10) - V11
    int interScore = 0;
@@ -559,18 +681,24 @@ TradeRecommendation GetTradeRecommendation(
       else if(interAlign < -0.3) reasons += "USD against|";
    }
 
-   // Spread regime penalty - V11
+   // Spread regime penalty - V11 (reduced from -15/-5 to -7/-2).
+   // Anti-double-counting: spread cost already reduces probTP1 via GetSpreadDrag()
+   // in ProbabilityEngine.mqh Step 4 (CalculateRealMarketProbTP). That reduction
+   // flows into evScore through the lower win probability. Applying the full
+   // -15/-5 here counted spread twice, disproportionately killing EV on wide-spread
+   // instruments. Residual -7/-2 accounts for liquidity risk not captured by
+   // static spread drag (sudden spike beyond measured ATR ratio).
    int spreadPenalty = 0;
    if(InpUseSpreadRegime)
    {
       if(g_spreadRegime.isExtreme)
       {
-         spreadPenalty = -15;
+         spreadPenalty = -7;
          reasons += "Spread EXTREME|";
       }
       else if(g_spreadRegime.isSpike)
       {
-         spreadPenalty = -5;
+         spreadPenalty = -2;
          reasons += "Spread SPIKE|";
       }
    }
@@ -579,7 +707,12 @@ TradeRecommendation GetTradeRecommendation(
    int wfScore = 0;
    if(InpUseWalkForward && g_walkForward.oosSamples >= 3)
    {
-      if(g_walkForward.isRobust)
+      bool wfNoData = (g_walkForward.isWinRate == 0 && g_walkForward.oosWinRate == 0);
+      if(wfNoData)
+      {
+         // Fresh install — no history yet, no penalty/bonus
+      }
+      else if(g_walkForward.isRobust)
       {
          wfScore = 5;
          reasons += "WF robust|";

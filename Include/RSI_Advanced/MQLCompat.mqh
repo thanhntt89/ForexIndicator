@@ -242,7 +242,7 @@ double iRSI(string symbol, int timeframe, int period,
                 IntegerToString(period) + "_" + IntegerToString(applied_price);
 
    int handle = GetCachedIndicatorHandle(key, 2, symbol, tf, period, applied_price);
-   if(handle == INVALID_HANDLE) return(0);
+   if(handle == INVALID_HANDLE) return(EMPTY_VALUE);
 
    // Use batch cache for current symbol + current TF (most common case)
    if(symbol == _Symbol && tf == _Period)
@@ -258,7 +258,7 @@ double iRSI(string symbol, int timeframe, int period,
    ArraySetAsSeries(val, true);
    if(CopyBuffer(handle, 0, shift, 1, val) > 0)
       return(val[0]);
-   return(0);
+   return(EMPTY_VALUE);
 }
 
 //--- iATR: uses batch cache for current symbol/TF
@@ -419,37 +419,47 @@ int iBarShift(string symbol, int timeframe, datetime time, bool exact = false)
    if(symbol == NULL || symbol == "") symbol = _Symbol;
    ENUM_TIMEFRAMES tf = MinutesToTimeframe(timeframe);
 
-   // Use cache for current symbol/TF
+   // [PERF-FIX P2-1] Binary search on sorted (descending) time array.
+   // Was O(10000) linear scan; now O(14) binary search.
    if(symbol == _Symbol && tf == _Period)
    {
       _RefreshPriceCache();
-      for(int i = 0; i < _cache_size; i++)
+      if(_cache_size <= 0) return(-1);
+      // _cache_time[] is as-series (descending): [0]=newest, [N-1]=oldest
+      // Find smallest i where _cache_time[i] <= time
+      int lo = 0, hi = _cache_size - 1, result = -1;
+      while(lo <= hi)
       {
-         if(_cache_time[i] <= time)
-         {
-            if(exact && _cache_time[i] != time) return(-1);
-            return(i);
-         }
+         int mid = (lo + hi) >> 1;
+         if(_cache_time[mid] <= time)
+         { result = mid; hi = mid - 1; }
+         else
+         { lo = mid + 1; }
       }
-      return(-1);
+      if(result < 0) return(-1);
+      if(exact && _cache_time[result] != time) return(-1);
+      return(result);
    }
 
-   // Fallback for other symbols
+   // Fallback for other symbols — also binary search
    datetime barTime[];
    ArraySetAsSeries(barTime, true);
    int totalBars = ::Bars(symbol, tf);
    int copyCount = MathMin(totalBars, 10000);
    if(CopyTime(symbol, tf, 0, copyCount, barTime) <= 0) return(-1);
 
-   for(int i = 0; i < copyCount; i++)
+   int lo = 0, hi = copyCount - 1, result = -1;
+   while(lo <= hi)
    {
-      if(barTime[i] <= time)
-      {
-         if(exact && barTime[i] != time) return(-1);
-         return(i);
-      }
+      int mid = (lo + hi) >> 1;
+      if(barTime[mid] <= time)
+      { result = mid; hi = mid - 1; }
+      else
+      { lo = mid + 1; }
    }
-   return(-1);
+   if(result < 0) return(-1);
+   if(exact && barTime[result] != time) return(-1);
+   return(result);
 }
 
 //====================================================================

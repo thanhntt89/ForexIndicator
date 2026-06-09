@@ -45,9 +45,16 @@ int DetectMarketRegime(int barIndex)
 //+------------------------------------------------------------------+
 //| Adaptive angle threshold based on RSI volatility                   |
 //+------------------------------------------------------------------+
+// [PERF-FIX P2-5] Cache per barIndex — called from both CalculateSignalScore()
+// and CalculateAngleStrength(), so 20-bar variance loop ran twice per signal bar.
 double GetAdaptiveAngleThreshold(int barIndex)
 {
-   if(barIndex < 20) return(InpAngleThreshold);
+   static int    s_aatLastBar = -1;
+   static double s_aatResult  = 0;
+   if(barIndex == s_aatLastBar) return(s_aatResult);
+   s_aatLastBar = barIndex;
+
+   if(barIndex < 20) { s_aatResult = InpAngleThreshold; return(s_aatResult); }
    double sum = 0, sumSq = 0;
    int count = 0;
    for(int j = 0; j < 20; j++)
@@ -57,10 +64,11 @@ double GetAdaptiveAngleThreshold(int barIndex)
       double delta = BufferGreen[idx] - BufferGreen[idx-1];
       sum += delta; sumSq += delta * delta; count++;
    }
-   if(count < 10) return(InpAngleThreshold);
+   if(count < 10) { s_aatResult = InpAngleThreshold; return(s_aatResult); }
    double variance = (sumSq / count) - ((sum / count) * (sum / count));
    double stddev = MathSqrt(MathMax(variance, 0));
-   return(MathMax(stddev * 1.5, 2.0));
+   s_aatResult = MathMax(stddev * 1.5, 2.0);
+   return(s_aatResult);
 }
 
 //+------------------------------------------------------------------+

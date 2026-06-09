@@ -46,6 +46,75 @@ int GetTrainingSplitIndex()
 }
 
 //+------------------------------------------------------------------+
+//| Information Coefficient (IC)                                       |
+//|                                                                    |
+//| Measures whether angleStrength (signal "score") actually predicts  |
+//| trade outcomes. Computed as Pearson(angleStrength, outcome).       |
+//|                                                                    |
+//| Interpretation:                                                    |
+//|   IC > 0.10: STRONG — angle predicts direction reliably            |
+//|   IC 0.05-0.10: WEAK — marginal alpha in the score                 |
+//|   IC < 0.05: NOISE — angleStrength has no predictive value         |
+//|   IC < 0: INVERSE — strong angle correlates with LOSSES (warning!) |
+//|                                                                    |
+//| Uses IS-only signals (splitIdx parameter) to prevent lookahead.    |
+//+------------------------------------------------------------------+
+void CalculateInformationCoefficient(int splitIdx)
+{
+   // [PROB-FIX-6] Cache per (outcomeCount, splitIdx).
+   // IC only changes when new outcomes are resolved or the IS/OOS split shifts.
+   // Avoids O(outcomeCount × splitIdx) join on every new bar.
+   static int s_icOutcomeCount = -1;
+   static int s_icSplitIdx    = -1;
+   if(s_icOutcomeCount == g_outcomeCount && s_icSplitIdx == splitIdx) return;
+   s_icOutcomeCount = g_outcomeCount;
+   s_icSplitIdx     = splitIdx;
+
+   g_walkForward.infoCoeff  = 0.0;
+   g_walkForward.icSamples  = 0;
+   if(g_outcomeCount < 10 || g_signalCount < 5) return;
+
+   // Collect matched (angleStrength, outcome) pairs.
+   // Capped at 200 pairs: Pearson is stable at n=30+, and O(n×m) join
+   // on large arrays would add latency. 200 covers ~1 year of M15 signals.
+   double icX[200], icY[200];
+   int n = 0;
+
+   for(int i = 0; i < g_outcomeCount && n < 200; i++)
+   {
+      if(g_outcomes[i].outcome == 0) continue;   // pending
+
+      // Match outcome to its IS signal by signalTime
+      for(int s = 0; s < splitIdx && s < g_signalCount; s++)
+      {
+         if(g_signals[s].signalTime != g_outcomes[i].signalTime) continue;
+         if(g_signals[s].angleStrength <= 0.1) break;  // no usable score
+         icX[n] = g_signals[s].angleStrength;
+         icY[n] = (g_outcomes[i].outcome > 0) ? 1.0 : -1.0;
+         n++;
+         break;
+      }
+   }
+
+   if(n < 10) return;
+   g_walkForward.icSamples = n;
+
+   // Pearson correlation
+   double mx=0.0, my=0.0;
+   for(int i=0; i<n; i++) { mx+=icX[i]; my+=icY[i]; }
+   mx/=n; my/=n;
+
+   double num=0.0, denX=0.0, denY=0.0;
+   for(int i=0; i<n; i++)
+   {
+      double dx=icX[i]-mx, dy=icY[i]-my;
+      num+=dx*dy; denX+=dx*dx; denY+=dy*dy;
+   }
+   if(denX<=0.0 || denY<=0.0) return;
+   g_walkForward.infoCoeff = num / MathSqrt(denX * denY);
+}
+
+//+------------------------------------------------------------------+
 //| Calculate walk-forward metrics                                     |
 //| Compare in-sample vs out-of-sample win rates                       |
 //+------------------------------------------------------------------+
@@ -106,8 +175,25 @@ void CalculateWalkForwardMetrics()
    else
       g_walkForward.overfitRatio = 1.0;  // Both zero
 
-   // Robust if ratio < 1.3 (IS not much better than OOS)
-   g_walkForward.isRobust = (g_walkForward.overfitRatio < 1.3);
+   // Information Coefficient computation (called here so it shares the split index).
+   CalculateInformationCoefficient(splitIndex);
+
+   // Anti-overfitting: dual-condition robustness check (Pardo 2008 standard).
+   //
+   // Condition 1 — ratio: IS win rate must not exceed OOS by more than 15%.
+   //   Previous threshold 1.3 (30% gap) was too generous: a strategy with
+   //   IS=65% and OOS=50% had ratio=1.30 and was labeled ROBUST, but a 15-point
+   //   drop from IS to OOS indicates meaningful overfitting on the training period.
+   //   Pardo recommends <1.10 for publication-quality robustness; we use 1.15
+   //   as a practical threshold for live indicators with moderate sample sizes.
+   //
+   // Condition 2 — absolute: even if ratio <1.15, a 7-point absolute gap still
+   //   signals degraded live performance. E.g. IS=55% / OOS=48% → ratio=1.14
+   //   (passes condition 1 alone), but 48% OOS is barely above coin-flip.
+   bool ratioOK    = (g_walkForward.overfitRatio < 1.15);
+   bool absoluteOK = (MathAbs(g_walkForward.isWinRate - g_walkForward.oosWinRate) < 7.0);
+   bool hasWins    = (g_walkForward.isWinRate > 0 || g_walkForward.oosWinRate > 0);
+   g_walkForward.isRobust = (ratioOK && absoluteOK && hasWins);
 }
 
 //+------------------------------------------------------------------+
@@ -130,18 +216,33 @@ string GetWalkForwardDisplay()
    if(g_walkForward.isSamples < 5 || g_walkForward.oosSamples < 3)
       return("Walk-Forward: Insufficient data (need more signals)");
 
+   bool noWins = (g_walkForward.isWinRate == 0 && g_walkForward.oosWinRate == 0);
    string status;
-   if(g_walkForward.isRobust)
-      status = "ROBUST";
-   else
-      status = "OVERFIT WARNING";
+   if(noWins)             status = "NO WIN DATA";
+   else if(g_walkForward.isRobust) status = "ROBUST";
+   else                   status = "OVERFIT WARNING";
 
-   return("IS:" + DoubleToString(g_walkForward.isWinRate, 1) + "%" +
-          "(n=" + IntegerToString(g_walkForward.isSamples) + ")" +
-          " | OOS:" + DoubleToString(g_walkForward.oosWinRate, 1) + "%" +
-          "(n=" + IntegerToString(g_walkForward.oosSamples) + ")" +
-          " | Ratio:" + DoubleToString(g_walkForward.overfitRatio, 2) +
-          " [" + status + "]");
+   string ratioStr = noWins ? "N/A" : DoubleToString(g_walkForward.overfitRatio, 2);
+   string wfLine = "IS:" + DoubleToString(g_walkForward.isWinRate, 1) + "%" +
+                   "(n=" + IntegerToString(g_walkForward.isSamples) + ")" +
+                   " | OOS:" + DoubleToString(g_walkForward.oosWinRate, 1) + "%" +
+                   "(n=" + IntegerToString(g_walkForward.oosSamples) + ")" +
+                   " | Ratio:" + ratioStr +
+                   " [" + status + "]";
+
+   // Append IC if computed
+   if(g_walkForward.icSamples >= 10)
+   {
+      double ic = g_walkForward.infoCoeff;
+      string icLabel;
+      if(MathAbs(ic) < 0.05)       icLabel = "NOISE";
+      else if(ic >= 0.10)           icLabel = "STRONG";
+      else if(ic >= 0.05)           icLabel = "WEAK";
+      else if(ic <= -0.05)          icLabel = "INVERSE!";
+      else                          icLabel = "WEAK-";
+      wfLine += " | IC:" + DoubleToString(ic, 3) + "[" + icLabel + "]";
+   }
+   return(wfLine);
 }
 
 //+------------------------------------------------------------------+
@@ -151,6 +252,7 @@ color GetWalkForwardColor()
 {
    if(!InpUseWalkForward) return(clrGray);
    if(g_walkForward.isSamples < 5 || g_walkForward.oosSamples < 3) return(clrGray);
+   if(g_walkForward.isWinRate == 0 && g_walkForward.oosWinRate == 0) return(clrGray);
    if(g_walkForward.isRobust) return(clrLime);
    return(clrOrange);
 }
@@ -270,11 +372,20 @@ color GetRollingPerfColor()
 //| Compare current ATR/kurtosis with historical average                |
 //| Returns warning text if regime shift detected                      |
 //+------------------------------------------------------------------+
+// [PERF-FIX P2-3] Cache CheckRegimeStability per-bar — was 100 iATR calls,
+// and GetRegimeColor called it again (200 iATR total per panel draw).
+string g_cachedRegimeText = "Regime: STABLE";
+color  g_cachedRegimeColor = clrLime;
+datetime g_regimeCacheBarTime = 0;
+
 string CheckRegimeStability()
 {
+   datetime curBar = iTime(NULL, 0, 0);
+   if(curBar == g_regimeCacheBarTime) return(g_cachedRegimeText);
+   g_regimeCacheBarTime = curBar;
+
    string warnings = "";
 
-   // Current ATR vs average
    double curATR = iATR(NULL, 0, 14, 0);
    double avgATR = 0;
    int atrCnt = 0;
@@ -294,7 +405,6 @@ string CheckRegimeStability()
          warnings += "VOL DEAD(" + DoubleToString(atrRatio, 1) + "x) ";
    }
 
-   // Check if recent signals are performing differently
    if(g_rollingPerf.totalTracked >= 20 && g_rollingPerf.totalTracked >= 10)
    {
       if(g_rollingPerf.last10WR < 20)
@@ -302,9 +412,20 @@ string CheckRegimeStability()
    }
 
    if(StringLen(warnings) == 0)
-      return("Regime: STABLE");
-
-   return("Regime: " + warnings);
+   {
+      g_cachedRegimeText = "Regime: STABLE";
+      g_cachedRegimeColor = clrLime;
+   }
+   else
+   {
+      g_cachedRegimeText = "Regime: " + warnings;
+      // [PERF-FIX P2-3] Compute color in same call to avoid double-call from GetRegimeColor
+      if(StringFind(warnings, "SPIKE") >= 0) g_cachedRegimeColor = clrRed;
+      else if(StringFind(warnings, "DEAD") >= 0) g_cachedRegimeColor = clrOrange;
+      else if(StringFind(warnings, "LOW") >= 0) g_cachedRegimeColor = clrRed;
+      else g_cachedRegimeColor = clrGray;
+   }
+   return(g_cachedRegimeText);
 }
 
 //+------------------------------------------------------------------+
@@ -312,12 +433,9 @@ string CheckRegimeStability()
 //+------------------------------------------------------------------+
 color GetRegimeColor()
 {
-   string status = CheckRegimeStability();
-   if(StringFind(status, "STABLE") >= 0) return(clrLime);
-   if(StringFind(status, "SPIKE") >= 0) return(clrRed);
-   if(StringFind(status, "DEAD") >= 0) return(clrOrange);
-   if(StringFind(status, "LOW") >= 0) return(clrRed);
-   return(clrGray);
+   // [PERF-FIX P2-3] Uses cached color from CheckRegimeStability instead of re-calling it
+   CheckRegimeStability();
+   return(g_cachedRegimeColor);
 }
 
 //+------------------------------------------------------------------+
@@ -330,26 +448,28 @@ color GetRegimeColor()
 //+------------------------------------------------------------------+
 void UpdateSpreadRegime()
 {
+   // [PROB-FIX-7] Per-bar cache — 50 iATR calls for avgATR; only recompute on new bar.
+   // currentSpread updates every tick (live), avgSpread/ratio only need per-bar refresh.
+   static datetime s_spreadBarTime = 0;
+   datetime s_spreadCurBar = iTime(NULL, 0, 0);
+   bool spreadNewBar = (s_spreadCurBar != s_spreadBarTime);
+   if(spreadNewBar) s_spreadBarTime = s_spreadCurBar;
+
    g_spreadRegime.currentSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
 
-   // Rolling average from recent bars ATR proxy
-   // Since we can't track tick-by-tick spread in indicator,
-   // use spread at each bar as approximation
-   double sumSpread = 0;
-   int count = 0;
-
-   // Sample spread at recent bar closes (approximation)
-   // Real spread tracking would need tick data
-   for(int i = 1; i <= 50 && i < Bars; i++)
+   if(!spreadNewBar)
    {
-      // Use current spread as proxy (MT4 limitation)
-      // In reality this should be historical spread data
-      sumSpread += g_spreadRegime.currentSpread;
-      count++;
+      // Tick-level: recompute ratio from live spread vs cached avgSpread
+      if(g_spreadRegime.avgSpread > 0)
+         g_spreadRegime.spreadRatio = g_spreadRegime.currentSpread / g_spreadRegime.avgSpread;
+      g_spreadRegime.isSpike   = (g_spreadRegime.spreadRatio > InpSpreadSpikeMulti);
+      g_spreadRegime.isExtreme = (g_spreadRegime.spreadRatio > InpSpreadSpikeMulti * 1.5);
+      return;
    }
 
-   // Better approximation: use ATR ratio as spread proxy
-   // When ATR spikes, spread usually widens
+   // [PERF-FIX P2-3] Removed dead loop (lines 452-458) that summed currentSpread 50 times
+   // producing sumSpread = 50 * currentSpread, which was never used.
+   // ATR-based estimation below is the actual spread approximation.
    double curATR = iATR(NULL, 0, 14, 0);
    double avgATR = 0;
    int atrCnt = 0;

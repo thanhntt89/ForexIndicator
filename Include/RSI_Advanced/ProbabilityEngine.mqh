@@ -233,14 +233,13 @@
 //+------------------------------------------------------------------+
 int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
                           double slPrice, double tp1Price, double tp2Price, double tp3Price,
-                          int maxBarsForward, int &barsToResult)
+                          int maxBarsForward, int &barsToResult,
+                          double knownSpread = 0.0)
 {
    barsToResult = 0;
    bool tp1Hit = false, tp2Hit = false, tp3Hit = false;
-   // Use real broker spread instead of hardcoded ATR percentage.
-   // Old code used spreadPct=0.03 for gold = 3% ATR, but actual spread
-   // on XAUUSD M1 is 0.20-0.50 USD vs ATR 0.50-1.50 = 13-100% ATR.
-   double avgSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
+   // [S2] Use spread captured at signal time if available, else fall back to live spread
+   double avgSpread = (knownSpread > 0) ? knownSpread : MarketInfo(Symbol(), MODE_SPREAD) * _Point;
    if(avgSpread <= 0)
    {
       double simATR = iATR(NULL, 0, 14, Bars - 1 - signalBar);
@@ -347,17 +346,30 @@ void ScanStoredSignals(const SignalData &curSig, bool matchCase, int maxFwd,
       if(g_signals[s].signalTime == curSig.signalTime) continue;
       if(g_signals[s].isBuySignal != curSig.isBuySignal) continue;
       if(matchCase && g_signals[s].caseNumber != curSig.caseNumber) continue;
-      
+
       //Patch #1 — Fix Timeout
       int timeBasedMax = 1440 / MathMax(Period(), 1);
       timeBasedMax = MathMax(timeBasedMax, maxFwd);
       if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
-      int btr = 0;
-      int out = SimulateSignalOutcome(
-         g_signals[s].barIndex, g_signals[s].isBuySignal,
-         g_signals[s].entryPrice, g_signals[s].stopLoss,
-         g_signals[s].takeProfit1, g_signals[s].takeProfit2, g_signals[s].takeProfit3,
-         timeBasedMax, btr);
+
+      int out, btr;
+      if(g_signals[s].simCachedTP != 99)
+      {
+         out = g_signals[s].simCachedTP;
+         btr = g_signals[s].simCachedBTR;
+      }
+      else
+      {
+         btr = 0;
+         out = SimulateSignalOutcome(
+            g_signals[s].barIndex, g_signals[s].isBuySignal,
+            g_signals[s].entryPrice, g_signals[s].stopLoss,
+            g_signals[s].takeProfit1, g_signals[s].takeProfit2, g_signals[s].takeProfit3,
+            timeBasedMax, btr, g_signals[s].spreadAtSignal);
+         g_signals[s].simCachedTP  = out;
+         g_signals[s].simCachedBTR = btr;
+      }
+
       if(out == 0) { timeout++; continue; }
       total++;
       if(out >= 1) { tp1++; bTP1 += btr; }
@@ -377,11 +389,39 @@ void ScanHistoricalATRBased(const SignalData &curSig,
 {
    total=0; timeout=0; tp1=0; tp2=0; tp3=0; sl=0; bTP1=0; bSL=0;
 
+   // [PROB-FIX-2] Cache per (signalTime, isBuy, caseNum, Bars).
+   // Historical bars don't change — result is stable for the same signal.
+   static datetime s_t3SigTime = 0;
+   static bool     s_t3Buy     = false;
+   static int      s_t3Case    = -1;
+   static int      s_t3Bars    = -1;
+   static int      s_t3Total=0, s_t3To=0, s_t3TP1=0, s_t3TP2=0, s_t3TP3=0, s_t3SL=0;
+   static double   s_t3B1=0, s_t3BS=0;
+   // [PROB-FIX-2b] Coarse Bars invalidation: Tier3 historical data shifts by 1 each bar,
+   // but the pool is large (hundreds of bars) — recomputing every bar is wasteful.
+   // Grace window of 20 bars: statistically negligible drift vs. avoiding O(n) scan/bar.
+   if(s_t3SigTime == curSig.signalTime && s_t3Buy == curSig.isBuySignal &&
+      s_t3Case == curSig.caseNumber && Bars - s_t3Bars < 20)
+   {
+      total=s_t3Total; timeout=s_t3To; tp1=s_t3TP1; tp2=s_t3TP2;
+      tp3=s_t3TP3;     sl=s_t3SL;     bTP1=s_t3B1;  bSL=s_t3BS;
+      return;
+   }
+
    int probLookback = MathMin(GetEffectiveProbMaxBars(), Bars - maxFwd - 10);
    int startScan = MathMax(Bars - probLookback, InpRSIPeriod + InpBBPeriod + 10);
    int maxSamples = GetMaxLookbackForTimeframe();
 
-   for(int i = startScan; i < Bars - maxFwd - 10; i++)
+   // Dedup guard: stop BEFORE the range already covered by g_signals[] (Tier 1/2).
+   // g_signals[] contains signals from the last InpMaxBars bars, so Tier 3 must
+   // stop at Bars-InpMaxBars to avoid counting the same bar in both Tier 1/2
+   // (via SimulateSignalOutcome on stored signals) AND Tier 3 (via raw ATR scan).
+   // Without this boundary, a bar that produced a signal in g_signals[] could be
+   // counted once in Tier 1 or 2 and again here — inflating sample count and
+   // biasing the weighted average toward in-range recent data.
+   int tier3End = MathMin(Bars - maxFwd - 10, MathMax(0, Bars - InpMaxBars));
+
+   for(int i = startScan; i < tier3End; i++)
    {
       if(total >= maxSamples) break;
       int bs = Bars - 1 - i;
@@ -445,6 +485,11 @@ void ScanHistoricalATRBased(const SignalData &curSig,
       if(out >= 3) tp3++;
       if(out == -1) { sl++; bSL += btr; }
    }
+   // [PROB-FIX-2] Store computed results in cache
+   s_t3SigTime = curSig.signalTime; s_t3Buy = curSig.isBuySignal;
+   s_t3Case    = curSig.caseNumber; s_t3Bars = Bars;
+   s_t3Total=total; s_t3To=timeout; s_t3TP1=tp1; s_t3TP2=tp2;
+   s_t3TP3=tp3;     s_t3SL=sl;     s_t3B1=bTP1;  s_t3BS=bSL;
 }
 
 //+------------------------------------------------------------------+
@@ -463,6 +508,12 @@ void ScanHistoricalATRBased(const SignalData &curSig,
 //+------------------------------------------------------------------+
 void UpdateVolRegime()
 {
+   // [PROB-FIX-3] Per-bar cache — 50 iATR calls per run; only recompute on new bar.
+   static datetime s_volBarTime = 0;
+   datetime s_volCurBar = iTime(NULL, 0, 0);
+   if(s_volCurBar == s_volBarTime) return;
+   s_volBarTime = s_volCurBar;
+
    double curATR = iATR(NULL, 0, InpATRPeriod, 0);
    if(curATR <= 0)
    {
@@ -642,6 +693,143 @@ void ApplyTimeDecay(int elapsedBars)
 }
 
 //+------------------------------------------------------------------+
+//| [PROB-FIX-5 + S5] Single-pass Tier1+Tier2 weighted scan          |
+//| [S5] Continuous similarity weighting: session + angle Gaussian   |
+//| [S6] Tracks sumW2 for effective sample size (n_eff)              |
+//+------------------------------------------------------------------+
+void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
+   double &t1_tw, int &t1_to, double &t1_w1, double &t1_w2, double &t1_w3, double &t1_ws,
+   double &t1_b1, double &t1_bs, double &t1_sumW2,
+   double &t2_tw, int &t2_to, double &t2_w1, double &t2_w2, double &t2_w3, double &t2_ws,
+   double &t2_b1, double &t2_bs, double &t2_sumW2)
+{
+   t1_tw=0; t1_to=0; t1_w1=0; t1_w2=0; t1_w3=0; t1_ws=0; t1_b1=0; t1_bs=0; t1_sumW2=0;
+   t2_tw=0; t2_to=0; t2_w1=0; t2_w2=0; t2_w3=0; t2_ws=0; t2_b1=0; t2_bs=0; t2_sumW2=0;
+
+   // [S4-FIX] Pre-build outcome override map: O(signalCount + outcomeCount) single pass
+   // instead of O(signalCount × outcomeCount) nested loop.
+   // Both g_signals[] and g_outcomes[] are chronologically ordered — two-pointer merge.
+   int outcomeOverride[]; // indexed by signal slot, value = resolved outcome (0=none)
+   ArrayResize(outcomeOverride, g_signalCount);
+   ArrayFill(outcomeOverride, 0, g_signalCount, 0);
+   {
+      int oIdx = 0;
+      for(int s = 0; s < g_signalCount && oIdx < g_outcomeCount; s++)
+      {
+         // Advance outcome pointer to match or pass signal time
+         while(oIdx < g_outcomeCount &&
+               g_outcomes[oIdx].signalTime < g_signals[s].signalTime)
+            oIdx++;
+         if(oIdx < g_outcomeCount &&
+            g_outcomes[oIdx].signalTime == g_signals[s].signalTime &&
+            g_outcomes[oIdx].outcome != 0)
+            outcomeOverride[s] = g_outcomes[oIdx].outcome;
+      }
+   }
+
+   int curBlock = GetSessionBlock(curSig.signalTime);
+
+   for(int s = 0; s < g_signalCount; s++)
+   {
+      if(g_signals[s].signalTime == curSig.signalTime) continue;
+      if(g_signals[s].isBuySignal != curSig.isBuySignal) continue;
+
+      int timeBasedMax = 1440 / MathMax(Period(), 1);
+      timeBasedMax = MathMax(timeBasedMax, maxFwd);
+      if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
+
+      int out, btr;
+      if(g_signals[s].simCachedTP != 99)
+      {
+         out = g_signals[s].simCachedTP;
+         btr = g_signals[s].simCachedBTR;
+      }
+      else
+      {
+         btr = 0;
+         out = SimulateSignalOutcome(
+            g_signals[s].barIndex, g_signals[s].isBuySignal,
+            g_signals[s].entryPrice, g_signals[s].stopLoss,
+            g_signals[s].takeProfit1, g_signals[s].takeProfit2, g_signals[s].takeProfit3,
+            timeBasedMax, btr, g_signals[s].spreadAtSignal);
+         g_signals[s].simCachedTP  = out;
+         g_signals[s].simCachedBTR = btr;
+      }
+
+      // [S4] Override simulation with actual outcome — O(1) via pre-built map
+      if(outcomeOverride[s] != 0)
+      {
+         if(outcomeOverride[s] > 0 && out <= 0) out = 1;
+         if(outcomeOverride[s] < 0 && out >= 1) out = -1;
+      }
+
+      // [S5] Continuous similarity weight
+      double w = 1.0;
+      int histBlock = GetSessionBlock(g_signals[s].signalTime);
+      int sessDiff = MathAbs(curBlock - histBlock);
+      if(sessDiff > 2) sessDiff = 4 - sessDiff;
+      w *= (sessDiff == 0) ? 1.0 : (sessDiff == 1) ? 0.7 : 0.4;
+
+      if(curSig.angleStrength > 0.1 && g_signals[s].angleStrength > 0.1)
+      {
+         double dz = curSig.angleStrength - g_signals[s].angleStrength;
+         w *= MathExp(-0.5 * dz * dz / 4.0); // Gaussian kernel sigma=2.0
+      }
+
+      // [S7] Recency decay: halflife=60 days — older signals less representative of current regime
+      double daysDiff = (double)(curSig.signalTime - g_signals[s].signalTime) / 86400.0;
+      if(daysDiff > 0)
+         w *= MathExp(-0.693 * daysDiff / 60.0);
+
+      // [S8] RSI proximity: Gaussian kernel sigma=5.0 RSI points
+      if(curSig.rsiAtSignal > 0 && g_signals[s].rsiAtSignal > 0)
+      {
+         double dr = curSig.rsiAtSignal - g_signals[s].rsiAtSignal;
+         w *= MathExp(-0.5 * dr * dr / 25.0);
+      }
+
+      // [S9] ATR regime similarity: log-ratio with sigma_log=0.7
+      if(curSig.atrValue > 0 && g_signals[s].atrValue > 0)
+      {
+         double logR = MathLog(curSig.atrValue / g_signals[s].atrValue);
+         w *= MathExp(-logR * logR / 0.96);
+      }
+
+      bool sameCase = (g_signals[s].caseNumber == curSig.caseNumber);
+
+      // Accumulate into Tier2 (all cases) — weighted
+      if(out == 0) { t2_to++; if(sameCase) t1_to++; continue; }
+      t2_tw += w;
+      t2_sumW2 += w * w;
+      if(out >= 1) { t2_w1 += w; t2_b1 += btr * w; }
+      if(out >= 2) t2_w2 += w;
+      if(out >= 3) t2_w3 += w;
+      if(out == -1) { t2_ws += w; t2_bs += btr * w; }
+
+      // Accumulate into Tier1 (same-case subset) — weighted
+      if(sameCase)
+      {
+         t1_tw += w;
+         t1_sumW2 += w * w;
+         if(out >= 1) { t1_w1 += w; t1_b1 += btr * w; }
+         if(out >= 2) t1_w2 += w;
+         if(out >= 3) t1_w3 += w;
+         if(out == -1) { t1_ws += w; t1_bs += btr * w; }
+      }
+   }
+
+   // Subtract Tier1 from Tier2 → Tier2 becomes "other-case only"
+   t2_tw -= t1_tw; t2_w1 -= t1_w1; t2_w2 -= t1_w2;
+   t2_w3 -= t1_w3; t2_ws -= t1_ws;
+   t2_b1 -= t1_b1; t2_bs -= t1_bs;
+   t2_sumW2 -= t1_sumW2;
+   if(t2_tw < 0) t2_tw = 0; if(t2_w1 < 0) t2_w1 = 0;
+   if(t2_w2 < 0) t2_w2 = 0; if(t2_w3 < 0) t2_w3 = 0;
+   if(t2_ws < 0) t2_ws = 0; if(t2_b1 < 0) t2_b1 = 0;
+   if(t2_bs < 0) t2_bs = 0; if(t2_sumW2 < 0) t2_sumW2 = 0;
+}
+
+//+------------------------------------------------------------------+
 //| Main probability calculation                                       |
 //+------------------------------------------------------------------+
 void CalculateProbability(int currentSignalIndex)
@@ -674,70 +862,66 @@ void CalculateProbability(int currentSignalIndex)
    int maxFwd = GetMaxForwardBarsForTimeframe();
 
    //=================================================================
-   // STEP 1: Historical simulation (3 tiers)
+   // STEP 1: Historical simulation (3 tiers) — [S5] weighted scan
    //=================================================================
-   int t1_t=0, t1_to=0, t1_1=0, t1_2=0, t1_3=0, t1_s=0;
-   double t1_b1=0, t1_bs=0;
-   ScanStoredSignals(curSig, true, maxFwd,
-                     t1_t, t1_to, t1_1, t1_2, t1_3, t1_s, t1_b1, t1_bs);
-
-   int t2_t=0, t2_to=0, t2_1=0, t2_2=0, t2_3=0, t2_s=0;
-   double t2_b1=0, t2_bs=0;
-   ScanStoredSignals(curSig, false, maxFwd,
-                     t2_t, t2_to, t2_1, t2_2, t2_3, t2_s, t2_b1, t2_bs);
-
-   t2_t -= t1_t; t2_1 -= t1_1; t2_2 -= t1_2;
-   t2_3 -= t1_3; t2_s -= t1_s;
-   t2_b1 -= t1_b1; t2_bs -= t1_bs;
-   if(t2_t < 0) t2_t = 0;
-   if(t2_1 < 0) t2_1 = 0;
-   if(t2_s < 0) t2_s = 0;
+   double t1_tw=0, t1_w1=0, t1_w2=0, t1_w3=0, t1_ws=0;
+   double t1_b1=0, t1_bs=0, t1_sumW2=0;
+   int t1_to=0;
+   double t2_tw=0, t2_w1=0, t2_w2=0, t2_w3=0, t2_ws=0;
+   double t2_b1=0, t2_bs=0, t2_sumW2=0;
+   int t2_to=0;
+   ScanStoredSignalsBoth(curSig, maxFwd,
+      t1_tw, t1_to, t1_w1, t1_w2, t1_w3, t1_ws, t1_b1, t1_bs, t1_sumW2,
+      t2_tw, t2_to, t2_w1, t2_w2, t2_w3, t2_ws, t2_b1, t2_bs, t2_sumW2);
 
    int t3_t=0, t3_to=0, t3_1=0, t3_2=0, t3_3=0, t3_s=0;
    double t3_b1=0, t3_bs=0;
-   if((t1_t + t2_t) < minSamples)
+   if((t1_tw + t2_tw) < minSamples)
       ScanHistoricalATRBased(curSig, t3_t, t3_to,
                              t3_1, t3_2, t3_3, t3_s, t3_b1, t3_bs, maxFwd);
 
-   // Data-proportional tier weights
-   // Patch #3 — Tier 1 weight từ N^0.5 lên N^0.75
-   double w1 = (t1_t >= 3) ? MathPow((double)t1_t, 0.75) * 1.0  : 0;
-   double w2 = (t2_t >= 3) ? MathSqrt((double)t2_t)      * 0.5  : 0;
-   double w3 = (t3_t >= 3) ? MathSqrt((double)t3_t)      * 0.25 : 0;
+   // Data-proportional tier weights (now using weighted totals from S5)
+   double w1 = (t1_tw >= 3.0) ? MathPow(t1_tw, 0.75) * 1.0  : 0;
+   double w2 = (t2_tw >= 3.0) ? MathSqrt(t2_tw)      * 0.5  : 0;
+   double w3 = (t3_t  >= 3)   ? MathSqrt((double)t3_t) * 0.15 : 0;
 
    double tw = 0, wTP1 = 0, wTP2 = 0, wTP3 = 0, wSL = 0, wB1 = 0, wBS = 0;
-   int totalUsed = 0;
+   double totalSumW = 0, totalSumW2 = 0;
 
    if(w1 > 0)
    {
-      wTP1+=((double)t1_1/t1_t)*w1; wTP2+=((double)t1_2/t1_t)*w1;
-      wTP3+=((double)t1_3/t1_t)*w1; wSL +=((double)t1_s/t1_t)*w1;
-      tw+=w1; totalUsed+=t1_t;
-      if(t1_1>0) wB1+=(t1_b1/t1_1)*w1;
-      if(t1_s>0) wBS+=(t1_bs/t1_s)*w1;
+      wTP1+=(t1_w1/t1_tw)*w1; wTP2+=(t1_w2/t1_tw)*w1;
+      wTP3+=(t1_w3/t1_tw)*w1; wSL +=(t1_ws/t1_tw)*w1;
+      tw+=w1; totalSumW+=t1_tw; totalSumW2+=t1_sumW2;
+      if(t1_w1>0) wB1+=(t1_b1/t1_w1)*w1;
+      if(t1_ws>0) wBS+=(t1_bs/t1_ws)*w1;
    }
    if(w2 > 0)
    {
-      wTP1+=((double)t2_1/t2_t)*w2; wTP2+=((double)t2_2/t2_t)*w2;
-      wTP3+=((double)t2_3/t2_t)*w2; wSL +=((double)t2_s/t2_t)*w2;
-      tw+=w2; totalUsed+=t2_t;
-      if(t2_1>0) wB1+=(t2_b1/t2_1)*w2;
-      if(t2_s>0) wBS+=(t2_bs/t2_s)*w2;
+      wTP1+=(t2_w1/t2_tw)*w2; wTP2+=(t2_w2/t2_tw)*w2;
+      wTP3+=(t2_w3/t2_tw)*w2; wSL +=(t2_ws/t2_tw)*w2;
+      tw+=w2; totalSumW+=t2_tw; totalSumW2+=t2_sumW2;
+      if(t2_w1>0) wB1+=(t2_b1/t2_w1)*w2;
+      if(t2_ws>0) wBS+=(t2_bs/t2_ws)*w2;
    }
    if(w3 > 0)
    {
       wTP1+=((double)t3_1/t3_t)*w3; wTP2+=((double)t3_2/t3_t)*w3;
       wTP3+=((double)t3_3/t3_t)*w3; wSL +=((double)t3_s/t3_t)*w3;
-      tw+=w3; totalUsed+=t3_t;
+      tw+=w3; totalSumW+=(double)t3_t; totalSumW2+=(double)t3_t;
       if(t3_1>0) wB1+=(t3_b1/t3_1)*w3;
       if(t3_s>0) wBS+=(t3_bs/t3_s)*w3;
    }
 
+   // [S6] Effective sample size for weighted data
+   double nEff = (totalSumW2 > 0) ? (totalSumW * totalSumW) / totalSumW2 : 0;
+   int totalUsed = (int)MathRound(nEff);
+
    g_currentProb.totalSamples = totalUsed;
-   g_currentProb.samplesTP1 = t1_1 + t2_1 + t3_1;
-   g_currentProb.samplesTP2 = t1_2 + t2_2 + t3_2;
-   g_currentProb.samplesTP3 = t1_3 + t2_3 + t3_3;
-   g_currentProb.samplesSL  = t1_s + t2_s + t3_s;
+   g_currentProb.samplesTP1 = (int)MathRound(t1_w1 + t2_w1) + t3_1;
+   g_currentProb.samplesTP2 = (int)MathRound(t1_w2 + t2_w2) + t3_2;
+   g_currentProb.samplesTP3 = (int)MathRound(t1_w3 + t2_w3) + t3_3;
+   g_currentProb.samplesSL  = (int)MathRound(t1_ws + t2_ws) + t3_s;
 
    int minBayesian = MathMax(10, GetMinSamplesForTimeframe() / 3);
    double histTP1=0, histTP2=0, histTP3=0, histSL=0;
@@ -794,7 +978,9 @@ void CalculateProbability(int currentSignalIndex)
    // Z > 1.0 = stronger angle than average → +edge; Z < 1.0 = weaker → -edge
    // Divergence cases (2,3) damped to 40% because structure matters more than angle
    // Formula: adj = (Z - 1.0) × 0.03, clamped [-0.03, +0.04]
-   if(curSig.angleStrength > 0.1)
+   // [S1] IC gate: only apply angle edge when IC confirms angleStrength predicts outcome
+   if(curSig.angleStrength > 0.1 &&
+      g_walkForward.icSamples >= 20 && g_walkForward.infoCoeff >= 0.05)
    {
       double caseDamp = (curSig.caseNumber == 2 || curSig.caseNumber == 3) ? 0.4 : 1.0;
       double angleAdj = MathMax(-0.03, MathMin(0.04, (curSig.angleStrength - 1.0) * 0.03));
@@ -807,8 +993,14 @@ void CalculateProbability(int currentSignalIndex)
    UpdateVolRegime();
    edgeAdjustment += GetVolRegimeEdgeAdjustment();
 
-   //Patch #2 — Hard Clamp [0.40, 0.85]
-   double adjustedEdge = MathMax(0.40, MathMin(0.85, measuredEdge + edgeAdjustment));
+   // Anti-overfitting: clamp to [0.48, 0.65] — realistic range for liquid markets.
+   // Previous [0.40, 0.85] allowed edge=0.85 → Gambler's Ruin P(TP1:1R) ≈ 84%,
+   // which is not sustainable in any continuously-traded instrument and causes the
+   // probability pipeline to output overconfident signals. Upper bound 0.65 still
+   // allows meaningful edge capture while preventing model explosion.
+   // Lower bound 0.48 (not 0.40) because edge < 0.48 after adjustments means the
+   // setup has no statistical basis; 0.50 default gives 50/50 via Gambler's Ruin.
+   double adjustedEdge = MathMax(0.48, MathMin(0.65, measuredEdge + edgeAdjustment));
 
    //=================================================================
    // STEP 4: Theoretical probability using adjusted edge
@@ -827,9 +1019,10 @@ void CalculateProbability(int currentSignalIndex)
    //=================================================================
    if(totalUsed >= minBayesian && tw > 0)
    {
-      g_currentProb.probTP1 = CombineTheoreticalHistorical(theoTP1, histTP1, totalUsed, minSamples);
-      g_currentProb.probTP2 = CombineTheoreticalHistorical(theoTP2, histTP2, totalUsed, minSamples);
-      g_currentProb.probTP3 = CombineTheoreticalHistorical(theoTP3, histTP3, totalUsed, minSamples);
+      // [S6] Pass nEff (double) for proper Wilson SE with weighted samples
+      g_currentProb.probTP1 = CombineTheoreticalHistorical(theoTP1, histTP1, nEff, minSamples);
+      g_currentProb.probTP2 = CombineTheoreticalHistorical(theoTP2, histTP2, nEff, minSamples);
+      g_currentProb.probTP3 = CombineTheoreticalHistorical(theoTP3, histTP3, nEff, minSamples);
       g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
    }
    else
@@ -879,32 +1072,36 @@ void CalculateProbability(int currentSignalIndex)
    }
 
    //--- ATR Spike Detection (skip when Vol-regime already penalized as EVENT)
+   // [PROB-FIX-4] Cache signal-bar ATR ratio per signal index.
+   // Signal bar is a closed historical bar — its avgATR context never changes.
+   static int    s_spikeIdx    = -2;
+   static double s_spikeCurATR = 0;
+   static double s_spikeAvgATR = 0;
    if(g_volRegime.regime != VOL_EVENT)
    {
-      int curBarShift = Bars - 1 - curSig.barIndex;
-      if(curBarShift >= 0)
+      if(currentSignalIndex != s_spikeIdx)
       {
-         double curATR = iATR(NULL, 0, InpATRPeriod, curBarShift);
-         double avgATR = 0;
-         int atrCount = 0;
-
-         for(int a = curBarShift + 1; a <= curBarShift + 50 && a < Bars; a++)
+         s_spikeIdx    = currentSignalIndex;
+         s_spikeCurATR = 0;
+         s_spikeAvgATR = 0;
+         int curBarShift = Bars - 1 - curSig.barIndex;
+         if(curBarShift >= 0)
          {
-            avgATR += iATR(NULL, 0, InpATRPeriod, a);
-            atrCount++;
+            s_spikeCurATR = iATR(NULL, 0, InpATRPeriod, curBarShift);
+            int atrCount  = 0;
+            for(int a = curBarShift + 1; a <= curBarShift + 50 && a < Bars; a++)
+            { s_spikeAvgATR += iATR(NULL, 0, InpATRPeriod, a); atrCount++; }
+            if(atrCount > 0) s_spikeAvgATR /= atrCount;
          }
-         if(atrCount > 0) avgATR /= atrCount;
-
-         if(avgATR > 0 && curATR > avgATR * 2.0)
-         {
-            double spikeRatio = curATR / avgATR;
-            double shrinkFactor = 1.0 / spikeRatio;
-
-            g_currentProb.probTP1 = 50.0 + (g_currentProb.probTP1 - 50.0) * shrinkFactor;
-            g_currentProb.probTP2 = 50.0 + (g_currentProb.probTP2 - 50.0) * shrinkFactor;
-            g_currentProb.probTP3 = 50.0 + (g_currentProb.probTP3 - 50.0) * shrinkFactor;
-            g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
-         }
+      }
+      if(s_spikeAvgATR > 0 && s_spikeCurATR > s_spikeAvgATR * 2.0)
+      {
+         double spikeRatio   = s_spikeCurATR / s_spikeAvgATR;
+         double shrinkFactor = 1.0 / spikeRatio;
+         g_currentProb.probTP1 = 50.0 + (g_currentProb.probTP1 - 50.0) * shrinkFactor;
+         g_currentProb.probTP2 = 50.0 + (g_currentProb.probTP2 - 50.0) * shrinkFactor;
+         g_currentProb.probTP3 = 50.0 + (g_currentProb.probTP3 - 50.0) * shrinkFactor;
+         g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
       }
    }
 

@@ -24,12 +24,27 @@ datetime g_lastAlertTime   = 0;
 SignalData g_signals[];
 int        g_signalCount       = 0;
 int        g_activeSignalIndex = -1;
+bool       g_userSelectedSignal = false;  // User clicked an arrow → don't auto-override
 
 //+------------------------------------------------------------------+
 //| MTF data                                                           |
 //+------------------------------------------------------------------+
 MTFStatus       g_mtfData[6];
 int             g_mtfCount = 0;
+
+//+------------------------------------------------------------------+
+//| MTF RAM Buffers — per-TF RSI history in RAM, no file I/O          |
+//| Slot: 0=M5 1=M15 2=M30 3=H1 4=H4 5=D1                           |
+//| barIdx 0 = most recent HTF bar, higher = older                    |
+//+------------------------------------------------------------------+
+#define MTF_RAM_BARS 250
+double   g_mtfRamGreen  [6][MTF_RAM_BARS];
+double   g_mtfRamRed    [6][MTF_RAM_BARS];
+double   g_mtfRamOrange [6][MTF_RAM_BARS];
+datetime g_mtfRamBarTime[6][MTF_RAM_BARS];
+int      g_mtfRamCount  [6];
+datetime g_mtfRamLastTime[6];
+bool     g_mtfRamReady  [6];
 
 //+------------------------------------------------------------------+
 //| Probability data                                                   |
@@ -91,7 +106,8 @@ void LoadPanelPosition()
 //+------------------------------------------------------------------+
 void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
                  double entry, double sl, double tp1, double tp2, double tp3,
-                 double atr, double angleZ = 0.0)
+                 double atr, double angleZ = 0.0,
+                 double spread = 0.0, int sessBlock = -1, double rsiVal = 0.0)
 {
    g_signalCount++;
    ArrayResize(g_signals, g_signalCount, 128);
@@ -106,7 +122,15 @@ void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
    g_signals[idx].takeProfit2   = tp2;
    g_signals[idx].takeProfit3   = tp3;
    g_signals[idx].atrValue      = atr;
-   g_signals[idx].angleStrength = angleZ; // Z-score of Green momentum (0.0 = not computed)
+   g_signals[idx].angleStrength = angleZ;
+   g_signals[idx].rsiPeriod     = InpRSIPeriod;
+   g_signals[idx].simCachedTP       = 99;
+   g_signals[idx].simCachedBTR      = 0;
+   g_signals[idx].edgeCachedOutcome = 99;
+   // [S2/S3] Context fields
+   g_signals[idx].spreadAtSignal = spread;
+   g_signals[idx].sessionBlock   = (sessBlock >= 0) ? sessBlock : GetSessionBlock(t);
+   g_signals[idx].rsiAtSignal    = rsiVal;
 }
 
 int FindSignalByArrowName(string arrowName)

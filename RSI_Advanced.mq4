@@ -125,14 +125,29 @@ int OnInit()
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
-   if(!LoadSessionStatsBinary())
-      LoadSessionStatsFromOutcomesCSV();
+   // Only load cached session stats on recompile/param change (quick restart).
+   // TF switch / remove / chart close → fullRecalc rebuilds everything fresh.
+   int prevReason = UninitializeReason();
+   if(prevReason == REASON_RECOMPILE || prevReason == REASON_PARAMETERS)
+   {
+      if(!LoadSessionStatsBinary())
+         LoadSessionStatsFromOutcomesCSV();
+   }
    return(INIT_SUCCEEDED);
 }
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   SaveSessionStatsBinary();
+   if(reason == REASON_RECOMPILE || reason == REASON_PARAMETERS)
+   {
+      SaveSessionStatsBinary();
+   }
+   else
+   {
+      // REASON_REMOVE, REASON_CHARTCHANGE, REASON_CHARTCLOSE →
+      // delete binary so next attach rebuilds from fresh signal scan.
+      FileDelete(SS_GetBinaryPath());
+   }
    FlushLogQueues();
    SavePanelPosition();
    DeleteObjectsByPrefix(PREFIX_ARROW);
@@ -194,6 +209,7 @@ int OnCalculate(const int rates_total,
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
       LoggerInit(true);
+      MTF_InitRamBuffers();  // Rebuild MTF RAM buffers from historical iRSI data
    }
    else if(rates_total > g_prevRatesTotal)
    {
@@ -275,38 +291,38 @@ int OnCalculate(const int rates_total,
       // Priority: Case 6→2→4→3→1→5→7 (optimized for M1/M5)
       if(InpEnableCase6 && buySignal == 0 && sellSignal == 0)
       {
-         if(CheckCase6_Buy(i))  buySignal  = 6;
-         if(CheckCase6_Sell(i)) sellSignal = 6;
+         if(CheckCase6_Buy(i))       buySignal  = 6;
+         else if(CheckCase6_Sell(i)) sellSignal = 6;
       }
       if(InpEnableCase2 && buySignal == 0 && sellSignal == 0)
       {
-         if(greenCrossUp && strongAngleUp && CheckCase2_Buy(i, low)) buySignal = 2;
-         if(greenCrossDown && strongAngleDown && CheckCase2_Sell(i, high)) sellSignal = 2;
+         if(greenCrossUp && strongAngleUp && CheckCase2_Buy(i, low))          buySignal = 2;
+         else if(greenCrossDown && strongAngleDown && CheckCase2_Sell(i, high)) sellSignal = 2;
       }
       if(InpEnableCase4 && buySignal == 0 && sellSignal == 0)
       {
-         if(CheckCase4_Buy(i))  buySignal  = 4;
-         if(CheckCase4_Sell(i)) sellSignal = 4;
+         if(CheckCase4_Buy(i))       buySignal  = 4;
+         else if(CheckCase4_Sell(i)) sellSignal = 4;
       }
       if(InpEnableCase3 && buySignal == 0 && sellSignal == 0)
       {
-         if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low)) buySignal = 3;
-         if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high)) sellSignal = 3;
+         if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low))          buySignal = 3;
+         else if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high)) sellSignal = 3;
       }
       if(InpEnableCase1 && buySignal == 0 && sellSignal == 0)
       {
-         if(CheckCase1_Buy(i))  buySignal  = 1;
-         if(CheckCase1_Sell(i)) sellSignal = 1;
+         if(CheckCase1_Buy(i))       buySignal  = 1;
+         else if(CheckCase1_Sell(i)) sellSignal = 1;
       }
       if(InpEnableCase5 && buySignal == 0 && sellSignal == 0)
       {
-         if(greenCrossUp && strongAngleUp && CheckCase5_Buy(i)) buySignal = 5;
-         if(greenCrossDown && strongAngleDown && CheckCase5_Sell(i)) sellSignal = 5;
+         if(greenCrossUp && strongAngleUp && CheckCase5_Buy(i))          buySignal = 5;
+         else if(greenCrossDown && strongAngleDown && CheckCase5_Sell(i)) sellSignal = 5;
       }
       if(InpEnableCase7 && buySignal == 0 && sellSignal == 0)
       {
-         if(CheckCase7_Buy(i))  buySignal  = 7;
-         if(CheckCase7_Sell(i)) sellSignal = 7;
+         if(CheckCase7_Buy(i))       buySignal  = 7;
+         else if(CheckCase7_Sell(i)) sellSignal = 7;
       }
       //--- Current bar: buffer only
       if(isCurrentBar)
@@ -328,22 +344,6 @@ int OnCalculate(const int rates_total,
          }
          continue;
       }
-      //--- MTF gate: suppress signal if higher TFs disagree (latest bar only)
-      if(InpMinMTFAgreement > 0 && InpShowMTF && g_mtfCount > 0 && i >= rates_total - 2)
-      {
-         int agreeCount = 0;
-         for(int t = 0; t < g_mtfCount; t++)
-         {
-            if(buySignal > 0 && g_mtfData[t].trend == 1) agreeCount++;
-            if(sellSignal > 0 && g_mtfData[t].trend == -1) agreeCount++;
-         }
-         int agreePct = (int)(((double)agreeCount / g_mtfCount) * 100);
-         if(agreePct < InpMinMTFAgreement)
-         {
-            buySignal = 0;
-            sellSignal = 0;
-         }
-      }
       if(buySignal > 0)
       {
          BufferBuySignal[i] = (double)buySignal;
@@ -363,11 +363,14 @@ int OnCalculate(const int rates_total,
          slDist = MathAbs(entryPrice - sl);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
          double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
-         StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
+         double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
+         int sigSessBlock = GetSessionBlock(time[i]);
+         StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
+                     curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
          //--- Log signal new + pending status
          LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
-                        GetSessionBlock(time[i]), angleZ);
+                        sigSessBlock, angleZ);
          LogOutcomePending(time[i], buySignal, true);
       }
       if(sellSignal > 0)
@@ -389,10 +392,13 @@ int OnCalculate(const int rates_total,
          slDist = MathAbs(sl - entryPrice);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
          double angleZ = CalculateAngleStrength(i);
-         StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ);
+         double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
+         int sigSessBlock = GetSessionBlock(time[i]);
+         StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
+                     curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
          LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
-                        GetSessionBlock(time[i]), angleZ);
+                        sigSessBlock, angleZ);
          LogOutcomePending(time[i], sellSignal, false);
       }
       //--- Alert on newly closed bar
@@ -459,26 +465,60 @@ int OnCalculate(const int rates_total,
       static bool    s_sltpDrawn = false;
       static bool    s_zonesDrawn = false;
       static bool    s_lastSuppressMode = false;
+      static bool    s_invalidatedSticky = false;
 
-      g_activeSignalIndex = g_signalCount - 1;
+      // Auto-switch to latest signal when new signal appears
+      static int s_prevSignalCount = 0;
+      if(g_signalCount > s_prevSignalCount && s_prevSignalCount > 0)
+         g_userSelectedSignal = false;
+      s_prevSignalCount = g_signalCount;
+
+      if(!g_userSelectedSignal)
+         g_activeSignalIndex = g_signalCount - 1;
+      else if(g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount)
+      {
+         g_activeSignalIndex = g_signalCount - 1;
+         g_userSelectedSignal = false;
+      }
+      if(g_activeSignalIndex != s_lastDrawSignalIdx)
+         s_invalidatedSticky = false;
       SignalData activeSig = g_signals[g_activeSignalIndex];
       double curPrice = iClose(NULL, 0, 0);
-      bool signalInvalidated = false;
-      if(activeSig.isBuySignal && curPrice <= activeSig.stopLoss)
-         signalInvalidated = true;
-      if(!activeSig.isBuySignal && curPrice >= activeSig.stopLoss)
-         signalInvalidated = true;
 
-      if(signalInvalidated)
+      bool rawInvalidated = false;
+      if(activeSig.isBuySignal && curPrice <= activeSig.stopLoss)
+         rawInvalidated = true;
+      if(!activeSig.isBuySignal && curPrice >= activeSig.stopLoss)
+         rawInvalidated = true;
+
+      bool signalInvalidated = rawInvalidated;
+      if(s_invalidatedSticky && !rawInvalidated)
       {
-         DeleteObjectsByPrefix(PREFIX_LINE);
+         double margin = activeSig.atrValue * 0.1;
+         if(activeSig.isBuySignal && curPrice < activeSig.stopLoss + margin)
+            signalInvalidated = true;
+         if(!activeSig.isBuySignal && curPrice > activeSig.stopLoss - margin)
+            signalInvalidated = true;
+      }
+
+      if(signalInvalidated && !s_invalidatedSticky)
+      {
          DeleteObjectsByPrefix(PREFIX_PROB);
          DeleteObjectsByPrefix(PREFIX_ZONE);
          g_validZoneCount = 0;
          g_recommendedZoneCount = 0;
          s_sltpDrawn  = false;
          s_zonesDrawn = false;
+
+         // Auto-switch to latest signal when current is invalidated
+         if(g_userSelectedSignal && g_signalCount > 0 &&
+            g_activeSignalIndex < g_signalCount - 1)
+         {
+            g_activeSignalIndex = g_signalCount - 1;
+            g_userSelectedSignal = false;
+         }
       }
+      s_invalidatedSticky = signalInvalidated;
 
       uint currentTick = GetTickCount();
       bool forceRedraw = false;
@@ -570,8 +610,16 @@ int OnCalculate(const int rates_total,
          }
          else
          {
-            s_sltpDrawn = false;
-            s_zonesDrawn = false;
+            if(!s_sltpDrawn || forceRedraw)
+            {
+               DrawSLTPLines(g_activeSignalIndex, true);
+               s_sltpDrawn = true;
+            }
+            if(s_zonesDrawn)
+            {
+               DeleteObjectsByPrefix(PREFIX_ZONE);
+               s_zonesDrawn = false;
+            }
          }
       }
    }

@@ -173,7 +173,8 @@ void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
          return;
 
    g_outcomeCount++;
-   ArrayResize(g_outcomes, g_outcomeCount);
+   // [PERF-FIX P2-4] Reserve 32 extra slots to avoid O(n) realloc on every signal
+   ArrayResize(g_outcomes, g_outcomeCount, 32);
 
    int idx = g_outcomeCount - 1;
    g_outcomes[idx].signalTime   = signalTime;
@@ -442,7 +443,8 @@ void LoadSessionStatsFromOutcomesCSV()
 
          // Append as pre-resolved entry (dedup in TrackSignalForSession prevents double-count)
          g_outcomeCount++;
-         ArrayResize(g_outcomes, g_outcomeCount);
+         // [PERF-FIX P2-4] Reserve 64 extra slots during CSV bulk load to avoid O(n) per row
+         ArrayResize(g_outcomes, g_outcomeCount, 64);
          int idx = g_outcomeCount - 1;
          g_outcomes[idx].signalTime   = st;
          g_outcomes[idx].caseNumber   = cn;

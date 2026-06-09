@@ -299,7 +299,8 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
       if(maxFav > 0)
       {
          moveCount++;
-         ArrayResize(moveRatios, moveCount);
+         // [PERF-FIX P2-4] Reserve 64 slots to avoid O(n) realloc per signal
+         ArrayResize(moveRatios, moveCount, 64);
          moveRatios[moveCount - 1] = maxFav / sigATR;
       }
    }
@@ -347,32 +348,24 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
       if(maxFav > 0)
       {
          moveCount++;
-         ArrayResize(moveRatios, moveCount);
+         // [PERF-FIX P2-4] Reserve 64 slots to avoid O(n) realloc per deep-history bar
+         ArrayResize(moveRatios, moveCount, 64);
          moveRatios[moveCount - 1] = maxFav / atr;
       }
    }
 
    if(moveCount < 30) return;
 
+   // [PERF-FIX P3] Replace O(n^2) partial selection sort with O(n log n) ArraySort.
+   // The old code ran nested loops up to target index for 3 percentiles.
+   ArraySort(moveRatios);
    int targets[3];
    targets[0] = MathMax(0, MathMin((int)(moveCount * 0.50), moveCount - 1));
    targets[1] = MathMax(0, MathMin((int)(moveCount * 0.75), moveCount - 1));
    targets[2] = MathMax(0, MathMin((int)(moveCount * 0.90), moveCount - 1));
    double results[3] = {0, 0, 0};
-
    for(int t = 0; t < 3; t++)
-   {
-      int k = targets[t];
-      for(int a = 0; a <= k; a++)
-      {
-         int minIdx = a;
-         for(int b2 = a + 1; b2 < moveCount; b2++)
-            if(moveRatios[b2] < moveRatios[minIdx]) minIdx = b2;
-         if(minIdx != a)
-         { double tmp = moveRatios[a]; moveRatios[a] = moveRatios[minIdx]; moveRatios[minIdx] = tmp; }
-      }
-      results[t] = moveRatios[k];
-   }
+      results[t] = moveRatios[targets[t]];
 
    tp1Ratio = results[0];
    tp2Ratio = results[1];
@@ -474,13 +467,29 @@ void AnalyzePriceDistribution(bool isBuy, int barIndex,
    {
       double barRange = hi[b] - lo[b];
       if(barRange <= 0) continue;
+
+      // MQL5 only: weight each bar by sqrt(tickVolume) to approximate
+      // a Volume Profile (VPOC) instead of a pure Time Price Opportunity
+      // (TPO) chart. sqrt() dampens extreme volume spikes (news events)
+      // while still giving more weight to high-activity price levels.
+      // MQL4 falls back to weight=1.0 (tick volume is unreliable there).
+      double volWeight = 1.0;
+#ifdef __MQL5__
+      int barShift = Bars - 1 - b;
+      if(barShift >= 0)
+      {
+         long bVol = (long)iVolume(NULL, 0, barShift);
+         if(bVol > 0) volWeight = MathSqrt((double)bVol);
+      }
+#endif
+
       for(int z = 0; z < microZones; z++)
       {
          double zLow  = rangeLow + z * zoneHeight;
          double zHigh = zLow + zoneHeight;
          double overlap = MathMin(zHigh, hi[b]) - MathMax(zLow, lo[b]);
          if(overlap <= 0) continue;
-         double timeFraction = overlap / barRange;
+         double timeFraction = overlap / barRange * volWeight;
          zoneTime[z] += timeFraction;
          totalTime += timeFraction;
       }

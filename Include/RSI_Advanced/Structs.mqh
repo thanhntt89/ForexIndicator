@@ -17,6 +17,23 @@ struct SignalData
    double   atrValue;
    double   angleStrength; // Z-score of Green momentum at crossover bar
                            // 0.0 = not computed; >1.5 = strong (12h-2h); <0.5 = weak (sideway)
+   int      rsiPeriod;     // InpRSIPeriod active at signal detection time.
+                           // Used to detect Tier 3 parameter contamination:
+                           // if current InpRSIPeriod != stored rsiPeriod, Tier 3
+                           // historical scan would use a different period than what
+                           // produced the original signal — invalidating comparability.
+   // --- Per-signal simulation cache (RAM only, rebuilt on fullRecalc) ---
+   // Avoids re-running SimulateSignalOutcome for resolved historical signals.
+   // Once a signal has all forward bars available, its outcome is deterministic.
+   // ScanStoredSignals: multi-level outcome (-1=SL, 0=timeout, 1/2/3=TP)
+   int      simCachedTP;      // 99 = not cached
+   int      simCachedBTR;     // bars-to-result for above
+   // MeasureEdgeFromHistory: binary outcome (-1=SL first, 1=target first)
+   int      edgeCachedOutcome; // 99 = not cached
+   // --- [S2/S3] Context fields for data quality improvement ---
+   double   spreadAtSignal;    // broker spread at signal detection (SELL simulation fix)
+   int      sessionBlock;      // 0=Asian 1=London 2=Overlap 3=LateNY at signal time
+   double   rsiAtSignal;       // BufferGreen[i] — exact RSI value at signal bar
 };
 
 struct SignalScore
@@ -118,10 +135,17 @@ struct WalkForwardData
 {
    double isWinRate;          // In-sample win rate
    double oosWinRate;         // Out-of-sample win rate
-   double overfitRatio;       // IS/OOS ratio (< 1.2 = robust)
+   double overfitRatio;       // IS/OOS ratio (< 1.15 = robust per Pardo 2008)
    bool   isRobust;
    int    isSamples;
    int    oosSamples;
+   // Information Coefficient: Pearson correlation between angleStrength and outcome.
+   // IC > 0.10 = strong alpha (signal score predicts direction reliably).
+   // IC 0.05-0.10 = weak alpha (marginal predictive power).
+   // IC < 0.05 = noise (angleStrength does NOT predict outcomes — review signal cases).
+   // Computed on IS-only resolved signals to avoid lookahead bias.
+   double infoCoeff;          // Pearson(angleStrength, outcome ∈ {+1,-1})
+   int    icSamples;          // Sample count (IS resolved signals with angleStrength > 0)
 };
 
 struct RollingPerformance

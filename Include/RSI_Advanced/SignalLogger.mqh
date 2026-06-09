@@ -358,10 +358,18 @@ void CheckAndLogNewlyResolved()
 {
    if(!InpEnableSignalLog || !s_loggerReady) return;
 
-   for(int i = 0; i < g_outcomeCount; i++)
+   // [PERF-FIX P1-2] Track start index to skip already-logged prefix.
+   // Outcomes are append-only and loggedToFile is set in order, so once
+   // an index is logged, all indices below it are also logged.
+   static int s_logScanStart = 0;
+   while(s_logScanStart < g_outcomeCount &&
+         g_outcomes[s_logScanStart].loggedToFile)
+      s_logScanStart++;
+
+   for(int i = s_logScanStart; i < g_outcomeCount; i++)
    {
-      if(g_outcomes[i].outcome == 0)        continue; // Còn pending
-      if(g_outcomes[i].loggedToFile)        continue; // Đã log rồi
+      if(g_outcomes[i].outcome == 0)        continue;
+      if(g_outcomes[i].loggedToFile)        continue;
 
       // Tính số bars giữ lệnh
       int barsHeld = 0;

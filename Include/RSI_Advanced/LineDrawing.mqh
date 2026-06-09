@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                             LineDrawing.mqh        |
 //|                         RSI Advanced - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
@@ -36,17 +36,19 @@ void CreateHorizontalLine(string name, double price, color clr, int style, int w
    ObjectSetString(0, name, OBJPROP_TOOLTIP, tip);
 }
 //+------------------------------------------------------------------+
-void CreatePriceTag(string name, string text, double price, color clr)
+// offsetSign: +1 = text above line (ANCHOR_LEFT_LOWER), -1 = text below line (ANCHOR_LEFT_UPPER)
+void CreatePriceTag(string name, string text, double price, color clr, int offsetSign = 1)
 {
    if(ObjectFind(name) >= 0) ObjectDelete(name);
-   double offset = GetCachedATROffset();
+   double offset = GetCachedATROffset() * offsetSign;
    datetime tagTime = GetTimeFromBarPlusPixels(30);
    ObjectCreate(name, OBJ_TEXT, 0, tagTime, price + offset);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
    ObjectSetString(0, name, OBJPROP_FONT, "Arial Bold");
    ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 7);
-   ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_LEFT_LOWER);
+   int anchor = (offsetSign >= 0) ? ANCHOR_LEFT_LOWER : ANCHOR_LEFT_UPPER;
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR, anchor);
    ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
    ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
 }
@@ -73,13 +75,19 @@ void DrawSLTPLines(int sigIdx, bool dimMode = false)
    if(!InpShowSLTPLines || sigIdx < 0 || sigIdx >= g_signalCount) return;
    SignalData sig = g_signals[sigIdx];
 
+   // EN text: offset toward TP (away from SL). SL text: offset away from entry.
+   // BUY:  TP is above entry → EN above (+1), SL below (-1)
+   // SELL: TP is below entry → EN below (-1), SL above (+1)
+   int enSign = sig.isBuySignal ? +1 : -1;
+   int slSign = sig.isBuySignal ? -1 : +1;
+
    if(dimMode)
    {
       // Full setup shown dim — trader sees risk/reward context without it being a trade signal
       CreateHorizontalLine(PREFIX_LINE+"ENTRY", sig.entryPrice, InpPanelDimColor, STYLE_DOT, 1, "");
-      CreatePriceTag(PREFIX_LINE+"T_EN", "ENTRY "+DoubleToString(sig.entryPrice,_Digits), sig.entryPrice, InpPanelDimColor);
+      CreatePriceTag(PREFIX_LINE+"T_EN", "EN "+DoubleToString(sig.entryPrice,_Digits), sig.entryPrice, InpPanelDimColor, enSign);
       CreateHorizontalLine(PREFIX_LINE+"SL", sig.stopLoss, InpPanelDimColor, STYLE_DOT, 1, "");
-      CreatePriceTag(PREFIX_LINE+"T_SL", "SL "+DoubleToString(sig.stopLoss,_Digits), sig.stopLoss, InpPanelDimColor);
+      CreatePriceTag(PREFIX_LINE+"T_SL", "SL "+DoubleToString(sig.stopLoss,_Digits), sig.stopLoss, InpPanelDimColor, slSign);
       CreateHorizontalLine(PREFIX_LINE+"TP1", sig.takeProfit1, InpPanelDimColor, STYLE_DOT, 1, "");
       CreatePriceTag(PREFIX_LINE+"T_T1", "TP1 "+DoubleToString(sig.takeProfit1,_Digits), sig.takeProfit1, InpPanelDimColor);
       CreateHorizontalLine(PREFIX_LINE+"TP2", sig.takeProfit2, InpPanelDimColor, STYLE_DOT, 1, "");
@@ -101,10 +109,10 @@ void DrawSLTPLines(int sigIdx, bool dimMode = false)
          else                  entryClr = clrRed;
       }
       CreateHorizontalLine(PREFIX_LINE+"ENTRY", sig.entryPrice, entryClr, STYLE_DOT, 1, "ENTRY");
-      CreatePriceTag(PREFIX_LINE+"T_EN", "ENTRY "+DoubleToString(sig.entryPrice,_Digits), sig.entryPrice, entryClr);
+      CreatePriceTag(PREFIX_LINE+"T_EN", "EN "+DoubleToString(sig.entryPrice,_Digits), sig.entryPrice, entryClr, enSign);
    }
    CreateHorizontalLine(PREFIX_LINE+"SL", sig.stopLoss, InpSLLineColor, InpSLTPLineStyle, InpSLTPLineWidth, "SL");
-   CreatePriceTag(PREFIX_LINE+"T_SL", "SL "+DoubleToString(sig.stopLoss,_Digits), sig.stopLoss, InpSLLineColor);
+   CreatePriceTag(PREFIX_LINE+"T_SL", "SL "+DoubleToString(sig.stopLoss,_Digits), sig.stopLoss, InpSLLineColor, slSign);
    CreateHorizontalLine(PREFIX_LINE+"TP1", sig.takeProfit1, InpTP1LineColor, InpSLTPLineStyle, InpSLTPLineWidth, "TP1");
    CreatePriceTag(PREFIX_LINE+"T_T1", "TP1 "+DoubleToString(sig.takeProfit1,_Digits), sig.takeProfit1, InpTP1LineColor);
    CreateHorizontalLine(PREFIX_LINE+"TP2", sig.takeProfit2, InpTP2LineColor, InpSLTPLineStyle, InpSLTPLineWidth, "TP2");
@@ -126,10 +134,12 @@ void DrawProbabilityLabels(bool dimMode = false)
 
    if(dimMode)
    {
-      string dimTxt = "ENTRY " + DoubleToString(sig.entryPrice,_Digits)
-                    + "  W:" + DoubleToString(g_currentProb.probTP1,1)
-                    + "% L:" + DoubleToString(g_currentProb.probSL,1) + "%" + ni;
+      string dimTxt = "EN " + DoubleToString(sig.entryPrice,_Digits)
+                    + " | W:" + DoubleToString(g_currentProb.probTP1,1)
+                    + "% L:" + DoubleToString(g_currentProb.probSL,1) + "%"
+                    + ni;
       ObjectSetString(0, PREFIX_LINE+"T_EN", OBJPROP_TEXT, dimTxt);
+      ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_FONTSIZE, 8);
       return;
    }
 
@@ -216,10 +226,11 @@ void DrawProbabilityLabels(bool dimMode = false)
 
    // ENTRY: win/loss
    ObjectSetString(0, PREFIX_LINE+"T_EN", OBJPROP_TEXT,
-      "ENTRY " + DoubleToString(sig.entryPrice,_Digits) +
-      "  Win:" + DoubleToString(g_currentProb.probTP1,1) +
-      "% | Loss:" + DoubleToString(g_currentProb.probSL,1) + "%");
+      "EN " + DoubleToString(sig.entryPrice,_Digits) +
+      " | W:" + DoubleToString(g_currentProb.probTP1,1) +
+      "% L:" + DoubleToString(g_currentProb.probSL,1) + "%");
    ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_FONTSIZE, 8);
 }
 //+------------------------------------------------------------------+
 //|     ██  ENTRY ZONE LINES  ██                                       |

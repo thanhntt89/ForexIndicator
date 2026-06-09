@@ -26,16 +26,19 @@ void HandleChartEvent(const int id, const long &lparam,
          int sigIdx = FindSignalByArrowName(sparam);
          if(sigIdx >= 0)
          {
-            if(g_activeSignalIndex == sigIdx)
+            if(g_activeSignalIndex == sigIdx && g_userSelectedSignal)
             {
                DeleteObjectsByPrefix(PREFIX_PANEL);
                DeleteObjectsByPrefix(PREFIX_LINE);
                DeleteObjectsByPrefix(PREFIX_PROB);
-               g_activeSignalIndex = -1;
+               DeleteObjectsByPrefix(PREFIX_ZONE);
+               g_activeSignalIndex = g_signalCount - 1;
+               g_userSelectedSignal = false;
             }
             else
             {
                g_activeSignalIndex = sigIdx;
+               g_userSelectedSignal = true;
                if(InpShowMTF) RefreshMTFData();
                if(InpShowProbability) CalculateProbability(sigIdx);
                DrawInfoPanel(sigIdx);

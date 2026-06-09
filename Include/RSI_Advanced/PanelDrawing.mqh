@@ -192,9 +192,10 @@ void DrawInfoPanel(int signalIndex)
          if(InpUseSpreadRegime)
          {
             string spreadText = GetSpreadDisplay();
+            // [PERF-FIX P0-2] Use cached regime color instead of calling GetRegimeColor separately
             string regimeText = CheckRegimeStability();
             color spreadClr = GetSpreadColor();
-            color regimeClr = GetRegimeColor();
+            color regimeClr = g_cachedRegimeColor;
             color combinedClr = (spreadClr==clrRed||regimeClr==clrRed) ? clrRed :
                                 (spreadClr==clrOrange||regimeClr==clrOrange) ? clrOrange : clrGray;
             CreateTextLabel(PREFIX_PANEL+"V_SR", px+pad+3, cy,
@@ -654,24 +655,29 @@ void DrawInfoPanel(int signalIndex)
             tfClr, fs-2, false);
          cy += lh;
       }
-      int ag = CalculateMTFAgreement();
+      // [PERF-FIX P0-2] Reuse mtfAgree from line 269 instead of calling CalculateMTFAgreement() again
+      int ag = mtfAgree;
       string agTxt; color agClr;
       if(ag > 50)       { agTxt="STRONG BULL";  agClr=InpMTF_BullColor; }
       else if(ag > 0)   { agTxt="WEAK BULL";    agClr=InpMTF_BullColor; }
       else if(ag < -50) { agTxt="STRONG BEAR";  agClr=InpMTF_BearColor; }
       else if(ag < 0)   { agTxt="WEAK BEAR";    agClr=InpMTF_BearColor; }
       else              { agTxt="MIXED";         agClr=InpMTF_NeutralColor; }
-      string alignTxt = "";
-      if((isBuy && ag>0)||(!isBuy && ag<0)) alignTxt=" ALIGNED";
-      else if((isBuy && ag<0)||(!isBuy && ag>0)) alignTxt=" AGAINST";
       int agreeCount = 0;
       for(int t=0; t<g_mtfCount; t++)
       {
          if(isBuy && g_mtfData[t].trend == 1) agreeCount++;
          if(!isBuy && g_mtfData[t].trend == -1) agreeCount++;
       }
+      string alignTxt = "";
+      if((isBuy && ag>0)||(!isBuy && ag<0))
+         alignTxt = IntegerToString(agreeCount)+"/"+IntegerToString(g_mtfCount)+" TFs ALIGNED";
+      else if((isBuy && ag<0)||(!isBuy && ag>0))
+         alignTxt = IntegerToString(g_mtfCount-agreeCount)+"/"+IntegerToString(g_mtfCount)+" TFs AGAINST";
+      else
+         alignTxt = IntegerToString(agreeCount)+"/"+IntegerToString(g_mtfCount)+" TFs NEUTRAL";
       CreateTextLabel(PREFIX_PANEL+"M_AG", px+pad, cy,
-         agTxt+" ("+IntegerToString(ag)+"%) "+IntegerToString(agreeCount)+"/"+IntegerToString(g_mtfCount)+" TFs"+alignTxt,
+         agTxt+" ("+IntegerToString(ag)+"%) "+alignTxt,
          agClr, fs-1, true);
       cy += lh;
    }
@@ -719,8 +725,10 @@ void DrawInfoPanel(int signalIndex)
       {
          string spreadText = GetSpreadDisplay();
          color spreadClr = GetSpreadColor();
+         // [PERF-FIX P0-2] CheckRegimeStability caches result; GetRegimeColor uses cached color.
+         // Single call gets both text and color without re-computing 100 iATR.
          string regimeText = CheckRegimeStability();
-         color regimeClr = GetRegimeColor();
+         color regimeClr = g_cachedRegimeColor;
          color combinedClr = (spreadClr==clrRed||regimeClr==clrRed) ? clrRed :
                              (spreadClr==clrOrange||regimeClr==clrOrange) ? clrOrange : clrGray;
          CreateTextLabel(PREFIX_PANEL+"V_SR", px+pad+3, cy,
