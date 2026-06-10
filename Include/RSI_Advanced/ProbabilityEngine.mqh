@@ -363,6 +363,12 @@ void ScanStoredSignals(const SignalData &curSig, bool matchCase, int maxFwd,
          out = g_signals[s].simCachedTP;
          btr = g_signals[s].simCachedBTR;
       }
+      else if(g_signals[s].barIndex == -1)
+      {
+         // [BINARY-CACHE-GUARD] Signal loaded from binary (old session) has stale barIndex.
+         // simCachedTP==99 means outcome unknown → skip to avoid invalid bar array access.
+         continue;
+      }
       else
       {
          btr = 0;
@@ -760,6 +766,11 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       {
          out = g_signals[s].simCachedTP;
          btr = g_signals[s].simCachedBTR;
+      }
+      else if(g_signals[s].barIndex == -1)
+      {
+         // [BINARY-CACHE-GUARD] Stale barIndex from binary load; outcome unknown → skip.
+         continue;
       }
       else
       {

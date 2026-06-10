@@ -159,6 +159,30 @@ double GetMeasuredSessionQuality(int caseNum, datetime signalTime)
 }
 
 //+------------------------------------------------------------------+
+//| Sort g_outcomes[] ascending by signalTime (insertion sort)        |
+//| [BUG#2-FIX] The two-pointer merge in ScanStoredSignalsBoth        |
+//| assumes g_outcomes[] is chronologically ordered. This invariant   |
+//| holds for live signals (appended in order) but may break when     |
+//| outcomes are loaded from CSV where file order ≠ signal order.     |
+//| Called once after bulk CSV load in LoadOutcomesFromCSV().         |
+//| O(n²) is acceptable: outcome count is hundreds, not thousands.   |
+//+------------------------------------------------------------------+
+void SortOutcomesByTime()
+{
+   for(int i = 1; i < g_outcomeCount; i++)
+   {
+      SignalOutcome key = g_outcomes[i];
+      int j = i - 1;
+      while(j >= 0 && g_outcomes[j].signalTime > key.signalTime)
+      {
+         g_outcomes[j + 1] = g_outcomes[j];
+         j--;
+      }
+      g_outcomes[j + 1] = key;
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Track a new signal for session statistics                          |
 //| Called when signal is created                                      |
 //+------------------------------------------------------------------+
@@ -462,6 +486,13 @@ void LoadSessionStatsFromOutcomesCSV()
       FileClose(fh);
    }
 
+   // [BUG#2-FIX] Enforce chronological order after CSV load.
+   // CSV rows are written in outcome-resolve order, not signal-time order — a signal
+   // from bar 100 that resolves on bar 200 can appear in the file after a signal from
+   // bar 150 that resolves on bar 160. The two-pointer merge in ScanStoredSignalsBoth
+   // requires g_outcomes[] sorted by signalTime; without this sort it would miss matches.
+   SortOutcomesByTime();
+
    UpdateSessionStats();  // Rebuild g_sessionStats from all loaded outcomes
 }
 
@@ -471,6 +502,11 @@ void LoadSessionStatsFromOutcomesCSV()
 string SS_GetBinaryPath()
 {
    return(InpLogFolder + "\\RSI_SESS_" + Symbol() + "_" + SS_GetTFName() + ".bin");
+}
+
+string SIG_GetBinaryPath()
+{
+   return(InpLogFolder + "\\RSI_SIG_" + Symbol() + "_" + SS_GetTFName() + ".bin");
 }
 
 //+------------------------------------------------------------------+
@@ -497,6 +533,83 @@ bool LoadSessionStatsBinary()
    bool ok = (FileReadStruct(fh, g_sessionStats) == sizeof(g_sessionStats));
    FileClose(fh);
    return(ok);
+}
+
+//+------------------------------------------------------------------+
+//| Save g_signals[] to binary — called from OnDeinit                 |
+//| Capped at 5000 newest signals to prevent unbounded file growth.   |
+//+------------------------------------------------------------------+
+void SaveSignalsBinary()
+{
+   if(IsBacktestMode() || g_signalCount == 0) return;
+   int fh = FileOpen(SIG_GetBinaryPath(), FILE_WRITE|FILE_BIN);
+   if(fh == INVALID_HANDLE) return;
+   int start = MathMax(0, g_signalCount - 5000);
+   int count = g_signalCount - start;
+   FileWriteInteger(fh, count);
+   for(int i = start; i < g_signalCount; i++)
+      FileWriteStruct(fh, g_signals[i]);
+   FileClose(fh);
+}
+
+//+------------------------------------------------------------------+
+//| Load old signals from binary and prepend to g_signals[].          |
+//| Call AFTER fullRecalc has populated g_signals[] with recent data.  |
+//| Only prepends signals older than the current scan window (no       |
+//| duplicates). Only signals with a cached sim outcome are loaded     |
+//| (barIndex will be set to -1; ProbabilityEngine guards this).       |
+//+------------------------------------------------------------------+
+void LoadAndMergeSignalsBinary()
+{
+   if(IsBacktestMode()) return;
+   int fh = FileOpen(SIG_GetBinaryPath(), FILE_READ|FILE_BIN);
+   if(fh == INVALID_HANDLE) return;
+
+   int savedCount = FileReadInteger(fh);
+   if(savedCount <= 0 || savedCount > 100000) { FileClose(fh); return; }
+
+   SignalData saved[];
+   ArrayResize(saved, savedCount);
+   int readOk = 0;
+   for(int i = 0; i < savedCount; i++)
+   {
+      if(FileReadStruct(fh, saved[i]) != (uint)sizeof(SignalData)) break;
+      readOk++;
+   }
+   FileClose(fh);
+   if(readOk == 0) return;
+
+   // Only accept signals older than the current scan window start.
+   datetime cutoff = (g_signalCount > 0) ? g_signals[0].signalTime : TimeCurrent();
+
+   // Count qualifying old signals: older than cutoff AND outcome already cached.
+   // barIndex from the old session is stale; ProbabilityEngine skips simulation
+   // for signals where barIndex==-1 and simCachedTP==99.
+   int oldCount = 0;
+   for(int i = 0; i < readOk; i++)
+      if(saved[i].signalTime < cutoff && saved[i].simCachedTP != 99)
+         oldCount++;
+
+   if(oldCount == 0) return;
+
+   // Expand array and shift current signals right to make room.
+   int newTotal = oldCount + g_signalCount;
+   ArrayResize(g_signals, newTotal);
+   for(int i = g_signalCount - 1; i >= 0; i--)
+      g_signals[i + oldCount] = g_signals[i];
+
+   // Insert old signals at front; mark barIndex=-1 (stale).
+   int pos = 0;
+   for(int i = 0; i < readOk; i++)
+   {
+      if(saved[i].signalTime < cutoff && saved[i].simCachedTP != 99)
+      {
+         g_signals[pos]          = saved[i];
+         g_signals[pos].barIndex = -1;  // stale; ProbabilityEngine must not access bar arrays
+         pos++;
+      }
+   }
+   g_signalCount = newTotal;
 }
 
 #endif
