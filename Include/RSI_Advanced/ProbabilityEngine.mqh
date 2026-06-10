@@ -31,7 +31,7 @@
 //|   - Tim bar co RSI tuong tu signal hien tai                       |
 //|   - Tu bar do, tao TP/SL tu ATR va simulate ket qua              |
 //|   - Co angle-tier filter: chi so sanh bar co angle tuong tu       |
-//|   - Weight: w3 = sqrt(n) × 0.25 (it tin nhat, du lieu tho)       |
+//|   - Weight: w3 = sqrt(n) × 0.15 (it tin nhat, du lieu tho)       |
 //|                                                                    |
 //| Ket qua Tier: histTP1, histSL (weighted average cua 3 tiers)      |
 //|   histTP1 = sum(tier_ratio × weight) / sum(weight) × 100          |
@@ -72,7 +72,7 @@
 //|   Divergence cases (2,3): damp 40% (structure > angle)            |
 //|   edgeAdj += angleAdj × caseDamp                                  |
 //|                                                                    |
-//| adjustedEdge = clamp(edge + edgeAdj, 0.40, 0.85)                  |
+//| adjustedEdge = clamp(edge + edgeAdj, 0.48, TF-ceiling)            |
 //|                                                                    |
 //| ================================================================= |
 //| STEP 4: THEORETICAL PROBABILITY (Gambler's Ruin)                   |
@@ -212,7 +212,7 @@
 //| - Session quality from MEASURED data (when n >= 20)                |
 //| - Time-decay: Weibull survival, not arbitrary linear discount      |
 //| - Wilson Score SE with floor 0.05 (never trust data 100%)         |
-//| - Edge hard clamp [0.40, 0.85] (prevent extreme predictions)      |
+//| - Edge TF-adaptive clamp [0.48, 0.56-0.65] per timeframe          |
 //|                                                                    |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_PROBABILITYENGINE_MQH
@@ -476,8 +476,11 @@ void ScanStoredSignals(const SignalData &curSig, bool matchCase, int maxFwd,
       if(g_signals[s].isBuySignal != curSig.isBuySignal) continue;
       if(matchCase && g_signals[s].caseNumber != curSig.caseNumber) continue;
 
-      //Patch #1 — Fix Timeout
+      // [FIX-P0] Cap forward window: old code gave M1 1440 bars (24h) while Tier 3 used 40.
+      // Signals >2h old on M1 measure random walk, not signal edge. Cap at 3x TF-forward.
+      // M1: min(1440,120)=120 bars (2h), M5: min(288,150)=150 (12.5h), H1+: maxFwd wins.
       int timeBasedMax = 1440 / MathMax(Period(), 1);
+      timeBasedMax = MathMin(timeBasedMax, maxFwd * 3);
       timeBasedMax = MathMax(timeBasedMax, maxFwd);
       if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
 
@@ -881,7 +884,9 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       if(g_signals[s].signalTime == curSig.signalTime) continue;
       if(g_signals[s].isBuySignal != curSig.isBuySignal) continue;
 
+      // [FIX-P0] Same cap as ScanStoredSignals — symmetric Tier1+2 forward window.
       int timeBasedMax = 1440 / MathMax(Period(), 1);
+      timeBasedMax = MathMin(timeBasedMax, maxFwd * 3);
       timeBasedMax = MathMax(timeBasedMax, maxFwd);
       if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
 
@@ -1105,6 +1110,32 @@ void CalculateProbability(int currentSignalIndex)
 
    int minBayesian = MathMax(10, GetMinSamplesForTimeframe() / 3);
    double histTP1=0, histTP2=0, histTP3=0, histSL=0;
+   // avgBarsToTP1/SL: simple weighted average — not gated by minBayesian.
+   if(tw > 0)
+   {
+      g_currentProb.avgBarsToTP1 = wB1/tw;
+      g_currentProb.avgBarsToSL  = wBS/tw;
+   }
+
+   // ATR-distance fallback: fires when tw=0 (all tiers below weight threshold due to
+   // S5-S9 heavy discounting on H4+) OR wB1=0 (all simulations timed out).
+   // Without this, avgBarsToTP1 stays 0 → ApplyTimeDecay never fires → no Edge display.
+   // Random walk scaling: E[bars] = (distance/ATR)^2 — price diffuses as sqrt(N),
+   // so reaching D ATR takes D^2 bars on average. Linear (D/ATR) assumes straight-line
+   // movement and underestimates severely (4 bars vs 16 for TP1=4×ATR).
+   if(g_currentProb.avgBarsToTP1 <= 0 && g_currentProb.avgBarsToSL <= 0 && curSig.atrValue > 0)
+   {
+      double tp1Dist = MathAbs(curSig.takeProfit1 - curSig.entryPrice);
+      double slDist  = MathAbs(curSig.stopLoss    - curSig.entryPrice);
+      if(tp1Dist > 0)
+      {
+         double tp1R = tp1Dist / curSig.atrValue;
+         double slR  = slDist  / MathMax(curSig.atrValue, 0.0001);
+         g_currentProb.avgBarsToTP1 = MathMax(2.0, tp1R * tp1R);
+         g_currentProb.avgBarsToSL  = MathMax(2.0, slR  * slR);
+      }
+   }
+
    if(tw > 0 && totalUsed >= minBayesian)
    {
       double rTP1=wTP1/tw*100, rTP2=wTP2/tw*100;
@@ -1116,11 +1147,6 @@ void CalculateProbability(int currentSignalIndex)
          histSL  = rSL/sum*100;
          histTP2 = MathMin(rTP2/sum*100, histTP1);
          histTP3 = MathMin(rTP3/sum*100, histTP2);
-      }
-      if(tw > 0)
-      {
-         g_currentProb.avgBarsToTP1 = wB1/tw;
-         g_currentProb.avgBarsToSL  = wBS/tw;
       }
    }
 
@@ -1173,14 +1199,20 @@ void CalculateProbability(int currentSignalIndex)
    UpdateVolRegime();
    edgeAdjustment += GetVolRegimeEdgeAdjustment();
 
-   // Anti-overfitting: clamp to [0.48, 0.65] — realistic range for liquid markets.
-   // Previous [0.40, 0.85] allowed edge=0.85 → Gambler's Ruin P(TP1:1R) ≈ 84%,
-   // which is not sustainable in any continuously-traded instrument and causes the
-   // probability pipeline to output overconfident signals. Upper bound 0.65 still
-   // allows meaningful edge capture while preventing model explosion.
-   // Lower bound 0.48 (not 0.40) because edge < 0.48 after adjustments means the
-   // setup has no statistical basis; 0.50 default gives 50/50 via Gambler's Ruin.
-   double adjustedEdge = MathMax(0.48, MathMin(0.65, measuredEdge + edgeAdjustment));
+   // [FIX-P1] TF-adaptive edge ceiling: M1=0.56, M5=0.58, M15=0.60, M30=0.62, H1=0.63, H4+=0.65
+   // Lower TFs: higher noise, larger proportional spread cost, shorter signal persistence.
+   // Menkhoff 2010 (daily), Kozhan & Salmon 2012 (intraday): M1 edge rarely >55-56%.
+   // Old flat 0.65 → Gambler's Ruin P(TP1)=72% on M1, unrealistic. Now capped per TF.
+   double edgeCeiling = 0.65;
+   {
+      int tfCeil = Period();
+      if(tfCeil <= TF_M1)       edgeCeiling = 0.56;
+      else if(tfCeil <= TF_M5)  edgeCeiling = 0.58;
+      else if(tfCeil <= TF_M15) edgeCeiling = 0.60;
+      else if(tfCeil <= TF_M30) edgeCeiling = 0.62;
+      else if(tfCeil <= TF_H1)  edgeCeiling = 0.63;
+   }
+   double adjustedEdge = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + edgeAdjustment));
 
    //=================================================================
    // STEP 4: Theoretical probability using adjusted edge
@@ -1384,6 +1416,13 @@ void CalculateProbability(int currentSignalIndex)
    {
       int barsAgo = iBarShift(NULL, 0, curSig.signalTime, false);
       if(barsAgo < 0) barsAgo = 0;
+      if(InpDebugMode && Period() >= TF_H4)
+         Print("[EDGE-DBG TF=", Period(), "] barsAgo=", barsAgo,
+               " avgTP1=", g_currentProb.avgBarsToTP1, " avgSL=", g_currentProb.avgBarsToSL,
+               " tw=", DoubleToString(tw,3), " wB1=", DoubleToString(wB1,3),
+               " t1tw=", DoubleToString(t1_tw,2), " t2tw=", DoubleToString(t2_tw,2),
+               " t3t=", t3_t, " t3b1=", DoubleToString(t3_b1,1),
+               " rawN12=", rawCount12, " minSmp=", minSamples, " probTP1=", g_currentProb.probTP1);
       if(barsAgo > 0 && (g_currentProb.avgBarsToTP1 > 0 || g_currentProb.avgBarsToSL > 0))
          ApplyTimeDecay(barsAgo);
    }

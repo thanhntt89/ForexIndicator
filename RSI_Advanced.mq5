@@ -383,6 +383,10 @@ int OnCalculate(const int rates_total,
          if(i - lastBar < InpCooldownBars) continue;
       }
 
+      // [SESSION-HARD] Pre-detection: compute session block; M1 non-Overlap skip
+      int _sb = GetSessionBlock(time[i]);
+      if(InpHardM1Overlap && Period() == TF_M1 && _sb != 2) continue;
+
       int buySignal  = 0;
       int sellSignal = 0;
       // Priority: Case 6→2→4→3→1→5→7 (optimized for M1/M5)
@@ -422,6 +426,15 @@ int OnCalculate(const int rates_total,
          else if(CheckCase7_Sell(i)) sellSignal = 7;
       }
 
+      // [SESSION-HARD] Post-detection: Case 6 block in Asian/LateNY
+      if(buySignal == 6 || sellSignal == 6)
+      {
+         if((InpHardCase6Asian  && _sb == 0) ||
+            (InpHardCase6LateNY && _sb == 3))
+         { buySignal = 0; sellSignal = 0; }
+      }
+      if(buySignal == 0 && sellSignal == 0) continue;
+
       //--- Current bar: buffer only
       if(isCurrentBar)
       {
@@ -454,7 +467,7 @@ int OnCalculate(const int rates_total,
          entryPrice = MathMax(entryPrice, baseEntry);
          double sl, tp1, tp2, tp3, atrVal;
          CalculateSLTP(true, i, entryPrice, high, low, rates_total,
-                       sl, tp1, tp2, tp3, atrVal);
+                       sl, tp1, tp2, tp3, atrVal, buySignal);
          double slDist  = MathAbs(entryPrice - sl);
          double tp1Dist = MathAbs(tp1 - entryPrice);
          double maxSLDist = atrVal * InpSLRatio;
@@ -491,7 +504,7 @@ int OnCalculate(const int rates_total,
          entryPrice = MathMin(entryPrice, baseEntry);
          double sl, tp1, tp2, tp3, atrVal;
          CalculateSLTP(false, i, entryPrice, high, low, rates_total,
-                       sl, tp1, tp2, tp3, atrVal);
+                       sl, tp1, tp2, tp3, atrVal, sellSignal);
          double slDist  = MathAbs(sl - entryPrice);
          double tp1Dist = MathAbs(entryPrice - tp1);
          double maxSLDist = atrVal * InpSLRatio;

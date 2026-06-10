@@ -112,12 +112,17 @@ void FindSwingRange(bool isBuy, int barIndex,
 void CalculateSLTP_ATR(bool isBuy, int barNS, double entry,
                        const double &hi[], const double &lo[], int total,
                        double &outSL, double &outTP1, double &outTP2, double &outTP3,
-                       double &outATR)
+                       double &outATR, int caseNum = 0)
 {
    int bs = total - 1 - barNS;
    outATR = GetATRValue(bs);
 
-   double atrSL = outATR * InpSLRatio;
+   // [CASE-SL] Case+TF SL ratio override — tighter/wider stop by case
+   double slRatio = InpSLRatio;
+   if(caseNum == 7 && Period() == TF_M5) slRatio = 1.2;  // Sideway break M5: tight stop
+   if(caseNum == 6 && Period() == TF_M5) slRatio = 2.2;  // Trend cont M5: wide stop
+
+   double atrSL = outATR * slRatio;
    double spreadBuf = GetNormalizedSpreadBuffer();
    double structBuf = outATR * 0.1;
    double totalBuf = spreadBuf + structBuf;
@@ -195,7 +200,7 @@ void CalculateSLTP_Fibonacci(bool isBuy, int barNS, double entry,
 void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
                            const double &hi[], const double &lo[], int total,
                            double &outSL, double &outTP1, double &outTP2, double &outTP3,
-                           double &outATR)
+                           double &outATR, int caseNum = 0)
 {
    int bs = total - 1 - barNS;
    outATR = GetATRValue(bs);
@@ -204,7 +209,12 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
    double totalBuf = spreadBuf + structBuf;
    double minSL = GetMinSLDistance();
 
-   double atrSLDist = outATR * InpSLRatio;
+   // [CASE-SL] Case+TF SL ratio override
+   double slRatio = InpSLRatio;
+   if(caseNum == 7 && Period() == TF_M5) slRatio = 1.2;
+   if(caseNum == 6 && Period() == TF_M5) slRatio = 2.2;
+
+   double atrSLDist = outATR * slRatio;
    double atrTP1 = outATR * InpTPRatio;
    double atrTP2 = outATR * InpTPRatio * InpTP2Multiplier;
    double atrTP3 = outATR * InpTPRatio * InpTP3Multiplier;
@@ -213,7 +223,7 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
    double swingHigh = 0, swingLow = 0;
    FindSwingRange(isBuy, barNS, hi, lo, fibLookback, swingHigh, swingLow);
    double swingRange = MathMax(swingHigh - swingLow, outATR);
-   double maxSLDist = outATR * (InpSLRatio + 0.5);
+   double maxSLDist = outATR * (slRatio + 0.5);
 
    if(isBuy)
    {
@@ -383,7 +393,7 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
 void CalculateSLTP(bool isBuy, int barNS, double entry,
                    const double &hi[], const double &lo[], int total,
                    double &outSL, double &outTP1, double &outTP2, double &outTP3,
-                   double &outATR)
+                   double &outATR, int caseNum = 0)
 {
    // Measure optimal TP ratios from actual market data
    double optTP1, optTP2, optTP3;
@@ -398,11 +408,11 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
          break;
       case SLTP_HYBRID:
          CalculateSLTP_Hybrid(isBuy, barNS, entry, hi, lo, total,
-                              outSL, outTP1, outTP2, outTP3, outATR);
+                              outSL, outTP1, outTP2, outTP3, outATR, caseNum);
          break;
       default:
          CalculateSLTP_ATR(isBuy, barNS, entry, hi, lo, total,
-                           outSL, outTP1, outTP2, outTP3, outATR);
+                           outSL, outTP1, outTP2, outTP3, outATR, caseNum);
          break;
    }
 

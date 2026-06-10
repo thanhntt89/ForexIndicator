@@ -263,7 +263,7 @@ void DrawInfoPanel(int signalIndex)
       if(!isBuy && curPrice > sig.stopLoss - margin) isInvalidated = true;
    }
    s_panelInvalidSticky = isInvalidated;
-   bool hasProb = (InpShowProbability && g_currentProb.totalSamples >= GetMinSamplesForTimeframe());
+   bool hasProb = (InpShowProbability && (g_currentProb.totalSamples >= GetMinSamplesForTimeframe() || g_currentProb.probTP1 > 0));
    bool hasMTF = (InpShowMTF && g_mtfCount > 0);
    bool hasZones = (InpEntryZoneCount >= 2 && g_validZoneCount >= 1 && !isInvalidated);
    int mtfAgree = 0;
@@ -401,10 +401,27 @@ void DrawInfoPanel(int signalIndex)
    // ============================================
    int cy = py + 3;
    //--- TITLE ---
-   string titleText = "RSI Advanced - " + dir + " SIGNAL";
-   if(isInvalidated) titleText += " [INVALID]";
-   CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText,
-      isInvalidated ? clrRed : InpPanelTitleColor, fs+1, true);
+   string titleText = "RSI Advanced - " + dir;
+   color titleClr = InpPanelTitleColor;
+   if(isInvalidated)
+   {
+      titleText += " SIGNAL [INVALID]";
+      titleClr = clrRed;
+   }
+   else if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
+   {
+      titleText += " (No Edge)";
+      titleClr = (rec.level == REC_WAIT) ? clrOrange : clrRed;
+   }
+   else
+   {
+      titleText += " SIGNAL";
+      if(rec.level == REC_STRONG_ENTRY || rec.level == REC_ENTRY)
+         titleClr = clrLime;
+      else
+         titleClr = clrYellow;
+   }
+   CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText, titleClr, fs+1, true);
    cy += titleBarH + 2 - 3;
    //--- CASE ---
    CreateTextLabel(PREFIX_PANEL+"2_C", px+pad, cy,
@@ -597,7 +614,8 @@ void DrawInfoPanel(int signalIndex)
       {
          string decayLine = " Elapsed:"+IntegerToString(g_currentProb.elapsedBars)+"bars";
          double survPct = g_currentProb.survivalRatio * 100.0;
-         decayLine += " | Edge-left:"+DoubleToString(survPct, 0)+"%";
+         string edgeLabel = suppressZones ? "Signal-life" : "Edge-left";
+         decayLine += " | "+edgeLabel+":"+DoubleToString(survPct, 0)+"%";
          if(g_currentProb.expiresMinutes > 0)
          {
             if(g_currentProb.expiresMinutes >= 60)
