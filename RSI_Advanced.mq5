@@ -167,6 +167,9 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   // Signals binary: always save (accumulates history across restarts).
+   // Session stats binary: save only on recompile/param change (quick restart).
+   SaveSignalsBinary();
    if(reason == REASON_RECOMPILE || reason == REASON_PARAMETERS)
    {
       SaveSessionStatsBinary();
@@ -174,7 +177,7 @@ void OnDeinit(const int reason)
    else
    {
       // REASON_REMOVE, REASON_CHARTCHANGE, REASON_CHARTCLOSE →
-      // delete binary so next attach rebuilds from fresh signal scan.
+      // delete session stats binary so next attach rebuilds outcomes fresh.
       FileDelete(SS_GetBinaryPath());
    }
    FlushLogQueues();
@@ -425,6 +428,15 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice - maxSLDist;
          slDist = MathAbs(entryPrice - sl);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
+         // SL floor: signal bar ATR may be tiny (quiet moment before a spike).
+         // Without floor, SL = 2 pts vs TP1 = 55 pts → Gambler's Ruin outputs W:1%,
+         // wasting signal display. Minimum = 30% of current-bar ATR × ratio.
+         {
+            double curATR = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
+            double minSLDist = curATR * InpSLRatio * 0.3;
+            slDist = MathAbs(entryPrice - sl);
+            if(slDist < minSLDist) { sl = entryPrice - minSLDist; slDist = minSLDist; }
+         }
          double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -453,6 +465,13 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice + maxSLDist;
          slDist = MathAbs(sl - entryPrice);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
+         // SL floor: same as BUY — prevent degenerate SL from low-ATR signal bar.
+         {
+            double curATR = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
+            double minSLDist = curATR * InpSLRatio * 0.3;
+            slDist = MathAbs(sl - entryPrice);
+            if(slDist < minSLDist) { sl = entryPrice + minSLDist; slDist = minSLDist; }
+         }
          double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -482,6 +501,12 @@ int OnCalculate(const int rates_total,
          }
       }
    }
+
+   // After fullRecalc scan: load old signals from binary and merge.
+   // These signals predate the current InpMaxBars window and give Tier 1/2
+   // access to historical data without rescanning the entire price history.
+   if(fullRecalc)
+      LoadAndMergeSignalsBinary();
 
    //=================================================================
    // V11: Update multi-source data
