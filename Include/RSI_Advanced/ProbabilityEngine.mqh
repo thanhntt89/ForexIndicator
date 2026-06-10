@@ -294,24 +294,29 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
       }
       else
       {
+         // SELL: entered at BID, exit at BID.
+         // SL hit when ASK (= BID + spread) reaches slPrice — use effHigh.
+         // TP hit when BID drops to tp1Price — use bL (raw BID), NOT bL+spread.
+         // [FIX] Previously effLow (=bL+spread) was used for TP, requiring price
+         // to travel one extra spread below target. This created a systematic
+         // downward bias: SELL win rate understated vs BUY by ~1 spread/ATR.
          double effHigh = bH + avgSpread;
-         double effLow  = bL + avgSpread;
 
          bool slHit  = (effHigh >= slPrice);
-         bool tp1Now = (effLow <= tp1Price);
+         bool tp1Now = (bL <= tp1Price);   // [FIX] was: effLow <= tp1Price
 
          if(slHit && tp1Now)
          {
             double distToSL = MathAbs(bO + avgSpread - slPrice);
-            double distToTP = MathAbs(bO + avgSpread - tp1Price);
+            double distToTP = MathAbs(bO - tp1Price);   // [FIX] was: bO+spread, use BID open
             if(distToSL <= distToTP * 1.2)
             {
                if(tp1Hit) return(tp2Hit ? (tp3Hit ? 3 : 2) : 1);
                return(-1);
             }
             tp1Hit = true;
-            if(effLow <= tp2Price) tp2Hit = true;
-            if(effLow <= tp3Price) tp3Hit = true;
+            if(bL <= tp2Price) tp2Hit = true;   // [FIX] was: effLow
+            if(bL <= tp3Price) tp3Hit = true;   // [FIX] was: effLow
             if(tp3Hit) return(3); if(tp2Hit) return(2); return(1);
          }
 
@@ -321,9 +326,9 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
             return(-1);
          }
 
-         if(!tp1Hit && effLow <= tp1Price) tp1Hit = true;
-         if(tp1Hit && !tp2Hit && effLow <= tp2Price) tp2Hit = true;
-         if(tp2Hit && !tp3Hit && effLow <= tp3Price) tp3Hit = true;
+         if(!tp1Hit && bL <= tp1Price) tp1Hit = true;             // [FIX] was: effLow
+         if(tp1Hit && !tp2Hit && bL <= tp2Price) tp2Hit = true;   // [FIX] was: effLow
+         if(tp2Hit && !tp3Hit && bL <= tp3Price) tp3Hit = true;   // [FIX] was: effLow
          if(tp3Hit) return(3);
       }
    }
@@ -697,20 +702,32 @@ void ApplyTimeDecay(int elapsedBars)
 //| [S5] Continuous similarity weighting: session + angle Gaussian   |
 //| [S6] Tracks sumW2 for effective sample size (n_eff)              |
 //+------------------------------------------------------------------+
+// [BUG#3-FIX] Added t1_rawN/t2_rawN: raw integer signal counts independent of similarity
+// weights. Previously (t1_tw + t2_tw) < minSamples was used to trigger Tier 3, but tw is
+// a weighted sum — 5 signals with weight 0.1 each gives tw=0.5 which falsely looks like
+// "not enough data". Raw counts correctly measure how many distinct signals were available.
 void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
    double &t1_tw, int &t1_to, double &t1_w1, double &t1_w2, double &t1_w3, double &t1_ws,
-   double &t1_b1, double &t1_bs, double &t1_sumW2,
+   double &t1_b1, double &t1_bs, double &t1_sumW2, int &t1_rawN,
    double &t2_tw, int &t2_to, double &t2_w1, double &t2_w2, double &t2_w3, double &t2_ws,
-   double &t2_b1, double &t2_bs, double &t2_sumW2)
+   double &t2_b1, double &t2_bs, double &t2_sumW2, int &t2_rawN)
 {
-   t1_tw=0; t1_to=0; t1_w1=0; t1_w2=0; t1_w3=0; t1_ws=0; t1_b1=0; t1_bs=0; t1_sumW2=0;
-   t2_tw=0; t2_to=0; t2_w1=0; t2_w2=0; t2_w3=0; t2_ws=0; t2_b1=0; t2_bs=0; t2_sumW2=0;
+   t1_tw=0; t1_to=0; t1_w1=0; t1_w2=0; t1_w3=0; t1_ws=0; t1_b1=0; t1_bs=0; t1_sumW2=0; t1_rawN=0;
+   t2_tw=0; t2_to=0; t2_w1=0; t2_w2=0; t2_w3=0; t2_ws=0; t2_b1=0; t2_bs=0; t2_sumW2=0; t2_rawN=0;
 
    // [S4-FIX] Pre-build outcome override map: O(signalCount + outcomeCount) single pass
    // instead of O(signalCount × outcomeCount) nested loop.
    // Both g_signals[] and g_outcomes[] are chronologically ordered — two-pointer merge.
-   int outcomeOverride[]; // indexed by signal slot, value = resolved outcome (0=none)
-   ArrayResize(outcomeOverride, g_signalCount);
+   // [PERF-FIX] Static array: ArrayResize is O(n) heap alloc called every bar on M1 with
+   // many signals. Resize only when g_signalCount grows; ArrayFill still needed each call
+   // to clear stale overrides from the previous signal set.
+   static int outcomeOverride[];
+   static int s_oaAllocSize = 0;
+   if(g_signalCount > s_oaAllocSize)
+   {
+      ArrayResize(outcomeOverride, g_signalCount);
+      s_oaAllocSize = g_signalCount;
+   }
    ArrayFill(outcomeOverride, 0, g_signalCount, 0);
    {
       int oIdx = 0;
@@ -776,16 +793,29 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
          w *= MathExp(-0.5 * dz * dz / 4.0); // Gaussian kernel sigma=2.0
       }
 
-      // [S7] Recency decay: halflife=60 days — older signals less representative of current regime
+      // [S7] Recency decay: halflife varies by TF — regime changes faster on lower TFs.
+      // [FIX-S7a] daysDiff < 0 means historical signal is timestamped after curSig (data
+      // anomaly or bar-shift edge case). Skip rather than amplify weight (exp(-negative)>1).
+      // [FIX-S7b] Hard prune by TF: signals older than maxDays are skipped entirely to
+      // avoid iterating effectively-zero-weight entries that waste CPU on large histories.
       double daysDiff = (double)(curSig.signalTime - g_signals[s].signalTime) / 86400.0;
+      if(daysDiff < 0) continue;   // [FIX-S7a] anomaly guard
+      {
+         int maxDays = (Period() <= PERIOD_M5) ? 60 : (Period() <= PERIOD_H1) ? 180 : 365;
+         if(daysDiff > maxDays) continue;   // [FIX-S7b] TF-scaled hard prune
+      }
       if(daysDiff > 0)
          w *= MathExp(-0.693 * daysDiff / 60.0);
 
-      // [S8] RSI proximity: Gaussian kernel sigma=5.0 RSI points
+      // [S8] RSI proximity Gaussian kernel — TF-adaptive sigma.
+      // XAUUSD M1 RSI(14) std dev ~15-18 pts; sigma=5 (fixed) discounts signals ±10 pts
+      // to weight=0.14, shrinking the effective sample pool below minSamples on M1/M5.
+      // sigma=12 for M1/M5, sigma=8 for M15-H1, sigma=5 for H4+ (tighter RSI levels).
       if(curSig.rsiAtSignal > 0 && g_signals[s].rsiAtSignal > 0)
       {
          double dr = curSig.rsiAtSignal - g_signals[s].rsiAtSignal;
-         w *= MathExp(-0.5 * dr * dr / 25.0);
+         double sigma_rsi = (Period() <= PERIOD_M5) ? 12.0 : (Period() <= PERIOD_H1) ? 8.0 : 5.0;
+         w *= MathExp(-0.5 * dr * dr / (sigma_rsi * sigma_rsi));   // [FIX-S8] was hardcoded /25.0
       }
 
       // [S9] ATR regime similarity: log-ratio with sigma_log=0.7
@@ -800,6 +830,7 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       // Accumulate into Tier2 (all cases) — weighted
       if(out == 0) { t2_to++; if(sameCase) t1_to++; continue; }
       t2_tw += w;
+      t2_rawN++;          // [BUG#3-FIX] raw count: 1 per signal regardless of weight
       t2_sumW2 += w * w;
       if(out >= 1) { t2_w1 += w; t2_b1 += btr * w; }
       if(out >= 2) t2_w2 += w;
@@ -810,6 +841,7 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       if(sameCase)
       {
          t1_tw += w;
+         t1_rawN++;       // [BUG#3-FIX] raw count same-case
          t1_sumW2 += w * w;
          if(out >= 1) { t1_w1 += w; t1_b1 += btr * w; }
          if(out >= 2) t1_w2 += w;
@@ -823,10 +855,12 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
    t2_w3 -= t1_w3; t2_ws -= t1_ws;
    t2_b1 -= t1_b1; t2_bs -= t1_bs;
    t2_sumW2 -= t1_sumW2;
+   t2_rawN  -= t1_rawN;   // [BUG#3-FIX] subtract same-case raw count
    if(t2_tw < 0) t2_tw = 0; if(t2_w1 < 0) t2_w1 = 0;
    if(t2_w2 < 0) t2_w2 = 0; if(t2_w3 < 0) t2_w3 = 0;
    if(t2_ws < 0) t2_ws = 0; if(t2_b1 < 0) t2_b1 = 0;
    if(t2_bs < 0) t2_bs = 0; if(t2_sumW2 < 0) t2_sumW2 = 0;
+   if(t2_rawN < 0) t2_rawN = 0;
 }
 
 //+------------------------------------------------------------------+
@@ -866,17 +900,22 @@ void CalculateProbability(int currentSignalIndex)
    //=================================================================
    double t1_tw=0, t1_w1=0, t1_w2=0, t1_w3=0, t1_ws=0;
    double t1_b1=0, t1_bs=0, t1_sumW2=0;
-   int t1_to=0;
+   int t1_to=0, t1_rawN=0;   // [BUG#3-FIX] raw count for Tier 3 trigger
    double t2_tw=0, t2_w1=0, t2_w2=0, t2_w3=0, t2_ws=0;
    double t2_b1=0, t2_bs=0, t2_sumW2=0;
-   int t2_to=0;
+   int t2_to=0, t2_rawN=0;   // [BUG#3-FIX] raw count for Tier 3 trigger
    ScanStoredSignalsBoth(curSig, maxFwd,
-      t1_tw, t1_to, t1_w1, t1_w2, t1_w3, t1_ws, t1_b1, t1_bs, t1_sumW2,
-      t2_tw, t2_to, t2_w1, t2_w2, t2_w3, t2_ws, t2_b1, t2_bs, t2_sumW2);
+      t1_tw, t1_to, t1_w1, t1_w2, t1_w3, t1_ws, t1_b1, t1_bs, t1_sumW2, t1_rawN,
+      t2_tw, t2_to, t2_w1, t2_w2, t2_w3, t2_ws, t2_b1, t2_bs, t2_sumW2, t2_rawN);
 
    int t3_t=0, t3_to=0, t3_1=0, t3_2=0, t3_3=0, t3_s=0;
    double t3_b1=0, t3_bs=0;
-   if((t1_tw + t2_tw) < minSamples)
+   // [BUG#3-FIX] Use raw signal count (not weighted sum) to decide Tier 3 activation.
+   // t1_tw + t2_tw is a weighted sum — with heavy similarity discounting, 5 real signals
+   // can produce tw=0.5, making the system think it has <1 sample and trigger Tier 3.
+   // Raw count correctly reflects how many distinct historical signals were available.
+   int rawCount12 = t1_rawN + t2_rawN;
+   if(rawCount12 < minSamples)
       ScanHistoricalATRBased(curSig, t3_t, t3_to,
                              t3_1, t3_2, t3_3, t3_s, t3_b1, t3_bs, maxFwd);
 
