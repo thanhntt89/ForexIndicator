@@ -237,6 +237,16 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
                           double knownSpread = 0.0)
 {
    barsToResult = 0;
+
+   // [GMT-FIX-C5] Dispatch to H1-resolution simulation when GMT normalization is active
+   if(g_gmtNormActive && Period() >= TF_H4)
+   {
+      datetime sigTime = iTime(NULL, 0, Bars - 1 - signalBar);
+      if(sigTime > 0)
+         return(SimulateSignalOutcomeH1(sigTime, isBuy, entryPrice, slPrice,
+                tp1Price, tp2Price, tp3Price, maxBarsForward, barsToResult, knownSpread));
+   }
+
    bool tp1Hit = false, tp2Hit = false, tp3Hit = false;
    // [S2] Use spread captured at signal time if available, else fall back to live spread
    double avgSpread = (knownSpread > 0) ? knownSpread : MarketInfo(Symbol(), MODE_SPREAD) * _Point;
@@ -333,6 +343,120 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
       }
    }
 
+   if(tp3Hit) return(3); if(tp2Hit) return(2); if(tp1Hit) return(1);
+   return(0);
+}
+
+//+------------------------------------------------------------------+
+//| [GMT-FIX-C5] H1-resolution simulation for H4+ timeframes          |
+//| When GMT normalization is active, use H1 bars for SL/TP detection  |
+//| giving 4x resolution vs H4 bars. Converts barsToResult to H4 eq.  |
+//+------------------------------------------------------------------+
+int SimulateSignalOutcomeH1(datetime sigTime, bool isBuy, double entryPrice,
+                            double slPrice, double tp1Price, double tp2Price, double tp3Price,
+                            int maxBarsForward, int &barsToResult,
+                            double knownSpread = 0.0)
+{
+   barsToResult = 0;
+   bool tp1Hit = false, tp2Hit = false, tp3Hit = false;
+
+   double avgSpread = (knownSpread > 0) ? knownSpread : MarketInfo(Symbol(), MODE_SPREAD) * _Point;
+   if(avgSpread <= 0)
+   {
+      double simATR = iATR(NULL, TF_H1, 14, 0);
+      if(simATR > 0) avgSpread = simATR * 0.05;
+   }
+
+   int barsPerParent = MathMax(Period() / TF_H1, 1);
+
+   // Entry is at the NEXT parent-TF bar open, not the signal bar itself.
+   // Starting from h1Start-1 checks bars INSIDE the signal bar where
+   // the trade hasn't entered yet — those cause false SL hits.
+   datetime entryTime = sigTime + Period() * 60;
+   int h1Entry = iBarShift(NULL, TF_H1, entryTime);
+   if(h1Entry < 0) return(0);
+
+   int maxH1Bars = maxBarsForward * barsPerParent;
+   int h1Count = 0;
+
+   for(int j = h1Entry; j >= 0 && h1Count < maxH1Bars; j--)
+   {
+      double bH = iHigh(NULL, TF_H1, j);
+      double bL = iLow(NULL, TF_H1, j);
+      double bO = iOpen(NULL, TF_H1, j);
+      if(bH == 0 || bL == 0) continue;
+      h1Count++;
+
+      if(isBuy)
+      {
+         bool slHit  = (bL <= slPrice);
+         bool tp1Now = (bH >= tp1Price);
+
+         if(slHit && tp1Now)
+         {
+            double distToSL = MathAbs(bO - slPrice);
+            double distToTP = MathAbs(bO - tp1Price);
+            if(distToSL <= distToTP * 1.2)
+            {
+               if(tp1Hit) { barsToResult = (h1Count + barsPerParent - 1) / barsPerParent; return(tp2Hit ? (tp3Hit ? 3 : 2) : 1); }
+               barsToResult = (h1Count + barsPerParent - 1) / barsPerParent; return(-1);
+            }
+            tp1Hit = true;
+            if(bH >= tp2Price) tp2Hit = true;
+            if(bH >= tp3Price) tp3Hit = true;
+            barsToResult = (h1Count + barsPerParent - 1) / barsPerParent;
+            if(tp3Hit) return(3); if(tp2Hit) return(2); return(1);
+         }
+
+         if(slHit)
+         {
+            barsToResult = (h1Count + barsPerParent - 1) / barsPerParent;
+            if(tp3Hit) return(3); if(tp2Hit) return(2); if(tp1Hit) return(1);
+            return(-1);
+         }
+
+         if(!tp1Hit && bH >= tp1Price) tp1Hit = true;
+         if(tp1Hit && !tp2Hit && bH >= tp2Price) tp2Hit = true;
+         if(tp2Hit && !tp3Hit && bH >= tp3Price) tp3Hit = true;
+         if(tp3Hit) { barsToResult = (h1Count + barsPerParent - 1) / barsPerParent; return(3); }
+      }
+      else
+      {
+         double effHigh = bH + avgSpread;
+         bool slHit  = (effHigh >= slPrice);
+         bool tp1Now = (bL <= tp1Price);
+
+         if(slHit && tp1Now)
+         {
+            double distToSL = MathAbs(bO + avgSpread - slPrice);
+            double distToTP = MathAbs(bO - tp1Price);
+            if(distToSL <= distToTP * 1.2)
+            {
+               if(tp1Hit) { barsToResult = (h1Count + barsPerParent - 1) / barsPerParent; return(tp2Hit ? (tp3Hit ? 3 : 2) : 1); }
+               barsToResult = (h1Count + barsPerParent - 1) / barsPerParent; return(-1);
+            }
+            tp1Hit = true;
+            if(bL <= tp2Price) tp2Hit = true;
+            if(bL <= tp3Price) tp3Hit = true;
+            barsToResult = (h1Count + barsPerParent - 1) / barsPerParent;
+            if(tp3Hit) return(3); if(tp2Hit) return(2); return(1);
+         }
+
+         if(slHit)
+         {
+            barsToResult = (h1Count + barsPerParent - 1) / barsPerParent;
+            if(tp3Hit) return(3); if(tp2Hit) return(2); if(tp1Hit) return(1);
+            return(-1);
+         }
+
+         if(!tp1Hit && bL <= tp1Price) tp1Hit = true;
+         if(tp1Hit && !tp2Hit && bL <= tp2Price) tp2Hit = true;
+         if(tp2Hit && !tp3Hit && bL <= tp3Price) tp3Hit = true;
+         if(tp3Hit) { barsToResult = (h1Count + barsPerParent - 1) / barsPerParent; return(3); }
+      }
+   }
+
+   barsToResult = (h1Count + barsPerParent - 1) / barsPerParent;
    if(tp3Hit) return(3); if(tp2Hit) return(2); if(tp1Hit) return(1);
    return(0);
 }
@@ -812,7 +936,8 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       double daysDiff = (double)(curSig.signalTime - g_signals[s].signalTime) / 86400.0;
       if(daysDiff < 0) continue;   // [FIX-S7a] anomaly guard
       {
-         int maxDays = (Period() <= PERIOD_M5) ? 60 : (Period() <= PERIOD_H1) ? 180 : 365;
+         // [GMT-FIX] Compare minutes, not ENUM_TIMEFRAMES (PERIOD_H1=16385 in MT5)
+         int maxDays = (Period() <= TF_M5) ? 60 : (Period() <= TF_H1) ? 180 : 365;
          if(daysDiff > maxDays) continue;   // [FIX-S7b] TF-scaled hard prune
       }
       if(daysDiff > 0)
@@ -825,7 +950,8 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       if(curSig.rsiAtSignal > 0 && g_signals[s].rsiAtSignal > 0)
       {
          double dr = curSig.rsiAtSignal - g_signals[s].rsiAtSignal;
-         double sigma_rsi = (Period() <= PERIOD_M5) ? 12.0 : (Period() <= PERIOD_H1) ? 8.0 : 5.0;
+         // [GMT-FIX] Compare minutes, not ENUM_TIMEFRAMES
+         double sigma_rsi = (Period() <= TF_M5) ? 12.0 : (Period() <= TF_H1) ? 8.0 : 5.0;
          w *= MathExp(-0.5 * dr * dr / (sigma_rsi * sigma_rsi));   // [FIX-S8] was hardcoded /25.0
       }
 
@@ -898,6 +1024,10 @@ void CalculateProbability(int currentSignalIndex)
    g_currentProb.survivalRatio=1.0; g_currentProb.elapsedBars=0;
    g_currentProb.expiresMinutes=0;
    g_currentProb.originalProbTP1=0; g_currentProb.originalProbTP2=0; g_currentProb.originalProbTP3=0;
+
+   // [GMT-FIX-A2c] Reset data quality warning each recalc cycle
+   g_gmtDataQualityWarn = false;
+   g_gmtWarnReason = "";
 
    if(!InpShowProbability) return;
    if(currentSignalIndex < 0 || currentSignalIndex >= g_signalCount) return;
@@ -1225,6 +1355,16 @@ void CalculateProbability(int currentSignalIndex)
             {
                double blended = (baselineWR * modelWeight + measuredWR * measuredWeight) / totalW;
                double ratio = blended / MathMax(baselineWR, 0.01);
+
+               // [GMT-FIX-A2b] Floor ratio at 0.30 — prevent session WR=0% from
+               // crushing probability below 30% of model. Without floor, A2a cap
+               // saves Step 5 but Step 5.6 re-crushes via 0% session data.
+               if(ratio < 0.30)
+               {
+                  ratio = 0.30;
+                  g_gmtDataQualityWarn = true;
+                  g_gmtWarnReason = "Session ratio floored";
+               }
 
                g_currentProb.probTP1 *= ratio;
                g_currentProb.probTP2 *= ratio;

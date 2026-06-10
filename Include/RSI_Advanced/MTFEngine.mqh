@@ -20,12 +20,12 @@
 //+------------------------------------------------------------------+
 int MTFSlotTF(int slot)
 {
-   if(slot == 0) return(PERIOD_M5);
-   if(slot == 1) return(PERIOD_M15);
-   if(slot == 2) return(PERIOD_M30);
-   if(slot == 3) return(PERIOD_H1);
-   if(slot == 4) return(PERIOD_H4);
-   if(slot == 5) return(PERIOD_D1);
+   if(slot == 0) return(TF_M5);
+   if(slot == 1) return(TF_M15);
+   if(slot == 2) return(TF_M30);
+   if(slot == 3) return(TF_H1);
+   if(slot == 4) return(TF_H4);
+   if(slot == 5) return(TF_D1);
    return(0);
 }
 
@@ -77,9 +77,12 @@ void MTF_BuildRamBuffer(int slot, int tf)
    double rawRSI[];
    ArrayResize(rawRSI, rawCount);
 
+   bool useNorm = (g_gmtMTFNormNeeded && (slot == 4 || slot == 5));
    for(int b = 0; b < rawCount; b++)
    {
-      double v = iRSI(NULL, tf, InpRSIPeriod, InpPrice, b);
+      double v = EMPTY_VALUE;
+      if(useNorm) v = GetNormMTF_RSI(slot, tf, b);
+      if(v == EMPTY_VALUE) v = iRSI(NULL, tf, InpRSIPeriod, InpPrice, b);
       rawRSI[b] = (v <= 0 || v == EMPTY_VALUE) ? 50.0 : v;
    }
 
@@ -128,9 +131,12 @@ void MTF_UpdateRamBuffer(int slot, int tf)
    int rawNeeded = InpBBPeriod + 1;
    double rawRSI[];
    ArrayResize(rawRSI, rawNeeded);
+   bool useNorm = (g_gmtMTFNormNeeded && (slot == 4 || slot == 5));
    for(int j = 0; j < rawNeeded; j++)
    {
-      double v = iRSI(NULL, tf, InpRSIPeriod, InpPrice, j);
+      double v = EMPTY_VALUE;
+      if(useNorm) v = GetNormMTF_RSI(slot, tf, j);
+      if(v == EMPTY_VALUE) v = iRSI(NULL, tf, InpRSIPeriod, InpPrice, j);
       rawRSI[j] = (v <= 0 || v == EMPTY_VALUE) ? 50.0 : v;
    }
 
@@ -271,9 +277,9 @@ int CalculateMTFAgreement()
    for(int i = 0; i < g_mtfCount; i++)
    {
       double w = 1.0;
-      if(g_mtfData[i].timeframe >= PERIOD_H4)  w = 3.0;
-      else if(g_mtfData[i].timeframe >= PERIOD_H1)  w = 2.0;
-      else if(g_mtfData[i].timeframe >= PERIOD_M30) w = 1.5;
+      if(g_mtfData[i].timeframe >= TF_H4)  w = 3.0;
+      else if(g_mtfData[i].timeframe >= TF_H1)  w = 2.0;
+      else if(g_mtfData[i].timeframe >= TF_M30) w = 1.5;
       if(g_mtfData[i].trend ==  1) bullW += w;
       if(g_mtfData[i].trend == -1) bearW += w;
       totalW += w;
@@ -290,10 +296,10 @@ int GetMTFContextScore(bool isBuySignal)
    for(int i = 0; i < g_mtfCount; i++)
    {
       double w = 1.0;
-      if(g_mtfData[i].timeframe >= PERIOD_H4)  w = 3.0;
-      else if(g_mtfData[i].timeframe >= PERIOD_H1)  w = 2.0;
-      else if(g_mtfData[i].timeframe >= PERIOD_M30) w = 1.5;
-      else if(g_mtfData[i].timeframe >= PERIOD_M15) w = 1.0;
+      if(g_mtfData[i].timeframe >= TF_H4)  w = 3.0;
+      else if(g_mtfData[i].timeframe >= TF_H1)  w = 2.0;
+      else if(g_mtfData[i].timeframe >= TF_M30) w = 1.5;
+      else if(g_mtfData[i].timeframe >= TF_M15) w = 1.0;
       double alignment = isBuySignal ? (double)g_mtfData[i].trend : -(double)g_mtfData[i].trend;
       double strength  = MathAbs(g_mtfData[i].greenValue - 50.0) / 50.0;
       alignment *= (1.0 + strength);

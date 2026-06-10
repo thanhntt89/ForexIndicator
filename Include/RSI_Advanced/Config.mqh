@@ -7,6 +7,22 @@
 #define VERSION "10.20"
 
 //+------------------------------------------------------------------+
+//| [GMT-FIX] Minute-based timeframe constants for Period() comparison |
+//| Period() returns minutes via MQLCompat (MT5) / natively (MT4).     |
+//| PERIOD_H1=16385, PERIOD_H4=16388 in MT5 — cannot compare with     |
+//| Period() which returns 60, 240. Use TF_H1, TF_H4 etc. instead.    |
+//+------------------------------------------------------------------+
+#define TF_M1   1
+#define TF_M5   5
+#define TF_M15  15
+#define TF_M30  30
+#define TF_H1   60
+#define TF_H4   240
+#define TF_D1   1440
+#define TF_W1   10080
+#define TF_MN1  43200
+
+//+------------------------------------------------------------------+
 //| Object name prefixes                                               |
 //+------------------------------------------------------------------+
 #define PREFIX_ARROW  "RSIAdv_Arrow_"
@@ -175,6 +191,18 @@ input string inp_grp_wf          = "========== Walk-Forward =========="; // ---
 input bool   InpUseWalkForward   = true;          // Enable IS/OOS validation
 input double InpOOSPercent       = 20.0;          // Out-of-sample % (10-30)
 input bool   InpShowRollingPerf  = true;          // Show rolling performance
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: GMT Normalization                                      |
+//+------------------------------------------------------------------+
+// [GMT-FIX-0] H4+ candle boundaries differ by broker GMT offset.
+// GMT+0 broker H4 candles: 00:00,04:00,...,20:00 UTC
+// GMT+2 broker H4 candles: 02:00,06:00,...,22:00 UTC (shifted 2h)
+// This causes completely different RSI values and signal outcomes.
+// Auto mode normalizes H4 candles to GMT+0 when broker offset != 0.
+input string inp_grp_gmt         = "========== GMT Normalization =========="; // ---
+input int    InpGMTNormalize     = -1;       // H4 Norm: -1=Auto, 0=Off, 1=Force
+input int    InpForceGMTOffset   = -99;      // Force GMT offset (-99=Auto-detect)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Spread Regime                                         |

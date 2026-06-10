@@ -373,6 +373,10 @@ void DrawInfoPanel(int signalIndex)
       if(InpUseSpreadRegime) calcY += lh;
       if(g_rollingPerf.totalTracked > 0) calcY += lh;
       calcY += lh;  // vol-regime line (always shown)
+      // [GMT-FIX-A1] GMT warning line for H4+ timeframes
+      // Note: Period() returns minutes via MQLCompat; PERIOD_H4 is enum 16388 in MT5.
+      // Compare against 240 (minutes) for cross-platform compatibility.
+      if(Period() >= TF_H4) calcY += lh;
    }
    calcY += lh + 4;
    int totalH = calcY;
@@ -733,6 +737,53 @@ void DrawInfoPanel(int signalIndex)
                              (spreadClr==clrOrange||regimeClr==clrOrange) ? clrOrange : clrGray;
          CreateTextLabel(PREFIX_PANEL+"V_SR", px+pad+3, cy,
             spreadText+" | "+regimeText, combinedClr, fs-2, false);
+         cy += lh;
+      }
+      // [GMT-FIX-A1] Broker GMT offset + normalization status for H4+ timeframes
+      // Orange = candle boundaries shifted (signals may differ across brokers)
+      // Lime = normalization active (RSI computed on GMT+0-aligned H4 candles)
+      // [DQ] = data quality warning (Bayesian/Session guards activated)
+      if(Period() >= TF_H4)
+      {
+         int gmtOff = GetBrokerGMTOffset();
+         string gmtText = "Broker:GMT" + ((gmtOff >= 0) ? "+" : "") + IntegerToString(gmtOff);
+         color gmtClr = clrGray;
+         if(g_gmtNormActive && Period() == TF_H4)
+         {
+            if(g_normRSICount >= NORM_RSI_MIN_CONVERGE)
+            {
+               gmtClr = clrLime;
+               gmtText += " | H4 Normalized";
+            }
+            else
+            {
+               gmtClr = clrYellow;
+               gmtText += " | H4 Norm(loading " + IntegerToString(g_normH4Count) + "/" +
+                          IntegerToString(NORM_RSI_MIN_CONVERGE) + ")";
+            }
+         }
+         else if(g_gmtNormActive && Period() == TF_D1)
+         {
+            if(g_normD1RSICount >= NORM_D1_MIN_CONVERGE)
+            {
+               gmtClr = clrLime;
+               gmtText += " | D1 Normalized";
+            }
+            else
+            {
+               gmtClr = clrYellow;
+               gmtText += " | D1 Norm(loading " + IntegerToString(g_normD1Count) + "/" +
+                          IntegerToString(NORM_D1_MIN_CONVERGE) + ")";
+            }
+         }
+         else if(gmtOff != 0)
+         {
+            gmtClr = clrOrange;
+            gmtText += " | H4 SHIFTED " + IntegerToString(MathAbs(gmtOff)) + "h";
+         }
+         if(g_gmtDataQualityWarn)
+            gmtText += " [DQ]";
+         CreateTextLabel(PREFIX_PANEL+"V_GMT", px+pad+3, cy, gmtText, gmtClr, fs-2, false);
          cy += lh;
       }
       if(g_rollingPerf.totalTracked > 0)

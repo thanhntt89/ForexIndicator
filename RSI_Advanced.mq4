@@ -69,6 +69,7 @@ double BufferSellSignal[];
 #include <RSI_Advanced/Globals.mqh>
 #include <RSI_Advanced/MathUtils.mqh>
 #include <RSI_Advanced/Normalize.mqh>
+#include <RSI_Advanced/CandleNormalize.mqh>
 #include <RSI_Advanced/RSICore.mqh>
 #include <RSI_Advanced/SwingDetection.mqh>
 #include <RSI_Advanced/SignalCases.mqh>
@@ -125,6 +126,14 @@ int OnInit()
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
+
+   // [GMT-FIX-B3] Initialize H4 candle normalization
+   g_gmtNormActive = ShouldNormalizeH4();
+   g_gmtBrokerOffset = GetBrokerGMTOffset();
+   g_normRecalcDone = false;
+   g_gmtMTFNormNeeded = (g_gmtBrokerOffset != 0);
+   if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
+
    // Only load cached session stats on recompile/param change (quick restart).
    // TF switch / remove / chart close → fullRecalc rebuilds everything fresh.
    int prevReason = UninitializeReason();
@@ -209,6 +218,7 @@ int OnCalculate(const int rates_total,
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
       LoggerInit(true);
+      if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
       MTF_InitRamBuffers();  // Rebuild MTF RAM buffers from historical iRSI data
    }
    else if(rates_total > g_prevRatesTotal)
@@ -241,6 +251,16 @@ int OnCalculate(const int rates_total,
       startBar = MathMax(InpRSIPeriod, prev_calculated - 1 - lb);
       startBar = MathMax(startBar, rates_total - InpMaxBars);
    }
+   // [GMT-FIX-B3] Refresh normalized H4 candles (internal cache guard skips if no new H1 bar)
+   if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
+
+   // [GMT-FIX-B3b] Force full recalc when normalization becomes ready.
+   if((g_gmtNormActive || g_gmtMTFNormNeeded) && g_normRSICount > 0 && !g_normRecalcDone)
+   {
+      g_normRecalcDone = true;
+      if(!fullRecalc) return(0);
+   }
+
    //--- Calculate RSI lines
    CalculateRSILines(startBar, rates_total);
    //--- Signal detection range

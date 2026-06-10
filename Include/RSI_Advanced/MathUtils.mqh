@@ -45,15 +45,15 @@ string GetTimeframeString()
 {
    switch(Period())
    {
-      case PERIOD_M1:  return("M1");
-      case PERIOD_M5:  return("M5");
-      case PERIOD_M15: return("M15");
-      case PERIOD_M30: return("M30");
-      case PERIOD_H1:  return("H1");
-      case PERIOD_H4:  return("H4");
-      case PERIOD_D1:  return("D1");
-      case PERIOD_W1:  return("W1");
-      case PERIOD_MN1: return("MN");
+      case TF_M1:  return("M1");
+      case TF_M5:  return("M5");
+      case TF_M15: return("M15");
+      case TF_M30: return("M30");
+      case TF_H1:  return("H1");
+      case TF_H4:  return("H4");
+      case TF_D1:  return("D1");
+      case TF_W1:  return("W1");
+      case TF_MN1: return("MN");
    }
    return(IntegerToString(Period()));
 }
@@ -101,8 +101,8 @@ int GetMinSamplesForTimeframe()
    if(tf <= PERIOD_M5)  return(40);
    if(tf <= PERIOD_M15) return(30);
    if(tf <= PERIOD_M30) return(25);
-   if(tf <= PERIOD_H1)  return(20);
-   if(tf <= PERIOD_H4)  return(15);
+   if(tf <= TF_H1)  return(20);
+   if(tf <= TF_H4)  return(15);
    return(10);
 }
 
@@ -113,8 +113,8 @@ int GetMaxForwardBarsForTimeframe()
    if(tf <= PERIOD_M5)  return(50);
    if(tf <= PERIOD_M15) return(60);
    if(tf <= PERIOD_M30) return(60);
-   if(tf <= PERIOD_H1)  return(80);
-   if(tf <= PERIOD_H4)  return(60);
+   if(tf <= TF_H1)  return(80);
+   if(tf <= TF_H4)  return(60);
    return(100);
 }
 
@@ -126,8 +126,8 @@ int GetMaxLookbackForTimeframe()
    else if(tf <= PERIOD_M5)  baseCap = 250;
    else if(tf <= PERIOD_M15) baseCap = 200;
    else if(tf <= PERIOD_M30) baseCap = 200;
-   else if(tf <= PERIOD_H1)  baseCap = 150;
-   else if(tf <= PERIOD_H4)  baseCap = 120;
+   else if(tf <= TF_H1)  baseCap = 150;
+   else if(tf <= TF_H4)  baseCap = 120;
    else                      baseCap = 100;
 
    int available = Bars - GetMaxForwardBarsForTimeframe() - 50;
@@ -198,8 +198,8 @@ int GetTPMeasurementBars()
    else if(tf <= PERIOD_M5)  target = 4000;
    else if(tf <= PERIOD_M15) target = 5000;
    else if(tf <= PERIOD_M30) target = 5000;
-   else if(tf <= PERIOD_H1)  target = 5000;
-   else if(tf <= PERIOD_H4)  target = 3000;
+   else if(tf <= TF_H1)  target = 5000;
+   else if(tf <= TF_H4)  target = 3000;
    else                      target = 2000;
 
    return(MathMin(target, MathMax(available, 500)));

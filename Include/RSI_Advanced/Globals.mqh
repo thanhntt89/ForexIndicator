@@ -160,6 +160,14 @@ RollingPerformance g_rollingPerf;
 SpreadRegime      g_spreadRegime;
 VolRegimeData     g_volRegime;
 
+// [GMT-FIX-0] GMT normalization state
+bool   g_gmtNormActive      = false;   // true when H4 normalization is active
+int    g_gmtBrokerOffset    = 0;       // cached broker GMT offset for display
+bool   g_gmtDataQualityWarn = false;   // true when Bayesian/Session guards fired
+string g_gmtWarnReason      = "";      // reason text for data quality warning
+bool   g_normRecalcDone     = false;   // true after first fullRecalc with normalized RSI ready
+bool   g_gmtMTFNormNeeded  = false;   // true when offset != 0 — MTF H4/D1 slots use normalized RSI
+
 //--- Signal outcome tracking for rolling performance
 struct SignalOutcome
 {

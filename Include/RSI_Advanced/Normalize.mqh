@@ -195,8 +195,8 @@ int GetNormalizedSwingDepth()
    if(tf<=PERIOD_M5) return(InpSwingDepth);
    if(tf<=PERIOD_M15) return(MathMax(InpSwingDepth,3));
    if(tf<=PERIOD_M30) return(MathMax(InpSwingDepth,4));
-   if(tf<=PERIOD_H1) return(MathMax(InpSwingDepth,5));
-   if(tf<=PERIOD_H4) return(MathMax(InpSwingDepth,6));
+   if(tf<=TF_H1) return(MathMax(InpSwingDepth,5));
+   if(tf<=TF_H4) return(MathMax(InpSwingDepth,6));
    return(MathMax(InpSwingDepth,8));
 }
 
@@ -204,8 +204,8 @@ int GetNormalizedSwingLookback()
 {
    int tf=Period(), minMin=240;
    if(tf<=PERIOD_M5) minMin=120;
-   if(tf>=PERIOD_H1) minMin=720;
-   if(tf>=PERIOD_H4) minMin=2880;
+   if(tf>=TF_H1) minMin=720;
+   if(tf>=TF_H4) minMin=2880;
    int minBars=minMin/Period();
    return(MathMax(InpSwingLookback,minBars));
 }
@@ -214,8 +214,8 @@ int GetNormalizedSLLookback()
 {
    int tf=Period(), minMin=60;
    if(tf<=PERIOD_M1) minMin=30;
-   if(tf>=PERIOD_H1) minMin=480;
-   if(tf>=PERIOD_H4) minMin=1440;
+   if(tf>=TF_H1) minMin=480;
+   if(tf>=TF_H4) minMin=1440;
    return(MathMax(InpSLSwingLookback,minMin/Period()));
 }
 
@@ -567,6 +567,17 @@ double CombineTheoreticalHistorical(double theoProb, double histProb,
 
    double histWeight = 1.0 / (adjustedHistSE * adjustedHistSE);
    double theoWeight = 1.0 / (theoSE * theoSE);
+
+   // [GMT-FIX-A2a] Cap histWeight when 0% historical but theory says viable.
+   // Broker GMT offset shifts H4 candle boundaries → different RSI → 0% WR in
+   // simulation. Without cap, histWeight crushes theoretical ~42% to ~10%.
+   if(histProb < 5.0 && theoProb > 30.0 && histWeight > theoWeight)
+   {
+      histWeight = theoWeight;
+      g_gmtDataQualityWarn = true;
+      g_gmtWarnReason = "Hist WR<5% capped";
+   }
+
    double totalWeight = histWeight + theoWeight;
    if(totalWeight <= 0) return(theoProb);
 

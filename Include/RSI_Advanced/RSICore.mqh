@@ -14,11 +14,31 @@
 //+------------------------------------------------------------------+
 void CalculateRSILines(int startBar, int rates_total)
 {
-   // Raw RSI
+   // Raw RSI — route through normalized GMT+0 H4 candles when active
    for(int i = startBar; i < rates_total; i++)
    {
       int barShift = rates_total - 1 - i;
-      g_rawRSI[i] = iRSI(NULL, 0, InpRSIPeriod, InpPrice, barShift);
+      // [GMT-FIX-B3] Use pre-computed RSI from GMT+0-aligned candles.
+      // Must check Period() to route to correct normalized dataset:
+      // H4 chart → g_normRSI (built from H1 data, UTC H4 aligned)
+      // D1 chart → g_normD1RSI (built from normalized H4, UTC day aligned)
+      // Other TFs use native iRSI (H1 boundaries are same for all brokers).
+      if(g_gmtNormActive && g_normRSICount > 0 && Period() == TF_H4)
+      {
+         int normShift = GetNormH4Shift(iTime(NULL, 0, barShift));
+         double normVal = (normShift >= 0) ? GetNormRSIByShift(normShift) : EMPTY_VALUE;
+         g_rawRSI[i] = (normVal != EMPTY_VALUE) ? normVal
+                      : iRSI(NULL, 0, InpRSIPeriod, InpPrice, barShift);
+      }
+      else if(g_gmtMTFNormNeeded && g_normD1RSICount > 0 && Period() == TF_D1)
+      {
+         int normShift = GetNormD1Shift(iTime(NULL, 0, barShift));
+         double normVal = (normShift >= 0) ? GetNormD1RSIByShift(normShift) : EMPTY_VALUE;
+         g_rawRSI[i] = (normVal != EMPTY_VALUE) ? normVal
+                      : iRSI(NULL, 0, InpRSIPeriod, InpPrice, barShift);
+      }
+      else
+         g_rawRSI[i] = iRSI(NULL, 0, InpRSIPeriod, InpPrice, barShift);
    }
 
    // Green = SMA(Fast) of RSI

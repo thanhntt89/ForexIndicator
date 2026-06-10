@@ -411,6 +411,22 @@ string CheckRegimeStability()
          warnings += "LOW RECENT WR ";
    }
 
+   // [GMT-FIX-B4] Cross-TF data quality: H4 extreme WR but lower TFs have valid trends
+   // suggests broker GMT offset is causing anomalous H4 simulation results.
+   if(Period() >= TF_H4 && g_rollingPerf.totalTracked >= 10)
+   {
+      bool h4Extreme = (g_rollingPerf.allTimeWR < 15.0 || g_rollingPerf.allTimeWR > 90.0);
+      if(h4Extreme && g_mtfCount > 0)
+      {
+         bool lowerTFOk = false;
+         for(int m = 0; m < g_mtfCount; m++)
+            if(g_mtfData[m].timeframe < TF_H4 && g_mtfData[m].trend != 0)
+               lowerTFOk = true;
+         if(lowerTFOk)
+            warnings += "TF MISMATCH? ";
+      }
+   }
+
    if(StringLen(warnings) == 0)
    {
       g_cachedRegimeText = "Regime: STABLE";
