@@ -45,6 +45,30 @@ int GetSessionBlock(datetime signalTime)
    return(0);  // Dead zone → map to Asian
 }
 
+// [ISSUE #5 FIX] GetSessionBlockUTC — accepts pre-converted UTC datetime (signalTimeUTC).
+// Unlike GetSessionBlock() which calls GetUTCHour() to convert broker time → UTC each call,
+// this variant reads the hour directly from an already-UTC timestamp. Use whenever the
+// signal has signalTimeUTC set (> 0) to avoid redundant timezone conversion and eliminate
+// broker-offset error accumulation.
+int GetSessionBlockUTC(datetime utcTime)
+{
+   // Guard: if UTC time is zero (old binary-loaded signal without signalTimeUTC),
+   // fall back to epoch → maps to Asian (hour 0). Caller should prefer GetSessionBlock()
+   // for signals where signalTimeUTC == 0.
+   if(utcTime <= 0) return(0);
+
+   MqlDateTime mdt;
+   TimeToStruct(utcTime, mdt);
+   int h = mdt.hour;
+
+   if(h >= 0  && h < 8)  return(0);  // Asian
+   if(h >= 8  && h < 12) return(1);  // London
+   if(h >= 12 && h < 16) return(2);  // Overlap
+   if(h >= 16 && h < 22) return(3);  // LateNY
+   return(0);  // Dead zone (22-23) → Asian
+}
+
+
 //+------------------------------------------------------------------+
 //| Session block name for display                                     |
 //+------------------------------------------------------------------+
@@ -145,9 +169,17 @@ void UpdateSessionStats()
 //| If insufficient data:                                              |
 //|   Return normalized session quality (from Normalize.mqh)           |
 //+------------------------------------------------------------------+
-double GetMeasuredSessionQuality(int caseNum, datetime signalTime)
+double GetMeasuredSessionQuality(int caseNum, datetime signalTime, datetime signalTimeUTC = 0)
 {
-   int block = GetSessionBlock(signalTime);
+   // [ISSUE #5 FIX] Use signalTimeUTC for session block comparison.
+   // signalTimeUTC is pre-converted to UTC boundary at signal creation (StoreSignal).
+   // Avoids re-running GetUTCHour(broker_time) which can be wrong when GMT offset cache
+   // is stale, and eliminates the cross-midnight day-loss bug (Bug 2 root cause).
+   // Fallback to broker-time conversion for old signals loaded from binary (signalTimeUTC==0).
+   int block = (signalTimeUTC > 0)
+                  ? GetSessionBlockUTC(signalTimeUTC)
+                  : GetSessionBlock(signalTime);
+
    int minSamples = 5;
 
    // If enough measured data → use measured win rate
@@ -204,6 +236,10 @@ void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
    g_outcomes[idx].signalTime   = signalTime;
    g_outcomes[idx].caseNumber   = caseNum;
    g_outcomes[idx].isBuy        = isBuy;
+   // [ISSUE #5 FIX] Use GetSessionBlock(signalTime) here — TrackSignalForSession
+   // receives broker-local signalTime, not signalTimeUTC (no access to SignalData).
+   // The session bucket will be overridden by the correct UTC block in UpdateSessionStats
+   // which reads from g_outcomes[].sessionBlock set at outcome-resolve time.
    g_outcomes[idx].sessionBlock = GetSessionBlock(signalTime);
    g_outcomes[idx].entryPrice   = entryPrice;
    g_outcomes[idx].stopLoss     = sl;
@@ -539,11 +575,21 @@ bool LoadSessionStatsBinary()
 //| Save g_signals[] to binary — called from OnDeinit                 |
 //| Capped at 5000 newest signals to prevent unbounded file growth.   |
 //+------------------------------------------------------------------+
+// [STRUCT-VERSION] Binary magic: thay đổi khi SignalData struct thay đổi size.
+// LoadAndMergeSignalsBinary sẽ reject file cũ thay vì đọc data corrupt.
+// Lịch sử:
+//   v1 = 0x52534901 (RSI\x01): struct gốc không có signalTimeUTC
+//   v2 = 0x52534902 (RSI\x02): thêm signalTimeUTC (datetime = 8 bytes) — ISSUE #4 FIX
+#define SIG_BINARY_MAGIC 0x52534902
+
 void SaveSignalsBinary()
 {
    if(IsBacktestMode() || g_signalCount == 0) return;
    int fh = FileOpen(SIG_GetBinaryPath(), FILE_WRITE|FILE_BIN);
    if(fh == INVALID_HANDLE) return;
+   // Write version magic + struct size as header for forward/backward compat detection
+   FileWriteInteger(fh, SIG_BINARY_MAGIC);
+   FileWriteInteger(fh, (int)sizeof(SignalData));
    int start = MathMax(0, g_signalCount - 5000);
    int count = g_signalCount - start;
    FileWriteInteger(fh, count);
@@ -564,6 +610,23 @@ void LoadAndMergeSignalsBinary()
    if(IsBacktestMode()) return;
    int fh = FileOpen(SIG_GetBinaryPath(), FILE_READ|FILE_BIN);
    if(fh == INVALID_HANDLE) return;
+
+   // [STRUCT-VERSION] Read and validate magic + struct size.
+   // File cũ (trước ISSUE #4): không có header → magic sẽ đọc được số signals (~vài trăm),
+   // hoàn toàn khác SIG_BINARY_MAGIC → detect được và reject an toàn.
+   // File với struct khác size (thêm/bớt field) → structSize mismatch → reject.
+   int magic      = FileReadInteger(fh);
+   int structSize = FileReadInteger(fh);
+   if(magic != SIG_BINARY_MAGIC || structSize != (int)sizeof(SignalData))
+   {
+      FileClose(fh);
+      // Xóa file stale để tránh lần sau load lại — sẽ được rebuild tự động sau OnDeinit.
+      FileDelete(SIG_GetBinaryPath());
+      Print("[SIG-BIN] Stale binary (magic=", IntegerToString(magic, 8, 16),
+            " size=", structSize, " expected=", sizeof(SignalData),
+            ") — deleted, will rebuild on next session.");
+      return;
+   }
 
    int savedCount = FileReadInteger(fh);
    if(savedCount <= 0 || savedCount > 100000) { FileClose(fh); return; }
@@ -599,6 +662,7 @@ void LoadAndMergeSignalsBinary()
       g_signals[i + oldCount] = g_signals[i];
 
    // Insert old signals at front; mark barIndex=-1 (stale).
+   // signalTimeUTC từ binary đã được lưu đúng (struct v2) — dùng trực tiếp không cần recompute.
    int pos = 0;
    for(int i = 0; i < readOk; i++)
    {

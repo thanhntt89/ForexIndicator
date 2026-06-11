@@ -116,14 +116,41 @@ string GetCleanSymbolName()
 //+------------------------------------------------------------------+
 //|        SECTION 3: TIMEZONE                                         |
 //+------------------------------------------------------------------+
+// [BUG-FIX 1] DST-aware EU broker offset helper.
+// Brokers using EET (UTC+2 winter / UTC+3 summer): IC Markets, Pepperstone,
+// XM, FXPro, ThinkMarkets. Hardcoding = 2 year-round was wrong for March–October
+// (EU DST active), causing session blocks to map into wrong hour buckets for ~7 months/year.
+// EU DST rule: last Sunday in March 02:00 → last Sunday in October 03:00.
+int GuessEUBrokerOffset(datetime dt)
+{
+   // [FIX compile] Dùng MqlDateTime struct thay TimeMonth/TimeDay/TimeDayOfWeek
+   // — MT5 không có các hàm standalone đó, MqlDateTime tương thích cả MT4+MT5.
+   MqlDateTime mdt;
+   TimeToStruct(dt, mdt);
+   int month = mdt.mon;
+   int day   = mdt.day;
+   int dow   = mdt.day_of_week; // 0=Sunday
+   // Summer (DST active): April through September always UTC+3
+   if(month > 3 && month < 10) return(3);
+   // March: DST starts on last Sunday (day >= 25 is safe last-week guard)
+   if(month == 3 && day >= 25 && dow == 0) return(3);
+   // October: DST ends on last Sunday; before last week still UTC+3
+   if(month == 10 && day < 25)             return(3);
+   if(month == 10 && day >= 25 && dow > 0) return(3);
+   // Winter (DST inactive): UTC+2
+   return(2);
+}
+
 int GetBrokerGMTOffset()
 {
-   // [PERF-FIX P3] Cache broker GMT offset — broker name never changes,
-   // was doing 9 StringFind calls per invocation on fallback path.
-   // Re-check periodically (every 1000 calls) for DST changes via TimeGMT path.
-   static int s_callCount = 0;
-   s_callCount++;
-   if(g_brokerGMTCached && s_callCount % 1000 != 0) return(g_cachedBrokerGMT);
+   // [BUG-FIX Warning] Time-based cache invalidation instead of count-based.
+   // Old logic: flush every 1000 calls ≈ 10 min on M1 — unnecessarily frequent.
+   // New logic: re-check at most once per hour — sufficient because DST only
+   // changes twice per year. Avoids thundering-herd re-computation on M1.
+   static datetime s_lastCheck = 0;
+   if(g_brokerGMTCached && TimeCurrent() - s_lastCheck < 3600)
+      return(g_cachedBrokerGMT);
+   s_lastCheck = TimeCurrent();
 
    datetime brokerTime = TimeCurrent();
    datetime gmtTime = TimeGMT();
@@ -136,11 +163,13 @@ int GetBrokerGMTOffset()
 
       int result = 2;
       if(StringFind(server, "exness") >= 0)      result = 0;
-      else if(StringFind(server, "icmarket") >= 0)     result = 2;
-      else if(StringFind(server, "thinkmarket") >= 0)  result = 2;
-      else if(StringFind(server, "xm") >= 0)           result = 2;
-      else if(StringFind(server, "fxpro") >= 0)        result = 2;
-      else if(StringFind(server, "pepperstone") >= 0)  result = 2;
+      // [BUG-FIX 1] EU/AU brokers (EET): use DST-aware offset instead of hardcode = 2.
+      // Hardcode = 2 was wrong from March to October each year (UTC+3 in summer).
+      else if(StringFind(server, "icmarket") >= 0)     result = GuessEUBrokerOffset(TimeCurrent());
+      else if(StringFind(server, "thinkmarket") >= 0)  result = GuessEUBrokerOffset(TimeCurrent());
+      else if(StringFind(server, "xm") >= 0)           result = GuessEUBrokerOffset(TimeCurrent());
+      else if(StringFind(server, "fxpro") >= 0)        result = GuessEUBrokerOffset(TimeCurrent());
+      else if(StringFind(server, "pepperstone") >= 0)  result = GuessEUBrokerOffset(TimeCurrent());
       else if(StringFind(server, "oanda") >= 0)        result = 0;
       else if(StringFind(server, "fxcm") >= 0)         result = 0;
       else if(StringFind(server, "alpari") >= 0)       result = 3;
@@ -166,6 +195,104 @@ int GetUTCHour(datetime localTime)
    int h=TimeHour(localTime)-GetBrokerGMTOffset();
    if(h<0) h+=24; if(h>=24) h-=24;
    return(h);
+}
+
+// [BUG-FIX 2] Full UTC datetime conversion — GetUTCHour() returns only the hour
+// (0-23) which loses day information when the broker clock crosses midnight relative
+// to UTC. Example: broker GMT+3, server shows 01:00 Jan 16 → UTC = 22:00 Jan 15.
+// GetUTCHour correctly returns 22 but iBarShift() needs the full UTC datetime
+// (Jan 15 22:00) to locate the right H4 candle; hour-only causes an off-by-one
+// day error. Primary path uses TimeGMT() system call for accuracy; fallback uses
+// the cached broker GMT offset when TimeGMT() is unavailable.
+datetime GetUTCDatetime(datetime localTime)
+{
+   // Primary: derive offset from live TimeGMT() — handles DST automatically
+   datetime gmtNow = TimeGMT();
+   if(gmtNow > D'2020.01.01')
+   {
+      int offSec = (int)(TimeCurrent() - gmtNow);
+      return(localTime - offSec);
+   }
+   // Fallback: use cached broker GMT offset (already DST-aware via GuessEUBrokerOffset)
+   return(localTime - GetBrokerGMTOffset() * 3600);
+}
+
+// [GENERALIZED] NormalizeCandleToUTC(brokerCandleOpen, tf)
+// Tổng quát cho mọi timeframe (M1 → MN1) — không chỉ H4.
+//
+// Vấn đề gốc: mỗi broker mở candle tại giờ local khác nhau tùy GMT offset.
+//   GMT+2: H4 opens 00/04/08/12/16/20 local = 22/02/06/10/14/18 UTC (sai nếu GMT≠0)
+//   GMT+3: H4 opens 01/05/09/13/17/21 local = same UTC boundaries ✓ (nếu offset đúng)
+// Sau khi convert về UTC, dùng integer floor để snap về boundary chuẩn:
+//   H4 → 0,4,8,12,16,20  |  H1 → 0..23  |  M15 → 0,15,30,45  |  M5 → 0,5,10...
+//
+// Tham số: tf = PERIOD_M1/M5/M15/M30/H1/H4/D1/W1/MN1 hoặc 0 = current chart TF.
+// Dùng: g_signals[idx].signalTimeUTC = NormalizeCandleToUTC(iTime(NULL, tf, shift), tf);
+datetime NormalizeCandleToUTC(datetime brokerCandleOpen, int tf = 0)
+{
+   if(tf <= 0) tf = Period();
+
+   // Step 1: Convert broker local time → full UTC datetime
+   datetime utcTime = GetUTCDatetime(brokerCandleOpen);
+
+   // ── Sub-day timeframes (M1..H4): dùng integer epoch arithmetic ──────────
+   // UTC epoch bắt đầu 1970.01.01 00:00:00 UTC (Thursday).
+   // Floor theo giây: (utcSec / tfSec) * tfSec cho đúng boundary chuẩn UTC
+   // mà không cần tính riêng hour/min/sec. Hoạt động cho mọi tf là bội số phút.
+   if(tf < 1440) // < PERIOD_D1
+   {
+      long tfSec   = (long)tf * 60;           // tf in seconds
+      long utcSec  = (long)utcTime;
+      long snapped = (utcSec / tfSec) * tfSec; // floor to nearest boundary
+      return((datetime)snapped);
+   }
+
+   // ── D1: floor về 00:00:00 UTC cùng ngày ─────────────────────────────────
+   if(tf == 1440) // PERIOD_D1
+   {
+      long utcSec  = (long)utcTime;
+      // [FIX compile] MQL không hỗ trợ 'L' suffix cho long literal (không như C/C++).
+      // Dùng biến long hoặc cast (long) thay thế.
+      long d1Sec   = (long)86400;
+      long snapped = (utcSec / d1Sec) * d1Sec;
+      return((datetime)snapped);
+   }
+
+   // ── W1: floor về Monday 00:00:00 UTC của tuần đó ────────────────────────
+   // Unix epoch 1970.01.01 là Thursday (day_of_week=4). Monday cách 3 ngày trước.
+   // Offset về Monday: (utcSec + 3*86400) floor theo 7*86400, rồi trừ 3*86400.
+   if(tf == 10080) // PERIOD_W1
+   {
+      long utcSec    = (long)utcTime;
+      // [FIX compile] MQL không hỗ trợ 'L' suffix — dùng biến long thay thế.
+      long weekSec   = (long)7 * (long)86400;  // 604800
+      long monOffset = (long)3 * (long)86400;  // 259200 — shift Thu epoch → Mon
+      long snapped   = ((utcSec + monOffset) / weekSec) * weekSec - monOffset;
+      return((datetime)snapped);
+   }
+
+   // ── MN1: floor về ngày 1 của tháng 00:00:00 UTC ─────────────────────────
+   // Cần MqlDateTime vì tháng có độ dài khác nhau (28/29/30/31 ngày).
+   if(tf == 43200) // PERIOD_MN1
+   {
+      MqlDateTime mdt;
+      TimeToStruct(utcTime, mdt);
+      mdt.day  = 1;
+      mdt.hour = 0;
+      mdt.min  = 0;
+      mdt.sec  = 0;
+      return(StructToTime(mdt));
+   }
+
+   // Fallback: trả về UTC time không snap (timeframe lạ không xác định)
+   return(utcTime);
+}
+
+// [BACKWARD COMPAT] NormalizeH4CandleToUTC — wrapper gọi NormalizeCandleToUTC với PERIOD_H4.
+// Giữ lại để code cũ đang dùng hàm này không cần sửa.
+datetime NormalizeH4CandleToUTC(datetime brokerCandleOpen)
+{
+   return(NormalizeCandleToUTC(brokerCandleOpen, 240)); // 240 = PERIOD_H4
 }
 
 //+------------------------------------------------------------------+
@@ -473,12 +600,21 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       if(outcome!=0) { totalCount++; if(outcome==1) correctCount++; }
    }
 
+   // [CROSS-BROKER-FIX v2] Time-based boundary + NEW→OLD scan for Phase 2.
+   // v1 (time cap only) still took oldest qualifying bars first → different
+   // brokers sample different time periods. NEW→OLD ensures both start from
+   // the most recent deep-scan bars and collect the same recent data.
+   int edgeMaxDays = (Period() <= TF_M5) ? 60 : (Period() <= TF_H1) ? 180 : 365;
+   datetime edgeCutoffTime = TimeCurrent() - edgeMaxDays * 86400;
    int phase1Start=MathMax(0, Bars-InpMaxBars);
    int deepEnd=Bars-maxForward-10;
-   for(int i=InpRSIPeriod+10; i<phase1Start && i<deepEnd; i++)
+   int deepUpperBound = MathMin(phase1Start, deepEnd);
+   for(int i=deepUpperBound-1; i>=InpRSIPeriod+10; i--)
    {
       if(totalCount>=2000) break;
       int bs=Bars-1-i; if(bs<0) continue;
+      // NEW→OLD: once past cutoff, all remaining bars are older
+      if(iTime(NULL, 0, bs) < edgeCutoffTime) break;
       double rsi=iRSI(NULL,0,InpRSIPeriod,InpPrice,bs);
       double atr=iATR(NULL,0,InpATRPeriod,bs);
       if(rsi==0 || atr==0) continue;
@@ -783,6 +919,23 @@ TradeRecommendation GetTradeRecommendation(
       { rec.level = REC_AVOID; rec.label = "AVOID"; }
       rec.labelColor = clrRed;
       rec.suggestedRisk = 0;
+   }
+
+   // Hard gate: insufficient historical data → cap positive recommendations at WAIT.
+   // Theoretical probability (Gambler's Ruin) can give optimistic 60-70% with zero evidence.
+   // Only real historical simulation data validates the probability.
+   int minReqSamples = GetMinSamplesForTimeframe();
+   if(probSamples < minReqSamples)
+   {
+      if(rec.level == REC_STRONG_ENTRY || rec.level == REC_ENTRY || rec.level == REC_CAUTION_ENTRY)
+      {
+         rec.level = REC_WAIT;
+         rec.label = "WAIT (Low Data n=" + IntegerToString(probSamples) + ")";
+         rec.labelColor = clrOrange;
+         rec.suggestedRisk = 0;
+         reasons = "n=" + IntegerToString(probSamples) + "<" + IntegerToString(minReqSamples) + " min|Theoretical prob only|";
+         reasons += "EV:" + DoubleToString(ev, 2) + "R|";
+      }
    }
 
    // Top 3 reasons

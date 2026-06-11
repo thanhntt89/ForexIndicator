@@ -227,10 +227,11 @@ int OnCalculate(const int rates_total,
                 const long &volume[],
                 const int &spread[])
 {
+   g_ratesTotal = rates_total;
    #ifdef __MQL5__
    InvalidatePriceCache();  // Force refresh at start of each OnCalculate
    #endif
-   
+
    ArraySetAsSeries(time, false);
    ArraySetAsSeries(open, false);
    ArraySetAsSeries(high, false);
@@ -380,12 +381,14 @@ int OnCalculate(const int rates_total,
       if(InpCooldownBars > 0 && g_signalCount > 0)
       {
          int lastBar = g_signals[g_signalCount-1].barIndex;
-         if(i - lastBar < InpCooldownBars) continue;
+         int stableAnchor = rates_total - 500;
+         if(InpMaxBars > 500 && lastBar < stableAnchor && i >= stableAnchor)
+         { /* crossing anchor — don't carry cooldown from deep history */ }
+         else if(i - lastBar < InpCooldownBars) continue;
       }
 
-      // [SESSION-HARD] Pre-detection: compute session block; M1 non-Overlap skip
+      // [SESSION-HARD] Pre-detection: session block for Case 6 filtering
       int _sb = GetSessionBlock(time[i]);
-      if(InpHardM1Overlap && Period() == TF_M1 && _sb != 2) continue;
 
       int buySignal  = 0;
       int sellSignal = 0;

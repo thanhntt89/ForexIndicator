@@ -5,7 +5,13 @@
 
 struct SignalData
 {
-   datetime signalTime;
+   datetime signalTime;    // Broker local time at signal bar open (raw, as seen by iTime())
+   // [ISSUE #4 FIX] signalTimeUTC: broker local time converted to UTC and snapped to
+   // standard TF boundary via NormalizeCandleToUTC(). This eliminates broker-timezone
+   // dependency: GMT+2 and GMT+3 brokers produce the same signalTimeUTC for the same
+   // market event. Used by GetSessionBlock() and ScanStoredSignalsBoth() for session
+   // comparison. Zero = not yet computed (backward compat with binary-loaded old signals).
+   datetime signalTimeUTC;
    int      barIndex;
    int      caseNumber;
    bool     isBuySignal;

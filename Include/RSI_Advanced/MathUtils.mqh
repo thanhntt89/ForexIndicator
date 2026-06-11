@@ -120,29 +120,34 @@ int GetMaxForwardBarsForTimeframe()
 
 int GetMaxLookbackForTimeframe()
 {
+   // [CROSS-BROKER-FIX] Fixed cap per TF — no Bars scaling.
+   // Old: sqrt(available/5000)*baseCap → broker 65k bars got cap=300,
+   // broker 30k got cap=288 → different sample sizes, different WR%.
+   // New: fixed baseCap → both brokers collect same max samples.
    int tf = Period();
-   int baseCap;
-   if(tf <= PERIOD_M1)       baseCap = 300;
-   else if(tf <= PERIOD_M5)  baseCap = 250;
-   else if(tf <= PERIOD_M15) baseCap = 200;
-   else if(tf <= PERIOD_M30) baseCap = 200;
-   else if(tf <= TF_H1)  baseCap = 150;
-   else if(tf <= TF_H4)  baseCap = 120;
-   else                      baseCap = 100;
-
-   int available = Bars - GetMaxForwardBarsForTimeframe() - 50;
-   if(available <= 0) return(baseCap);
-   double scale = MathSqrt((double)available / 5000.0);
-   scale = MathMax(1.0, MathMin(scale, 2.5));
-   return((int)(baseCap * scale));
+   if(tf <= PERIOD_M1)       return(300);
+   if(tf <= PERIOD_M5)       return(250);
+   if(tf <= PERIOD_M15)      return(200);
+   if(tf <= PERIOD_M30)      return(200);
+   if(tf <= TF_H1)           return(150);
+   if(tf <= TF_H4)           return(120);
+   return(100);
 }
 
 int GetEffectiveProbMaxBars()
 {
+   // [CROSS-BROKER-FIX] Time-based cap aligned with S7 hard prune maxDays.
+   // Old: available*0.8 scaled with Bars → broker with 65k bars scanned 52k,
+   // broker with 30k scanned 24k → completely different time periods.
+   // New: fixed maxDays per TF → both brokers scan same calendar window.
+   int maxDays = (Period() <= TF_M5) ? 60 : (Period() <= TF_H1) ? 180 : 365;
+   int barsPerDay = 1440 / MathMax(Period(), 1);
+   int timeBased = maxDays * barsPerDay;
+
    int available = Bars - GetMaxForwardBarsForTimeframe() - 50;
    if(available <= 0) return(InpProbMaxBars);
-   int autoMax = (int)(available * 0.8);
-   return(MathMax(InpProbMaxBars, MathMin(autoMax, 30000)));
+
+   return(MathMin(timeBased, MathMax(InpProbMaxBars, available)));
 }
 
 //+------------------------------------------------------------------+
@@ -150,12 +155,21 @@ int GetEffectiveProbMaxBars()
 //+------------------------------------------------------------------+
 string GetConfidenceText(int sampleSize, double probability, color &outColor)
 {
+   int minReq = GetMinSamplesForTimeframe();
+   if(sampleSize <= 0)
+   {
+      outColor = clrRed;
+      return("NO DATA (theoretical only)");
+   }
+   if(sampleSize < minReq)
+   {
+      outColor = clrOrange;
+      return("LOW DATA (n<" + IntegerToString(minReq) + ")");
+   }
    double p = probability / 100.0;
    if(p <= 0) p = 0.01;
    if(p >= 1) p = 0.99;
-   double me = 0;
-   if(sampleSize > 0)
-      me = 1.96 * MathSqrt(p * (1.0 - p) / (double)sampleSize) * 100.0;
+   double me = 1.96 * MathSqrt(p * (1.0 - p) / (double)sampleSize) * 100.0;
    string conf;
    if(me <= 8)       { conf = "HIGH";      outColor = clrLime;   }
    else if(me <= 15) { conf = "MODERATE";   outColor = clrYellow; }
@@ -190,7 +204,14 @@ datetime GetTimeFromBarPlusPixels(int pixelsRight)
 //+------------------------------------------------------------------+
 int GetTPMeasurementBars()
 {
+   // [CROSS-BROKER-FIX] Time-based cap for TP measurement scan.
+   // Old: target capped by available=Bars-100 → different brokers, different scan depth.
+   // New: time-based cap aligned with S7 maxDays → same calendar window.
    int tf = Period();
+   int maxDays = (tf <= TF_M5) ? 60 : (tf <= TF_H1) ? 180 : 365;
+   int barsPerDay = 1440 / MathMax(tf, 1);
+   int timeBased = maxDays * barsPerDay;
+
    int available = Bars - 100;
    int target = 0;
 
@@ -198,10 +219,11 @@ int GetTPMeasurementBars()
    else if(tf <= PERIOD_M5)  target = 4000;
    else if(tf <= PERIOD_M15) target = 5000;
    else if(tf <= PERIOD_M30) target = 5000;
-   else if(tf <= TF_H1)  target = 5000;
-   else if(tf <= TF_H4)  target = 3000;
+   else if(tf <= TF_H1)      target = 5000;
+   else if(tf <= TF_H4)      target = 3000;
    else                      target = 2000;
 
+   target = MathMin(target, timeBased);
    return(MathMin(target, MathMax(available, 500)));
 }
 

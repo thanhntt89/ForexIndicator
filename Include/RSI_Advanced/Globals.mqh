@@ -16,6 +16,7 @@ double g_rawRSI[];
 //| State tracking                                                     |
 //+------------------------------------------------------------------+
 int      g_prevRatesTotal  = 0;
+int      g_ratesTotal      = 0;
 datetime g_lastAlertTime   = 0;
 
 //+------------------------------------------------------------------+
@@ -113,6 +114,11 @@ void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
    ArrayResize(g_signals, g_signalCount, 128);
    int idx = g_signalCount - 1;
    g_signals[idx].signalTime    = t;
+   // [ISSUE #4 FIX] Compute and store UTC-normalized time at signal creation.
+   // NormalizeCandleToUTC converts broker local time → UTC → snaps to standard
+   // TF boundary. Stored once here so all downstream consumers (GetSessionBlock,
+   // ScanStoredSignalsBoth) use consistent UTC time without re-converting each call.
+   g_signals[idx].signalTimeUTC = NormalizeCandleToUTC(t, Period());
    g_signals[idx].barIndex      = barIdx;
    g_signals[idx].caseNumber    = caseNum;
    g_signals[idx].isBuySignal   = isBuy;

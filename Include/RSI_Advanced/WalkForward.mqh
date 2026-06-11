@@ -77,7 +77,11 @@ void CalculateInformationCoefficient(int splitIdx)
    // Collect matched (angleStrength, outcome) pairs.
    // Capped at 200 pairs: Pearson is stable at n=30+, and O(n×m) join
    // on large arrays would add latency. 200 covers ~1 year of M15 signals.
+   // [FIX warning] Kh\u1edfi t\u1ea1o icX/icY = 0.0 \u2014 compiler c\u1ea3nh b\u00e1o "possible uninitialized"
+   // v\u00ec kh\u00f4ng track \u0111\u01b0\u1ee3c guard i < n \u0111\u1ea3m b\u1ea3o ch\u1ec9 \u0111\u1ecdc sau khi \u0111\u00e3 ghi. Init s\u1eadch h\u01a1n.
    double icX[200], icY[200];
+   ArrayInitialize(icX, 0.0);
+   ArrayInitialize(icY, 0.0);
    int n = 0;
 
    for(int i = 0; i < g_outcomeCount && n < 200; i++)
@@ -178,22 +182,25 @@ void CalculateWalkForwardMetrics()
    // Information Coefficient computation (called here so it shares the split index).
    CalculateInformationCoefficient(splitIndex);
 
-   // Anti-overfitting: dual-condition robustness check (Pardo 2008 standard).
+   // Anti-overfitting: robustness check (Pardo 2008 standard).
    //
    // Condition 1 — ratio: IS win rate must not exceed OOS by more than 15%.
-   //   Previous threshold 1.3 (30% gap) was too generous: a strategy with
-   //   IS=65% and OOS=50% had ratio=1.30 and was labeled ROBUST, but a 15-point
-   //   drop from IS to OOS indicates meaningful overfitting on the training period.
-   //   Pardo recommends <1.10 for publication-quality robustness; we use 1.15
-   //   as a practical threshold for live indicators with moderate sample sizes.
+   //   Pardo recommends <1.10 for publication-quality; we use 1.15 for live.
    //
-   // Condition 2 — absolute: even if ratio <1.15, a 7-point absolute gap still
-   //   signals degraded live performance. E.g. IS=55% / OOS=48% → ratio=1.14
-   //   (passes condition 1 alone), but 48% OOS is barely above coin-flip.
+   // Condition 2 — absolute: IS must exceed OOS (one-sided, not MathAbs).
+   //   OOS > IS is NOT overfit — it means the model generalizes well (or small
+   //   OOS sample got lucky). Only penalize when IS > OOS by more than 7 points.
+   //   Old code used MathAbs which falsely blocked IS=57%/OOS=75% as "overfit".
+   //
+   // Condition 3 — minimum OOS: with n<15 OOS, Wilson CI is ±20-25%.
+   //   Any ratio/gap verdict is noise. Require n>=15 before declaring overfit.
+   //   With n<15, default to robust (benefit of the doubt).
    bool ratioOK    = (g_walkForward.overfitRatio < 1.15);
-   bool absoluteOK = (MathAbs(g_walkForward.isWinRate - g_walkForward.oosWinRate) < 7.0);
+   double isOosGap = g_walkForward.isWinRate - g_walkForward.oosWinRate;
+   bool absoluteOK = (isOosGap < 7.0);
    bool hasWins    = (g_walkForward.isWinRate > 0 || g_walkForward.oosWinRate > 0);
-   g_walkForward.isRobust = (ratioOK && absoluteOK && hasWins);
+   bool enoughOOS  = (g_walkForward.oosSamples >= 15);
+   g_walkForward.isRobust = !enoughOOS || (ratioOK && absoluteOK && hasWins);
 }
 
 //+------------------------------------------------------------------+

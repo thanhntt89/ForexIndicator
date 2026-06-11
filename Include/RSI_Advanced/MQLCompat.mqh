@@ -467,6 +467,7 @@ int iBarShift(string symbol, int timeframe, datetime time, bool exact = false)
 //====================================================================
 int _compat_GetBars()
 {
+   if(g_ratesTotal > 0) return(g_ratesTotal);
    return(::Bars(_Symbol, _Period));
 }
 #define Bars _compat_GetBars()

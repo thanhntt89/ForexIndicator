@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
-//|                                            PanelDrawing.mqh        |
-//|                         RSI Advanced - Info Panel Drawing          |
+//|                                            PanelDrawing.mqh       |
+//|                         RSI Advanced - Info Panel Drawing         |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_PANELDRAWING_MQH
 #define RSI_ADV_PANELDRAWING_MQH
@@ -80,7 +80,7 @@ void DrawInfoPanel(int signalIndex)
                      g_outcomeCount > 0 ||
                      g_walkForward.isSamples > 0 ||
                      InpUseSpreadRegime);
-      int calcY = titleBarH + 2 + lh;
+      int calcY = titleBarH + 2 + lh + lh;
       if(hasMTF) { calcY += 3 + lh + g_mtfCount * lh + lh; }
       if(hasV11)
       {
@@ -115,6 +115,17 @@ void DrawInfoPanel(int signalIndex)
          GetCleanSymbolName()+" | "+GetTimeframeString()+" | No active signal",
          InpPanelTextColor, fs-1, false);
       cy += lh;
+      {
+         int gmtOff2 = GetBrokerGMTOffset();
+         datetime utcNow = TimeCurrent() - gmtOff2 * 3600;
+         string gmtSign2 = (gmtOff2 >= 0) ? "+" : "";
+         CreateTextLabel(PREFIX_PANEL+"2_TM", px+pad, cy,
+            "Server: "+TimeToString(TimeCurrent(), TIME_MINUTES)+
+            " | UTC: "+TimeToString(utcNow, TIME_MINUTES)+
+            " (GMT"+gmtSign2+IntegerToString(gmtOff2)+")",
+            InpPanelDimColor, fs-2, false);
+         cy += lh;
+      }
       if(hasMTF)
       {
          cy += 3;
@@ -326,6 +337,7 @@ void DrawInfoPanel(int signalIndex)
    calcY += lh;
    calcY += detailCount * (lh - 2) + 2;
    calcY += lh;
+   calcY += lh;
    if(isStale) calcY += lh;
    if(isInvalidated) calcY += lh;
    calcY += 3;
@@ -446,6 +458,17 @@ void DrawInfoPanel(int signalIndex)
       " | "+TimeToString(sig.signalTime, TIME_MINUTES)+" | Age: "+ageShort,
       InpPanelTextColor, fs-1, false);
    cy += lh;
+   {
+      int gmtOff2 = GetBrokerGMTOffset();
+      datetime utcNow = TimeCurrent() - gmtOff2 * 3600;
+      string gmtSign2 = (gmtOff2 >= 0) ? "+" : "";
+      CreateTextLabel(PREFIX_PANEL+"3_TM", px+pad, cy,
+         "Server: "+TimeToString(TimeCurrent(), TIME_MINUTES)+
+         " | UTC: "+TimeToString(utcNow, TIME_MINUTES)+
+         " (GMT"+gmtSign2+IntegerToString(gmtOff2)+")",
+         InpPanelDimColor, fs-2, false);
+      cy += lh;
+   }
    //--- STALE ---
    if(isStale && !isInvalidated)
    {

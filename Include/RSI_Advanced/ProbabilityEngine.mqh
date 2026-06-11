@@ -229,6 +229,27 @@
 #include "WalkForward.mqh"
 
 //+------------------------------------------------------------------+
+//| D0-aligned entry time for GMT-normalized H4 charts                 |
+//| Native iTime returns broker-local bar time (e.g. 12:00 GMT+3).    |
+//| With normalization the signal belongs to a D0 bar (e.g. 08:00 UTC)|
+//| so entry must be at the NEXT D0 slot, not next native slot.        |
+//+------------------------------------------------------------------+
+datetime GetD0AlignedEntry(datetime sigTime)
+{
+   if(!g_gmtNormActive || Period() < TF_H4)
+      return(sigTime + Period() * 60);
+   int gmt = GetBrokerGMTOffset();
+   int perSec = Period() * 60;
+   datetime utc = sigTime - gmt * 3600;
+   int secInDay = (int)(utc % 86400);
+   if(secInDay < 0) secInDay += 86400;
+   int d0Slot = secInDay / perSec;
+   datetime dayStart = utc - secInDay;
+   datetime utcEntry = dayStart + (d0Slot + 1) * perSec;
+   return(utcEntry + gmt * 3600);
+}
+
+//+------------------------------------------------------------------+
 //| Simulate one signal forward (live-accurate version)                |
 //+------------------------------------------------------------------+
 int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
@@ -238,13 +259,23 @@ int SimulateSignalOutcome(int signalBar, bool isBuy, double entryPrice,
 {
    barsToResult = 0;
 
-   // [GMT-FIX-C5] Dispatch to H1-resolution simulation when GMT normalization is active
-   if(g_gmtNormActive && Period() >= TF_H4)
+   // [H1-SIM] Use H1-resolution for H4+: 4x finer SL/TP detection.
+   // Fall back to H4-bar sim when H1 data doesn't cover the signal's time range.
+   if(Period() >= TF_H4)
    {
       datetime sigTime = iTime(NULL, 0, Bars - 1 - signalBar);
       if(sigTime > 0)
-         return(SimulateSignalOutcomeH1(sigTime, isBuy, entryPrice, slPrice,
-                tp1Price, tp2Price, tp3Price, maxBarsForward, barsToResult, knownSpread));
+      {
+         datetime entryChk = GetD0AlignedEntry(sigTime);
+         int h1Chk = iBarShift(NULL, TF_H1, entryChk);
+         if(h1Chk >= 0)
+         {
+            datetime h1Time = iTime(NULL, TF_H1, h1Chk);
+            if(MathAbs((long)h1Time - (long)entryChk) <= 7200)
+               return(SimulateSignalOutcomeH1(sigTime, isBuy, entryPrice, slPrice,
+                      tp1Price, tp2Price, tp3Price, maxBarsForward, barsToResult, knownSpread));
+         }
+      }
    }
 
    bool tp1Hit = false, tp2Hit = false, tp3Hit = false;
@@ -370,9 +401,9 @@ int SimulateSignalOutcomeH1(datetime sigTime, bool isBuy, double entryPrice,
    int barsPerParent = MathMax(Period() / TF_H1, 1);
 
    // Entry is at the NEXT parent-TF bar open, not the signal bar itself.
-   // Starting from h1Start-1 checks bars INSIDE the signal bar where
-   // the trade hasn't entered yet — those cause false SL hits.
-   datetime entryTime = sigTime + Period() * 60;
+   // D0-aligned: on GMT+3 broker, native bar 12:00→entry 16:00 is WRONG.
+   // Correct: D0 slot 08:00-12:00→entry 15:00 (=12:00 UTC in server time).
+   datetime entryTime = GetD0AlignedEntry(sigTime);
    int h1Entry = iBarShift(NULL, TF_H1, entryTime);
    if(h1Entry < 0) return(0);
 
@@ -550,20 +581,26 @@ void ScanHistoricalATRBased(const SignalData &curSig,
    int startScan = MathMax(Bars - probLookback, InpRSIPeriod + InpBBPeriod + 10);
    int maxSamples = GetMaxLookbackForTimeframe();
 
+   // [CROSS-BROKER-FIX v2] Time-based hard stop + NEW→OLD scan direction.
+   // v1 fix (time cap) was insufficient: OLD→NEW scan collects first maxSamples
+   // from the OLDEST bars. Broker with 40k bars samples 5-6 months ago,
+   // broker with 10k bars samples 5-7 weeks ago → completely different WR.
+   // NEW→OLD: both brokers start from the same recent boundary and collect
+   // the same recent qualifying bars → consistent samples.
+   int t3MaxDays = (Period() <= TF_M5) ? 60 : (Period() <= TF_H1) ? 180 : 365;
+   datetime t3CutoffTime = TimeCurrent() - t3MaxDays * 86400;
+
    // Dedup guard: stop BEFORE the range already covered by g_signals[] (Tier 1/2).
-   // g_signals[] contains signals from the last InpMaxBars bars, so Tier 3 must
-   // stop at Bars-InpMaxBars to avoid counting the same bar in both Tier 1/2
-   // (via SimulateSignalOutcome on stored signals) AND Tier 3 (via raw ATR scan).
-   // Without this boundary, a bar that produced a signal in g_signals[] could be
-   // counted once in Tier 1 or 2 and again here — inflating sample count and
-   // biasing the weighted average toward in-range recent data.
    int tier3End = MathMin(Bars - maxFwd - 10, MathMax(0, Bars - InpMaxBars));
 
-   for(int i = startScan; i < tier3End; i++)
+   for(int i = tier3End - 1; i >= startScan; i--)
    {
       if(total >= maxSamples) break;
       int bs = Bars - 1 - i;
       if(bs < 0) continue;
+
+      // NEW→OLD: once we hit a bar older than cutoff, all remaining are older
+      if(iTime(NULL, 0, bs) < t3CutoffTime) break;
 
       double rsi = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs);
       double atr = iATR(NULL, 0, InpATRPeriod, bs);
@@ -877,7 +914,14 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       }
    }
 
-   int curBlock = GetSessionBlock(curSig.signalTime);
+   // [ISSUE #5 FIX] Use signalTimeUTC for session block comparison.
+   // signalTimeUTC is pre-converted to UTC boundary at signal creation (StoreSignal).
+   // Avoids re-running GetUTCHour(broker_time) which can be wrong when GMT offset cache
+   // is stale, and eliminates the cross-midnight day-loss bug (Bug 2 root cause).
+   // Fallback to broker-time conversion for old signals loaded from binary (signalTimeUTC==0).
+   int curBlock = (curSig.signalTimeUTC > 0)
+                  ? GetSessionBlockUTC(curSig.signalTimeUTC)
+                  : GetSessionBlock(curSig.signalTime);
 
    for(int s = 0; s < g_signalCount; s++)
    {
@@ -922,7 +966,11 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
 
       // [S5] Continuous similarity weight
       double w = 1.0;
-      int histBlock = GetSessionBlock(g_signals[s].signalTime);
+      // [ISSUE #5 FIX] Use signalTimeUTC for historical signal session block.
+      // Same rationale as curBlock above: avoid broker-time re-conversion per-signal.
+      int histBlock = (g_signals[s].signalTimeUTC > 0)
+                      ? GetSessionBlockUTC(g_signals[s].signalTimeUTC)
+                      : GetSessionBlock(g_signals[s].signalTime);
       int sessDiff = MathAbs(curBlock - histBlock);
       if(sessDiff > 2) sessDiff = 4 - sessDiff;
       w *= (sessDiff == 0) ? 1.0 : (sessDiff == 1) ? 0.7 : 0.4;
@@ -946,18 +994,18 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
          if(daysDiff > maxDays) continue;   // [FIX-S7b] TF-scaled hard prune
       }
       if(daysDiff > 0)
-         w *= MathExp(-0.693 * daysDiff / 60.0);
+      {
+         double halfLife = (Period() <= TF_M5) ? 60.0 : (Period() <= TF_H1) ? 90.0 : 120.0;
+         w *= MathExp(-0.693 * daysDiff / halfLife);
+      }
 
       // [S8] RSI proximity Gaussian kernel — TF-adaptive sigma.
-      // XAUUSD M1 RSI(14) std dev ~15-18 pts; sigma=5 (fixed) discounts signals ±10 pts
-      // to weight=0.14, shrinking the effective sample pool below minSamples on M1/M5.
-      // sigma=12 for M1/M5, sigma=8 for M15-H1, sigma=5 for H4+ (tighter RSI levels).
+      // sigma=12 for M1/M5, sigma=8 for M15+ (H4+ was 5 but caused n=0 squeeze).
       if(curSig.rsiAtSignal > 0 && g_signals[s].rsiAtSignal > 0)
       {
          double dr = curSig.rsiAtSignal - g_signals[s].rsiAtSignal;
-         // [GMT-FIX] Compare minutes, not ENUM_TIMEFRAMES
-         double sigma_rsi = (Period() <= TF_M5) ? 12.0 : (Period() <= TF_H1) ? 8.0 : 5.0;
-         w *= MathExp(-0.5 * dr * dr / (sigma_rsi * sigma_rsi));   // [FIX-S8] was hardcoded /25.0
+         double sigma_rsi = (Period() <= TF_M5) ? 12.0 : 8.0;
+         w *= MathExp(-0.5 * dr * dr / (sigma_rsi * sigma_rsi));
       }
 
       // [S9] ATR regime similarity: log-ratio with sigma_log=0.7
@@ -1056,19 +1104,38 @@ void CalculateProbability(int currentSignalIndex)
 
    int t3_t=0, t3_to=0, t3_1=0, t3_2=0, t3_3=0, t3_s=0;
    double t3_b1=0, t3_bs=0;
-   // [BUG#3-FIX] Use raw signal count (not weighted sum) to decide Tier 3 activation.
-   // t1_tw + t2_tw is a weighted sum — with heavy similarity discounting, 5 real signals
-   // can produce tw=0.5, making the system think it has <1 sample and trigger Tier 3.
-   // Raw count correctly reflects how many distinct historical signals were available.
-   int rawCount12 = t1_rawN + t2_rawN;
-   if(rawCount12 < minSamples)
+   // Tier 3 gate: use preliminary nEff (not raw count) — raw count ignores S5-S9 weighting.
+   // H4 1500bars: rawCount12=40+ but nEff=6 → raw gate says "enough data", nEff says "starving".
+   // [FIX-TIER-TW] H4+ lowered from 1.5→1.0: S5-S9 weighting crushes tw heavily
+   // on sparse H4 data. MT4 had tw=1.45 (12 raw signals) excluded at 1.5 threshold
+   // while MT5 had tw=1.53 included → completely opposite results from 0.08 diff.
+   double tierMinTw = (Period() >= TF_H4) ? 1.0 : 3.0;
+   double pre_sw  = ((t1_tw >= tierMinTw) ? t1_tw : 0) + ((t2_tw >= tierMinTw) ? t2_tw : 0);
+   double pre_sw2 = ((t1_tw >= tierMinTw) ? t1_sumW2 : 0) + ((t2_tw >= tierMinTw) ? t2_sumW2 : 0);
+   double prelimNEff = (pre_sw2 > 0) ? (pre_sw * pre_sw) / pre_sw2 : 0;
+
+   if(prelimNEff < minSamples * 2)
       ScanHistoricalATRBased(curSig, t3_t, t3_to,
                              t3_1, t3_2, t3_3, t3_s, t3_b1, t3_bs, maxFwd);
 
-   // Data-proportional tier weights (now using weighted totals from S5)
-   double w1 = (t1_tw >= 3.0) ? MathPow(t1_tw, 0.75) * 1.0  : 0;
-   double w2 = (t2_tw >= 3.0) ? MathSqrt(t2_tw)      * 0.5  : 0;
-   double w3 = (t3_t  >= 3)   ? MathSqrt((double)t3_t) * 0.15 : 0;
+   double w1 = (t1_tw >= tierMinTw) ? MathPow(t1_tw, 0.75) * 1.0  : 0;
+   double w2 = (t2_tw >= tierMinTw) ? MathSqrt(t2_tw)      * 0.5  : 0;
+   double t3Scale = (prelimNEff < minSamples) ? 1.0 :
+                    MathMax(0.0, 1.0 - (prelimNEff - (double)minSamples) / (double)minSamples);
+   double w3 = (t3_t >= 3) ? MathSqrt((double)t3_t) * 0.15 * t3Scale : 0;
+
+   // [FIX-T3-CAP] Tier 3 (ATR scan) must not outweigh real signal data (Tier 1/2).
+   // Problem: sqrt(203)*0.15 = 2.14 > w1=1.38 → Tier 3 WR=17.7% dominates histTP1.
+   // Tier 3 lacks actual signal conditions — mostly mid-trend bars where SL hits,
+   // so its WR can be worse than random walk. Cap at 50% of best real-signal tier.
+   double wReal = MathMax(w1, w2);
+   if(wReal > 0 && w3 > wReal * 0.5)
+      w3 = wReal * 0.5;
+   // [FIX-T3-FALLBACK] When both real tiers fall below tierMinTw (wReal=0) but raw
+   // signals DO exist, Tier 3 gets unlimited weight. Cap at 0.5 absolute — Tier 3
+   // alone (no real-signal anchor) should never drive strong recommendations.
+   else if(wReal == 0 && (t1_rawN + t2_rawN) >= 3 && w3 > 0.5)
+      w3 = 0.5;
 
    double tw = 0, wTP1 = 0, wTP2 = 0, wTP3 = 0, wSL = 0, wB1 = 0, wBS = 0;
    double totalSumW = 0, totalSumW2 = 0;
@@ -1148,6 +1215,25 @@ void CalculateProbability(int currentSignalIndex)
          histTP2 = MathMin(rTP2/sum*100, histTP1);
          histTP3 = MathMin(rTP3/sum*100, histTP2);
       }
+   }
+
+   // [DEBUG] Per-tier breakdown: where does n come from?
+   if(InpDebugMode)
+   {
+      double t1NE = (t1_sumW2 > 0) ? t1_tw*t1_tw/t1_sumW2 : 0;
+      double t2NE = (t2_sumW2 > 0) ? t2_tw*t2_tw/t2_sumW2 : 0;
+      double t1WR = (t1_tw > 0) ? t1_w1/t1_tw*100 : 0;
+      double t2WR = (t2_tw > 0) ? t2_w1/t2_tw*100 : 0;
+      double t3WR = (t3_t > 0) ? (double)t3_1/t3_t*100 : 0;
+      Print("[PROB-TIER] ChartSig=", g_signalCount,
+            " | T1(case): raw=", t1_rawN, " nEff=", DoubleToString(t1NE,1),
+            " tw=", DoubleToString(t1_tw,2), " WR=", DoubleToString(t1WR,1), "%",
+            " | T2(other): raw=", t2_rawN, " nEff=", DoubleToString(t2NE,1),
+            " tw=", DoubleToString(t2_tw,2), " WR=", DoubleToString(t2WR,1), "%",
+            " | T3(ATR): n=", t3_t, " WR=", DoubleToString(t3WR,1), "%",
+            " | nEff=", totalUsed, " histTP1=", DoubleToString(histTP1,1), "%",
+            " w1=", DoubleToString(w1,2), " w2=", DoubleToString(w2,2),
+            " w3=", DoubleToString(w3,2));
    }
 
    //=================================================================
@@ -1422,7 +1508,7 @@ void CalculateProbability(int currentSignalIndex)
                " tw=", DoubleToString(tw,3), " wB1=", DoubleToString(wB1,3),
                " t1tw=", DoubleToString(t1_tw,2), " t2tw=", DoubleToString(t2_tw,2),
                " t3t=", t3_t, " t3b1=", DoubleToString(t3_b1,1),
-               " rawN12=", rawCount12, " minSmp=", minSamples, " probTP1=", g_currentProb.probTP1);
+               " prelimNEff=", DoubleToString(prelimNEff,1), " minSmp=", minSamples, " probTP1=", g_currentProb.probTP1);
       if(barsAgo > 0 && (g_currentProb.avgBarsToTP1 > 0 || g_currentProb.avgBarsToSL > 0))
          ApplyTimeDecay(barsAgo);
    }

@@ -75,9 +75,8 @@ input bool   InpUseRegimeFilter  = false;  // Use market regime filter
 //| INPUT GROUP: Session Hard Block                                    |
 //+------------------------------------------------------------------+
 input string inp_grp_sess_hard   = "=== Session Hard Block ==="; // ---
-input bool   InpHardCase6Asian   = false;   // Block Case 6 in Asian/DeadZone session
-input bool   InpHardCase6LateNY  = false;   // Block Case 6 in LateNY session
-input bool   InpHardM1Overlap    = false;   // M1: allow signals in Overlap session only
+input bool   InpHardCase6Asian   = true;   // Block Case 6 in Asian/DeadZone session
+input bool   InpHardCase6LateNY  = true;   // Block Case 6 in LateNY session
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Case Filters                                          |
