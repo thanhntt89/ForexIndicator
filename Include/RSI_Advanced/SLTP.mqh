@@ -10,9 +10,11 @@
 #define RSI_ADV_SLTP_MQH
 
 #include "Config.mqh"
+#include "Globals.mqh"
 #include "Normalize.mqh"
 #include "IntermarketAnalysis.mqh"
 #include "WalkForward.mqh"
+#include "TFConfig.mqh"
 
 double GetATRValue(int barShift)
 { return(iATR(NULL, 0, InpATRPeriod, barShift)); }
@@ -107,6 +109,65 @@ void FindSwingRange(bool isBuy, int barIndex,
 }
 
 //+------------------------------------------------------------------+
+//| SL multiplier per case × TF group                                  |
+//| Returns multiplier to apply on InpSLRatio.                         |
+//| Bounded [0.70, 1.40] — never extreme override of user config.      |
+//| Logic:                                                             |
+//|   Reversal (1/5): tight — entry at extreme, invalidation clear     |
+//|   Divergence (2/3): moderate — lag means needs small extra room    |
+//|   Trend (4): wide — pullbacks before continuation are normal       |
+//|   TrendCont (6): wide — continuation has shallow pullback risk     |
+//|   Sideway (7): tightest — breaks cleanly or fails fast             |
+//|   Higher TF: slightly wider (more structural noise per ATR)        |
+//+------------------------------------------------------------------+
+double GetCaseTFSLMultiplier(int caseNum, int tf)
+{
+   double mult = 1.0;
+   if(tf <= TF_M5)
+   {
+      if(caseNum==1||caseNum==5) mult=0.80;
+      else if(caseNum==2||caseNum==3) mult=0.95;
+      else if(caseNum==4) mult=1.05;
+      else if(caseNum==6) mult=1.10;
+      else if(caseNum==7) mult=0.70;
+   }
+   else if(tf <= TF_M30)
+   {
+      if(caseNum==1||caseNum==5) mult=0.85;
+      else if(caseNum==2||caseNum==3) mult=1.00;
+      else if(caseNum==4) mult=1.10;
+      else if(caseNum==6) mult=1.10;
+      else if(caseNum==7) mult=0.80;
+   }
+   else if(tf <= TF_H1)
+   {
+      if(caseNum==1||caseNum==5) mult=0.90;
+      else if(caseNum==2||caseNum==3) mult=1.00;
+      else if(caseNum==4) mult=1.15;
+      else if(caseNum==6) mult=1.10;
+      else if(caseNum==7) mult=0.85;
+   }
+   else if(tf <= TF_H4)
+   {
+      if(caseNum==1||caseNum==5) mult=0.95;
+      else if(caseNum==2||caseNum==3) mult=1.05;
+      else if(caseNum==4) mult=1.20;
+      else if(caseNum==6) mult=1.15;
+      else if(caseNum==7) mult=0.90;
+   }
+   else // D1+
+   {
+      if(caseNum==1||caseNum==5) mult=1.00;
+      else if(caseNum==2||caseNum==3) mult=1.10;
+      else if(caseNum==4) mult=1.25;
+      else if(caseNum==6) mult=1.20;
+      else if(caseNum==7) mult=0.95;
+      else mult=1.05;
+   }
+   return(MathMax(0.70, MathMin(1.40, mult)));
+}
+
+//+------------------------------------------------------------------+
 //|        METHOD 0: ATR-BASED (Wilder + Van Tharp)                    |
 //+------------------------------------------------------------------+
 void CalculateSLTP_ATR(bool isBuy, int barNS, double entry,
@@ -117,19 +178,16 @@ void CalculateSLTP_ATR(bool isBuy, int barNS, double entry,
    int bs = total - 1 - barNS;
    outATR = GetATRValue(bs);
 
-   // [CASE-SL] Case+TF SL ratio override — tighter/wider stop by case
-   double slRatio = InpSLRatio;
-   if(caseNum == 7 && Period() == TF_M5) slRatio = 1.2;  // Sideway break M5: tight stop
-   if(caseNum == 6 && Period() == TF_M5) slRatio = 2.2;  // Trend cont M5: wide stop
+   double slRatio = GetActiveSLRatio() * GetCaseTFSLMultiplier(caseNum, Period());
 
    double atrSL = outATR * slRatio;
    double spreadBuf = GetNormalizedSpreadBuffer();
    double structBuf = outATR * 0.1;
    double totalBuf = spreadBuf + structBuf;
 
-   double tp1D = outATR * InpTPRatio;
-   double tp2D = outATR * InpTPRatio * InpTP2Multiplier;
-   double tp3D = outATR * InpTPRatio * InpTP3Multiplier;
+   double tp1D = outATR * GetActiveTPRatio();
+   double tp2D = outATR * GetActiveTPRatio() * GetActiveTP2Mult();
+   double tp3D = outATR * GetActiveTPRatio() * GetActiveTP3Mult();
    double minSL = GetMinSLDistance();
 
    if(isBuy)
@@ -167,7 +225,7 @@ void CalculateSLTP_Fibonacci(bool isBuy, int barNS, double entry,
    double spreadBuf = GetNormalizedSpreadBuffer();
    double minSL = GetMinSLDistance();
 
-   int fibLookback = MathMax(InpSLSwingLookback, 30);
+   int fibLookback = MathMax(GetActiveSLSwingLB(), 30);
    double swingHigh = 0, swingLow = 0;
    FindSwingRange(isBuy, barNS, hi, lo, fibLookback, swingHigh, swingLow);
    double swingRange = swingHigh - swingLow;
@@ -209,17 +267,14 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
    double totalBuf = spreadBuf + structBuf;
    double minSL = GetMinSLDistance();
 
-   // [CASE-SL] Case+TF SL ratio override
-   double slRatio = InpSLRatio;
-   if(caseNum == 7 && Period() == TF_M5) slRatio = 1.2;
-   if(caseNum == 6 && Period() == TF_M5) slRatio = 2.2;
+   double slRatio = GetActiveSLRatio() * GetCaseTFSLMultiplier(caseNum, Period());
 
    double atrSLDist = outATR * slRatio;
-   double atrTP1 = outATR * InpTPRatio;
-   double atrTP2 = outATR * InpTPRatio * InpTP2Multiplier;
-   double atrTP3 = outATR * InpTPRatio * InpTP3Multiplier;
+   double atrTP1 = outATR * GetActiveTPRatio();
+   double atrTP2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult();
+   double atrTP3 = outATR * GetActiveTPRatio() * GetActiveTP3Mult();
 
-   int fibLookback = MathMax(InpSLSwingLookback, 30);
+   int fibLookback = MathMax(GetActiveSLSwingLB(), 30);
    double swingHigh = 0, swingLow = 0;
    FindSwingRange(isBuy, barNS, hi, lo, fibLookback, swingHigh, swingLow);
    double swingRange = MathMax(swingHigh - swingLow, outATR);
@@ -265,125 +320,200 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
 //| Phase 2: Deep history scan (max samples via GetTPMeasurementBars)  |
 //| Returns percentile-based ratios: 50th, 75th, 90th                 |
 //+------------------------------------------------------------------+
-void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
-                             double &tp1Ratio, double &tp2Ratio, double &tp3Ratio)
+// [BUG2-FIX] RSI range filter for Phase 2 deep scan, per case and filter level.
+// Level 1: case-specific (most accurate, fewest samples).
+// Level 2: case-group reversal vs trend (fallback).
+// Level 3: direction-only (original broad filter, last resort).
+bool _TPRatioRSIFilter(double rsi, double rsiPrev, bool isBuy, int caseNum, int level)
 {
-   tp1Ratio = InpTPRatio;
-   tp2Ratio = InpTPRatio * InpTP2Multiplier;
-   tp3Ratio = InpTPRatio * InpTP3Multiplier;
+   if(level == 1)
+   {
+      if(isBuy) {
+         if((caseNum==1||caseNum==5) && rsi<33 && rsi>12 && rsi>rsiPrev) return(true);
+         if((caseNum==2||caseNum==3) && rsi<42 && rsi>18 && rsi>rsiPrev) return(true);
+         if((caseNum==4||caseNum==7) && rsi>47 && rsi<53 && rsi>rsiPrev) return(true);
+         if(caseNum==6 && rsi>42 && rsi<62 && rsi>rsiPrev) return(true);
+         if(caseNum<=0 && rsi<48 && rsi>18 && rsi>rsiPrev) return(true);
+      } else {
+         if((caseNum==1||caseNum==5) && rsi>67 && rsi<88 && rsi<rsiPrev) return(true);
+         if((caseNum==2||caseNum==3) && rsi>58 && rsi<82 && rsi<rsiPrev) return(true);
+         if((caseNum==4||caseNum==7) && rsi>47 && rsi<53 && rsi<rsiPrev) return(true);
+         if(caseNum==6 && rsi>38 && rsi<58 && rsi<rsiPrev) return(true);
+         if(caseNum<=0 && rsi>52 && rsi<82 && rsi<rsiPrev) return(true);
+      }
+      return(false);
+   }
+   if(level == 2)
+   {
+      // Reversal group (1/2/3/5): extreme RSI. Trend group (4/6/7): mid RSI.
+      bool isReversal=(caseNum==1||caseNum==2||caseNum==3||caseNum==5);
+      bool isTrend=(caseNum==4||caseNum==6||caseNum==7);
+      if(isBuy) {
+         if(isReversal && rsi<42 && rsi>12 && rsi>rsiPrev) return(true);
+         if(isTrend    && rsi<55 && rsi>35 && rsi>rsiPrev) return(true);
+         if(!isReversal && !isTrend && rsi<48 && rsi>18 && rsi>rsiPrev) return(true);
+      } else {
+         if(isReversal && rsi>58 && rsi<88 && rsi<rsiPrev) return(true);
+         if(isTrend    && rsi>45 && rsi<65 && rsi<rsiPrev) return(true);
+         if(!isReversal && !isTrend && rsi>52 && rsi<82 && rsi<rsiPrev) return(true);
+      }
+      return(false);
+   }
+   // Level 3: direction-only (original behavior)
+   if(isBuy  && rsi<45 && rsi>15 && rsi>rsiPrev) return(true);
+   if(!isBuy && rsi>55 && rsi<85 && rsi<rsiPrev) return(true);
+   return(false);
+}
 
+// [BUG2-FIX] Minimum moveCount per level per TF before using that level's result.
+int _TPRatioMinSamples(int level, int tf)
+{
+   if(level == 1)
+   {
+      if(tf <= TF_M5)  return(60);
+      if(tf <= TF_H1)  return(25);
+      if(tf <= TF_H4)  return(15);
+      return(10);
+   }
+   if(level == 2)
+   {
+      if(tf <= TF_M5)  return(100);
+      if(tf <= TF_H1)  return(45);
+      if(tf <= TF_H4)  return(25);
+      return(15);
+   }
+   // Level 3
+   return(30);
+}
+
+void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
+                             double &tp1Ratio, double &tp2Ratio, double &tp3Ratio,
+                             int caseNum = 0)
+{
+   tp1Ratio = GetActiveTPRatio();
+   tp2Ratio = GetActiveTPRatio() * GetActiveTP2Mult();
+   tp3Ratio = GetActiveTPRatio() * GetActiveTP3Mult();
+
+   int tf     = Period();
    int maxFwd = GetMaxForwardBarsForTimeframe();
-   int tpScanBars = GetTPMeasurementBars();
+   int timeBasedMax = MathMax(1440 / MathMax(tf, 1), maxFwd);
 
-   double moveRatios[];
-   int moveCount = 0;
-   int timeBasedMax = 1440 / MathMax(_Period, 1);
-
-   //--- Phase 1: Actual signals
-   for(int s = 0; s < g_signalCount; s++)
+   // IS/OOS split — same as MeasureEdgeFromHistory, measure on IS signals only
+   int splitIdx = g_signalCount;
+   if(InpUseWalkForward && g_signalCount >= 10)
    {
-      if(g_signals[s].isBuySignal != isBuy) continue;
-      
-      timeBasedMax = MathMax(timeBasedMax, maxFwd);
-      if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
-
-      double sigEntry = g_signals[s].entryPrice;
-      double sigATR   = g_signals[s].atrValue;
-      double sigSL    = g_signals[s].stopLoss;
-      if(sigATR <= 0) continue;
-
-      double maxFav = 0;
-      for(int b = g_signals[s].barIndex + 1;
-         b < g_signals[s].barIndex + timeBasedMax && b < Bars; b++)
-      {
-         int bs = Bars - 1 - b;
-         if(bs < 0) break;
-         double bH = iHigh(NULL, 0, bs);
-         double bL = iLow(NULL, 0, bs);
-         double fav = isBuy ? (bH - sigEntry) : (sigEntry - bL);
-         if(fav > maxFav) maxFav = fav;
-         if(isBuy && bL <= sigSL) break;
-         if(!isBuy && bH >= sigSL) break;
-      }
-
-      if(maxFav > 0)
-      {
-         moveCount++;
-         // [PERF-FIX P2-4] Reserve 64 slots to avoid O(n) realloc per signal
-         ArrayResize(moveRatios, moveCount, 64);
-         moveRatios[moveCount - 1] = maxFav / sigATR;
-      }
+      double oosPct = MathMax(10.0, MathMin(30.0, (double)InpOOSPercent));
+      splitIdx = (int)(g_signalCount * (100.0 - oosPct) / 100.0);
+      if(splitIdx < 5) splitIdx = g_signalCount;
    }
 
-   //--- Phase 2: Deep history (all available bars per TF)
-   int deepStart = MathMax(InpRSIPeriod + 10, totalBars - tpScanBars);
-   if(deepStart < 0) deepStart = 0;
-   int deepEnd = totalBars - maxFwd - 10;
+   // Time-based cutoff (same window as MeasureEdgeFromHistory)
+   int edgeMaxDays = (tf <= TF_M5) ? 60 : (tf <= TF_H1) ? 180 : 365;
+   datetime edgeCutoffTime = TimeCurrent() - edgeMaxDays * 86400;
 
-   for(int i = deepStart; i < deepEnd && moveCount < 500; i++)
+   // Try levels 1→2→3, accept first that has enough samples
+   for(int level = 1; level <= 3; level++)
    {
-      int bs = totalBars - 1 - i;
-      if(bs < 0) continue;
+      double moveRatios[];
+      int moveCount = 0;
 
-      double rsi = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs);
-      double atr = iATR(NULL, 0, InpATRPeriod, bs);
-      if(rsi == 0 || atr == 0) continue;
-
-      bool rel = false;
-      if(isBuy && rsi < 45 && rsi > 15) rel = true;
-      if(!isBuy && rsi > 55 && rsi < 85) rel = true;
-      if(!rel) continue;
-
-      double rsiPrev = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs + 1);
-      if(rsiPrev == 0) continue;
-      if(isBuy && rsi <= rsiPrev) continue;
-      if(!isBuy && rsi >= rsiPrev) continue;
-
-      double entryP = iClose(NULL, 0, bs);
-      double slDist = atr * InpSLRatio;
-      double maxFav = 0;
-
-      for(int b = i + 1; b < i + timeBasedMax && b < deepEnd; b++)
+      //--- Phase 1: Actual IS signals
+      for(int s = 0; s < splitIdx; s++)
       {
-         int fbs = totalBars - 1 - b;
-         if(fbs < 0) break;
-         double bH = iHigh(NULL, 0, fbs);
-         double bL = iLow(NULL, 0, fbs);
-         double fav = isBuy ? (bH - entryP) : (entryP - bL);
-         if(fav > maxFav) maxFav = fav;
-         if(isBuy && (entryP - bL) > slDist) break;
-         if(!isBuy && (bH - entryP) > slDist) break;
+         if(g_signals[s].isBuySignal != isBuy) continue;
+         if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
+         double sigEntry = g_signals[s].entryPrice;
+         double sigATR   = g_signals[s].atrValue;
+         double sigSL    = g_signals[s].stopLoss;
+         if(sigATR <= 0) continue;
+         // Case filter for Phase 1 actual signals
+         if(level == 1 && caseNum > 0 && g_signals[s].caseNumber != caseNum) continue;
+         if(level == 2)
+         {
+            bool isRev=(caseNum==1||caseNum==2||caseNum==3||caseNum==5);
+            bool isTrend=(caseNum==4||caseNum==6||caseNum==7);
+            bool sigRev=(g_signals[s].caseNumber==1||g_signals[s].caseNumber==2||
+                         g_signals[s].caseNumber==3||g_signals[s].caseNumber==5);
+            bool sigTrend=(g_signals[s].caseNumber==4||g_signals[s].caseNumber==6||
+                           g_signals[s].caseNumber==7);
+            if(isRev && !sigRev) continue;
+            if(isTrend && !sigTrend) continue;
+         }
+
+         double maxFav = 0;
+         for(int b = g_signals[s].barIndex + 1;
+            b < g_signals[s].barIndex + timeBasedMax && b < Bars; b++)
+         {
+            int bs = Bars - 1 - b; if(bs < 0) break;
+            double bH = iHigh(NULL, 0, bs), bL = iLow(NULL, 0, bs);
+            double fav = isBuy ? (bH - sigEntry) : (sigEntry - bL);
+            if(fav > maxFav) maxFav = fav;
+            if(isBuy  && bL <= sigSL) break;
+            if(!isBuy && bH >= sigSL) break;
+         }
+         if(maxFav > 0)
+         {
+            moveCount++;
+            ArrayResize(moveRatios, moveCount, 64);
+            moveRatios[moveCount-1] = maxFav / sigATR;
+         }
       }
 
-      if(maxFav > 0)
+      //--- Phase 2: Deep history NEW→OLD with time cutoff
+      int phase1Start  = MathMax(0, Bars - InpMaxBars);
+      int deepEnd      = totalBars - maxFwd - 10;
+      int deepUpperBound = MathMin(phase1Start, deepEnd);
+
+      for(int i = deepUpperBound-1; i >= InpRSIPeriod+10 && moveCount < 500; i--)
       {
-         moveCount++;
-         // [PERF-FIX P2-4] Reserve 64 slots to avoid O(n) realloc per deep-history bar
-         ArrayResize(moveRatios, moveCount, 64);
-         moveRatios[moveCount - 1] = maxFav / atr;
+         int bs = totalBars - 1 - i; if(bs < 0) continue;
+         if(iTime(NULL, 0, bs) < edgeCutoffTime) break; // NEW→OLD: all remaining are older
+
+         double rsi     = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs);
+         double rsiPrev = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs+1);
+         double atr     = iATR(NULL, 0, InpATRPeriod, bs);
+         if(rsi==0 || rsiPrev==0 || atr==0) continue;
+
+         if(!_TPRatioRSIFilter(rsi, rsiPrev, isBuy, caseNum, level)) continue;
+
+         double entryP = iClose(NULL, 0, bs);
+         double slDist = atr * GetActiveSLRatio();
+         double maxFav = 0;
+         for(int b = i+1; b < i+timeBasedMax && b < deepEnd; b++)
+         {
+            int fbs = totalBars - 1 - b; if(fbs < 0) break;
+            double bH = iHigh(NULL, 0, fbs), bL = iLow(NULL, 0, fbs);
+            double fav = isBuy ? (bH - entryP) : (entryP - bL);
+            if(fav > maxFav) maxFav = fav;
+            if(isBuy  && (entryP - bL) > slDist) break;
+            if(!isBuy && (bH - entryP) > slDist) break;
+         }
+         if(maxFav > 0)
+         {
+            moveCount++;
+            ArrayResize(moveRatios, moveCount, 64);
+            moveRatios[moveCount-1] = maxFav / atr;
+         }
       }
+
+      // Accept this level if enough samples; else try next level
+      if(moveCount < _TPRatioMinSamples(level, tf)) continue;
+
+      ArraySort(moveRatios);
+      int tgt[3];
+      tgt[0] = MathMax(0, MathMin((int)(moveCount*0.50), moveCount-1));
+      tgt[1] = MathMax(0, MathMin((int)(moveCount*0.75), moveCount-1));
+      tgt[2] = MathMax(0, MathMin((int)(moveCount*0.90), moveCount-1));
+      tp1Ratio = moveRatios[tgt[0]];
+      tp2Ratio = moveRatios[tgt[1]];
+      tp3Ratio = moveRatios[tgt[2]];
+
+      tp1Ratio = MathMax(tp1Ratio, GetActiveSLRatio());
+      if(tp2Ratio <= tp1Ratio) tp2Ratio = tp1Ratio * 1.5;
+      if(tp3Ratio <= tp2Ratio) tp3Ratio = tp2Ratio * 1.3;
+      return; // done
    }
-
-   if(moveCount < 30) return;
-
-   // [PERF-FIX P3] Replace O(n^2) partial selection sort with O(n log n) ArraySort.
-   // The old code ran nested loops up to target index for 3 percentiles.
-   ArraySort(moveRatios);
-   int targets[3];
-   targets[0] = MathMax(0, MathMin((int)(moveCount * 0.50), moveCount - 1));
-   targets[1] = MathMax(0, MathMin((int)(moveCount * 0.75), moveCount - 1));
-   targets[2] = MathMax(0, MathMin((int)(moveCount * 0.90), moveCount - 1));
-   double results[3] = {0, 0, 0};
-   for(int t = 0; t < 3; t++)
-      results[t] = moveRatios[targets[t]];
-
-   tp1Ratio = results[0];
-   tp2Ratio = results[1];
-   tp3Ratio = results[2];
-
-   tp1Ratio = MathMax(tp1Ratio, InpSLRatio);
-   if(tp2Ratio <= tp1Ratio) tp2Ratio = tp1Ratio * 1.5;
-   if(tp3Ratio <= tp2Ratio) tp3Ratio = tp2Ratio * 1.3;
+   // Level 4: not enough data at any level — return parametric (already set at top)
 }
 
 
@@ -395,12 +525,12 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
                    double &outSL, double &outTP1, double &outTP2, double &outTP3,
                    double &outATR, int caseNum = 0)
 {
-   // Measure optimal TP ratios from actual market data
+   // Measure optimal TP ratios from actual market data (case-specific, IS-only, NEW→OLD)
    double optTP1, optTP2, optTP3;
-   MeasureOptimalTPRatios(isBuy, barNS, total, optTP1, optTP2, optTP3);
+   MeasureOptimalTPRatios(isBuy, barNS, total, optTP1, optTP2, optTP3, caseNum);
 
    // Calculate SL/TP using selected method
-   switch(InpSLTPMethod)
+   switch(GetActiveSLTPMethod())
    {
       case SLTP_FIBONACCI:
          CalculateSLTP_Fibonacci(isBuy, barNS, entry, hi, lo, total,
@@ -416,30 +546,57 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
          break;
    }
 
-   // Apply measured TP if significantly different from method TP
-   // Use CLOSER TP (more achievable)
-   // Ngưỡng tương đối 15% thay vì tuyệt đối
-   if(MathAbs(optTP1 - InpTPRatio) / MathMax(InpTPRatio, 0.1) > 0.15)
-   {
-      double mTP1 = entry + (isBuy ? 1 : -1) * outATR * optTP1;
-      double mTP2 = entry + (isBuy ? 1 : -1) * outATR * optTP2;
-      double mTP3 = entry + (isBuy ? 1 : -1) * outATR * optTP3;
+   // [BUG1-FIX] Bayesian shrinkage + conservative gate.
+   // Old code: always replace with measured TP regardless of direction.
+   // New: blend measured toward parametric (shrinkage), then only apply if blended
+   // is CLOSER to entry than method TP (conservative — measured may only tighten, not widen).
+   // Shrinkage prior k scales with TF: higher TF has fewer samples → heavier prior.
+   // Clip: [InpSLRatio*0.8, InpTPRatio*2.0] prevents extreme outlier regimes.
+   int tf = Period();
+   double k_tf = (tf <= TF_M5) ? 50 : (tf <= TF_M30) ? 80 :
+                 (tf <= TF_H1) ? 180 : (tf <= TF_H4) ? 300 : 600;
 
+   // Approximate moveCount credibility from ratio (MeasureOptimalTPRatios already
+   // only returns non-parametric when samples passed minSamples threshold).
+   // Use ratio deviation as proxy: if optTP1==InpTPRatio, no data was applied (L4).
+   bool measuredApplied = (MathAbs(optTP1 - GetActiveTPRatio()) > 0.01 ||
+                           MathAbs(optTP2 - GetActiveTPRatio()*GetActiveTP2Mult()) > 0.01);
+   if(measuredApplied)
+   {
+      // Estimate sample count proxy from level used (conservative: assume min threshold)
+      int minSamp = _TPRatioMinSamples(1, tf); // level 1 min as conservative proxy
+      double credibility = MathMin(1.0, (double)minSamp / (minSamp + k_tf));
+
+      double b1 = optTP1 * credibility + GetActiveTPRatio() * (1.0 - credibility);
+      double b2 = optTP2 * credibility + GetActiveTPRatio()*GetActiveTP2Mult()*(1.0-credibility);
+      double b3 = optTP3 * credibility + GetActiveTPRatio()*GetActiveTP3Mult()*(1.0-credibility);
+
+      // Hard clip: measured ratio bounded within [SLRatio*0.8, TPRatio*2.0]
+      b1 = MathMax(GetActiveSLRatio()*0.8, MathMin(GetActiveTPRatio()*2.0, b1));
+      b2 = MathMax(b1, MathMin(GetActiveTPRatio()*2.5, b2));
+      b3 = MathMax(b2, MathMin(GetActiveTPRatio()*3.0, b3));
+
+      double mTP1 = entry + (isBuy ? 1.0 : -1.0) * outATR * b1;
+      double mTP2 = entry + (isBuy ? 1.0 : -1.0) * outATR * b2;
+      double mTP3 = entry + (isBuy ? 1.0 : -1.0) * outATR * b3;
+
+      // Conservative gate: only apply if blended TP is closer to entry than method TP.
+      // Closer = more achievable = lower risk of TP not being hit.
       if(isBuy)
       {
-         outTP1 = mTP1;
-         outTP2 = mTP2;
-         outTP3 = mTP3;
-         if(outTP2 < outTP1) outTP2 = outTP1 + outATR * 0.5;
-         if(outTP3 < outTP2) outTP3 = outTP2 + outATR * 0.5;
+         if(mTP1 < outTP1) outTP1 = mTP1;
+         if(mTP2 < outTP2) outTP2 = mTP2;
+         if(mTP3 < outTP3) outTP3 = mTP3;
+         if(outTP2 <= outTP1) outTP2 = outTP1 + outATR * 0.5;
+         if(outTP3 <= outTP2) outTP3 = outTP2 + outATR * 0.5;
       }
       else
       {
-         outTP1 = mTP1;
-         outTP2 = mTP2;
-         outTP3 = mTP3;
-         if(outTP2 > outTP1) outTP2 = outTP1 - outATR * 0.5;
-         if(outTP3 > outTP2) outTP3 = outTP2 - outATR * 0.5;
+         if(mTP1 > outTP1) outTP1 = mTP1;
+         if(mTP2 > outTP2) outTP2 = mTP2;
+         if(mTP3 > outTP3) outTP3 = mTP3;
+         if(outTP2 >= outTP1) outTP2 = outTP1 - outATR * 0.5;
+         if(outTP3 >= outTP2) outTP3 = outTP2 - outATR * 0.5;
       }
    }
 }
@@ -772,7 +929,7 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       g_entryZones[z].zoneName = "";
    }
 
-   int maxZones = MathMax(2, MathMin(5, InpEntryZoneCount));
+   int maxZones = MathMax(2, MathMin(5, GetActiveZoneCount()));
    double moveHeight = MathAbs(marketEntry - sl);
 
    // DATA-DRIVEN minSLDist: from broker data, not hardcoded ratio
@@ -787,7 +944,7 @@ void CalculateEntryZones(bool isBuy, int barIndex,
 
    double effectiveSL = ValidateSLAgainstVolume(isBuy, sl, marketEntry,
                                                  hi, lo, barIndex,
-                                                 InpPriceDistLookback, atr);
+                                                 GetActivePriceDistLB(), atr);
 
    if(isBuy)
       effectiveSL = MathMin(effectiveSL, sl);
@@ -803,7 +960,7 @@ void CalculateEntryZones(bool isBuy, int barIndex,
    // beyond the visible SL line. effectiveSL may be expanded by ValidateSLAgainstVolume
    // and is kept only for per-zone slDistance (lot sizing).
    AnalyzePriceDistribution(isBuy, barIndex, marketEntry, sl,
-                             hi, lo, InpPriceDistLookback,
+                             hi, lo, GetActivePriceDistLB(),
                              maxZones, pullbackPrices, pullbackProbs);
 
    int bar = totalBars - 1 - barIndex;
@@ -836,7 +993,7 @@ void CalculateEntryZones(bool isBuy, int barIndex,
 
    double accountBalance = AccountBalance();
    if(accountBalance <= 0) accountBalance = 1000;
-   double totalRisk = accountBalance * InpTotalRiskPercent / 100.0;
+   double totalRisk = accountBalance * GetActiveRiskPct() / 100.0;
 
    g_entryZones[0].price = marketEntry;
    g_entryZones[0].zoneName = "Market";

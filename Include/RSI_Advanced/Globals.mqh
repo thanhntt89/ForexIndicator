@@ -231,4 +231,23 @@ void UpdateTPHitStatus(int sigIdx)
    }
 }
 
+//+------------------------------------------------------------------+
+//| TF Auto-Config computed globals                                    |
+//| Set by ApplyTFAutoConfig() in TFConfig.mqh.                       |
+//| When InpAutoTFConfig=false these mirror the manual input values.  |
+//+------------------------------------------------------------------+
+double g_cfgSLRatio        = 2.0;
+double g_cfgTPRatio        = 4.0;
+double g_cfgTP2Mult        = 1.5;
+double g_cfgTP3Mult        = 2.0;
+int    g_cfgSLTPMethod     = 2;   // SLTP_HYBRID
+int    g_cfgSLSwingLB      = 20;
+double g_cfgMinScore       = 40.0;
+int    g_cfgCooldownBars   = 5;
+int    g_cfgMinMTFAgree    = 40;
+double g_cfgRiskPct        = 1.0;
+int    g_cfgZoneCount      = 3;
+int    g_cfgPriceDistLB    = 50;
+bool   g_cfgCaseEnabled[8];  // index 0-7 → Case 0-7
+
 #endif

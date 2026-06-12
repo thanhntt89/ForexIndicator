@@ -155,6 +155,9 @@ int OnInit()
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
 
+   // Apply auto TF config profile (scalping params per TF when InpAutoTFConfig=true)
+   ApplyTFAutoConfig();
+
    // [GMT-FIX-B3] Initialize H4 candle normalization
    g_gmtNormActive = ShouldNormalizeH4();
    g_gmtBrokerOffset = GetBrokerGMTOffset();
@@ -378,13 +381,14 @@ int OnCalculate(const int rates_total,
       bool strongAngleDown  = (greenDelta <= -adaptiveThresh);
 
       // Cooldown: skip if too close to previous signal
-      if(InpCooldownBars > 0 && g_signalCount > 0)
+      int _cooldown = GetActiveCooldownBars();
+      if(_cooldown > 0 && g_signalCount > 0)
       {
          int lastBar = g_signals[g_signalCount-1].barIndex;
          int stableAnchor = rates_total - 500;
          if(InpMaxBars > 500 && lastBar < stableAnchor && i >= stableAnchor)
          { /* crossing anchor — don't carry cooldown from deep history */ }
-         else if(i - lastBar < InpCooldownBars) continue;
+         else if(i - lastBar < _cooldown) continue;
       }
 
       // [SESSION-HARD] Pre-detection: session block for Case 6 filtering
@@ -393,37 +397,37 @@ int OnCalculate(const int rates_total,
       int buySignal  = 0;
       int sellSignal = 0;
       // Priority: Case 6→2→4→3→1→5→7 (optimized for M1/M5)
-      if(InpEnableCase6 && buySignal == 0 && sellSignal == 0)
+      if(GetActiveCaseEnabled(6) && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase6_Buy(i))       buySignal  = 6;
          else if(CheckCase6_Sell(i)) sellSignal = 6;
       }
-      if(InpEnableCase2 && buySignal == 0 && sellSignal == 0)
+      if(GetActiveCaseEnabled(2) && buySignal == 0 && sellSignal == 0)
       {
          if(greenCrossUp && strongAngleUp && CheckCase2_Buy(i, low))          buySignal = 2;
          else if(greenCrossDown && strongAngleDown && CheckCase2_Sell(i, high)) sellSignal = 2;
       }
-      if(InpEnableCase4 && buySignal == 0 && sellSignal == 0)
+      if(GetActiveCaseEnabled(4) && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase4_Buy(i))       buySignal  = 4;
          else if(CheckCase4_Sell(i)) sellSignal = 4;
       }
-      if(InpEnableCase3 && buySignal == 0 && sellSignal == 0)
+      if(GetActiveCaseEnabled(3) && buySignal == 0 && sellSignal == 0)
       {
          if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low))          buySignal = 3;
          else if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high)) sellSignal = 3;
       }
-      if(InpEnableCase1 && buySignal == 0 && sellSignal == 0)
+      if(GetActiveCaseEnabled(1) && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase1_Buy(i))       buySignal  = 1;
          else if(CheckCase1_Sell(i)) sellSignal = 1;
       }
-      if(InpEnableCase5 && buySignal == 0 && sellSignal == 0)
+      if(GetActiveCaseEnabled(5) && buySignal == 0 && sellSignal == 0)
       {
          if(greenCrossUp && strongAngleUp && CheckCase5_Buy(i))          buySignal = 5;
          else if(greenCrossDown && strongAngleDown && CheckCase5_Sell(i)) sellSignal = 5;
       }
-      if(InpEnableCase7 && buySignal == 0 && sellSignal == 0)
+      if(GetActiveCaseEnabled(7) && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase7_Buy(i))       buySignal  = 7;
          else if(CheckCase7_Sell(i)) sellSignal = 7;

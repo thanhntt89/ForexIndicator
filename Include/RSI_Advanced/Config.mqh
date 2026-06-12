@@ -219,6 +219,15 @@ input bool   InpUseSpreadRegime  = true;          // Monitor spread anomalies
 input double InpSpreadSpikeMulti = 2.0;           // Spread spike threshold (x average)
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: TF Auto-Config                                        |
+//| When enabled, SL/TP ratios, method, case filters, cooldown, risk  |
+//| are automatically adapted to the current chart timeframe using     |
+//| the scalping intraday profile. Set to false to use manual inputs. |
+//+------------------------------------------------------------------+
+input string inp_grp_tfcfg       = "========== TF Auto-Config =========="; // ---
+input bool   InpAutoTFConfig     = true;  // Auto-adapt SL/TP/cases per TF (scalping profile)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Signal Logging                                        |
 //+------------------------------------------------------------------+
 input string inp_grp_log        = "========== Signal Logging =========="; // ---
