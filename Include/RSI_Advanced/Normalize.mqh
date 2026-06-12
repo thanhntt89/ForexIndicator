@@ -206,15 +206,10 @@ int GetUTCHour(datetime localTime)
 // the cached broker GMT offset when TimeGMT() is unavailable.
 datetime GetUTCDatetime(datetime localTime)
 {
-   // Primary: derive offset from live TimeGMT() — handles DST automatically
-   datetime gmtNow = TimeGMT();
-   if(gmtNow > D'2020.01.01')
-   {
-      int offSec = (int)(TimeCurrent() - gmtNow);
-      return(localTime - offSec);
-   }
-   // Fallback: use cached broker GMT offset (already DST-aware via GuessEUBrokerOffset)
-   return(localTime - GetBrokerGMTOffset() * 3600);
+   // DST-aware: use GuessEUBrokerOffset for the specific historical time,
+   // not current offset. Fixes 1-hour error for signals stored in opposite DST season.
+   int offHours = GuessEUBrokerOffset(localTime);
+   return(localTime - offHours * 3600);
 }
 
 // [GENERALIZED] NormalizeCandleToUTC(brokerCandleOpen, tf)
@@ -374,17 +369,6 @@ double GetSessionQualityNormalized(int caseNum, datetime signalTime)
 
    int hour = GetUTCHour(signalTime);
 
-   int localHour = TimeHour(signalTime);
-   int diff = MathAbs(localHour - hour);
-   if(diff > 12) diff = 24 - diff;
-
-   if(diff > 5)
-   {
-      int knownOffset = GetBrokerGMTOffset();
-      if(MathAbs(knownOffset) > 5)
-         return(0.5);
-   }
-
    bool isAsian    = (hour >= 0 && hour < 8);
    bool isLondon   = (hour >= 8 && hour < 12);
    bool isOverlap  = (hour >= 12 && hour < 16);
@@ -409,24 +393,6 @@ double GetSessionQualityNormalized(int caseNum, datetime signalTime)
          if(isOverlap) return(0.7); return(0.5);
    }
    return(0.5);
-}
-
-//+------------------------------------------------------------------+
-//|        SECTION 6: SCORE WEIGHTS                                    |
-//+------------------------------------------------------------------+
-void GetScoreWeights(double &wRSI,double &wVol,double &wVty,double &wSes,double &wMTF,double &wSR)
-{
-   ENUM_INSTRUMENT_TYPE t=DetectInstrumentType();
-   switch(t)
-   {
-      case INST_FOREX_MAJOR: wRSI=0.30;wVol=0.08;wVty=0.15;wSes=0.17;wMTF=0.10;wSR=0.20;break;
-      case INST_FOREX_CROSS: wRSI=0.30;wVol=0.06;wVty=0.14;wSes=0.15;wMTF=0.10;wSR=0.25;break;
-      case INST_GOLD: wRSI=0.28;wVol=0.08;wVty=0.17;wSes=0.12;wMTF=0.10;wSR=0.25;break;
-      case INST_CRYPTO: wRSI=0.30;wVol=0.15;wVty=0.20;wSes=0.00;wMTF=0.10;wSR=0.25;break;
-      case INST_INDEX: wRSI=0.25;wVol=0.12;wVty=0.15;wSes=0.18;wMTF=0.10;wSR=0.20;break;
-      case INST_OIL: wRSI=0.28;wVol=0.10;wVty=0.17;wSes=0.15;wMTF=0.10;wSR=0.20;break;
-      default: wRSI=0.30;wVol=0.10;wVty=0.15;wSes=0.10;wMTF=0.10;wSR=0.25;break;
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -693,11 +659,7 @@ double CombineTheoreticalHistorical(double theoProb, double histProb,
 
    double theoSE = 0.15;
 
-   double credibility = 1.0;
-   if(histSamples < minSamples)
-      credibility = (double)histSamples / (double)minSamples;
-   else if(histSamples < minSamples * 3)
-      credibility = 0.7 + 0.3 * ((double)(histSamples - minSamples) / (double)(minSamples * 2));
+   double credibility = MathMin(1.0, (double)histSamples / (double)minSamples);
 
    double adjustedHistSE = wilsonSE / MathMax(credibility, 0.1);
 
