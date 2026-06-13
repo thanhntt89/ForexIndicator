@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                             LineDrawing.mqh        |
 //|                         RSI Advanced - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
@@ -249,7 +249,12 @@ void DrawZoneLines(bool suppress = false)
 
    if(InpEntryZoneCount < 2) return;
    if(g_validZoneCount < 1) return;
-   double offset = GetCachedATROffset();
+   // Zone label offset: use a tiny fraction of ATR, capped at 1% of zone spacing.
+   // ATR*0.2 (old) was fine for XAUUSD (~2 pip) but pushed BTC labels ~100 pts
+   // above their lines, making Z2 text appear at Z3's level.
+   // With ANCHOR_LEFT_LOWER, offset=0 already places text ABOVE the line price.
+   // We add only a tiny nudge so the text bottom doesn't sit exactly on the line.
+   double atrOffset   = iATR(NULL, 0, 14, 0) * 0.02;  // 2% of ATR (was 20%)
    datetime tagTime = GetTimeFromBarPlusPixels(30);
    for(int z = 0; z < 5; z++)
    {
@@ -265,20 +270,21 @@ void DrawZoneLines(bool suppress = false)
          zColor, zStyle, 1,
          g_entryZones[z].zoneName + " " +
          DoubleToString(g_entryZones[z].price, _Digits));
-      //--- Zone label: tag + prob in ONE object
+      //--- Zone label anchored exactly at zone line with minimal nudge
       string tagText = "Z" + IntegerToString(z + 1) + " " +
                         DoubleToString(g_entryZones[z].price, _Digits);
       if(g_entryZones[z].lotSize > 0)
          tagText += " " + DoubleToString(g_entryZones[z].lotSize, 2) + "lot";
       if(g_entryZones[z].isRecommended && g_entryZones[z].rrRatio > 0)
          tagText += " R:R1:" + DoubleToString(g_entryZones[z].rrRatio, 1);
-      tagText += "  P:" + DoubleToString(g_entryZones[z].probReach * 100, 0) + "%";
+      tagText += "  Reach:" + DoubleToString(g_entryZones[z].probReach * 100, 0) + "%";
+      tagText += " Win:" + DoubleToString(g_entryZones[z].probTP1, 0) + "%";
       if(g_entryZones[z].expectedValue > 0)
          tagText += " EV+" + DoubleToString(g_entryZones[z].expectedValue, 2) + "R *";
       else if(g_entryZones[z].expectedValue != 0)
          tagText += " EV" + DoubleToString(g_entryZones[z].expectedValue, 2) + "R";
       if(ObjectFind(zName + "_T") >= 0) ObjectDelete(zName + "_T");
-      ObjectCreate(zName + "_T", OBJ_TEXT, 0, tagTime, g_entryZones[z].price + offset);
+      ObjectCreate(zName + "_T", OBJ_TEXT, 0, tagTime, g_entryZones[z].price + atrOffset);
       ObjectSetString(0, zName + "_T", OBJPROP_TEXT, tagText);
       ObjectSetInteger(0, zName + "_T", OBJPROP_COLOR, zColor);
       ObjectSetString(0, zName + "_T", OBJPROP_FONT, "Arial Bold");

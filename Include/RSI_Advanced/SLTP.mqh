@@ -1029,11 +1029,23 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       g_entryZones[z].isValid = true;
       g_validZoneCount++;
 
+      double rawReach;
       if(z - 1 < ArraySize(pullbackProbs) && pullbackProbs[z - 1] > 0)
-         g_entryZones[z].probReach = pullbackProbs[z - 1];
+         rawReach = pullbackProbs[z - 1];
       else
-         g_entryZones[z].probReach = MeasureZoneReachProb(
+         rawReach = MeasureZoneReachProb(
             isBuy, marketEntry, g_entryZones[z].price, moveHeight, maxFwd);
+
+      // Distance decay: zones farther from entry are harder to reach.
+      // Exponential decay: distFraction=0 (at entry) → decay=1.0 (no reduction)
+      //                    distFraction=1 (at SL)     → decay=0.135 (86% reduction)
+      // This ensures Z2 (close to entry) always has higher probReach than Z3 (far),
+      // correctly reflecting that a 9-pip pullback is more likely than a 65-pip pullback.
+      double distFraction = (moveHeight > 0)
+         ? MathAbs(marketEntry - g_entryZones[z].price) / moveHeight
+         : 0;
+      double distDecay = MathExp(-distFraction * 2.0);
+      g_entryZones[z].probReach = MathMax(0.05, MathMin(0.90, rawReach * distDecay));
    }
 
    g_recommendedZoneCount = 0;

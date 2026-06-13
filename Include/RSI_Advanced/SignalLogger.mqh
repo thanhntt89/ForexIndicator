@@ -79,6 +79,102 @@ void QueueScoringRow(string row)
 }
 
 //+------------------------------------------------------------------+
+//| Quant helpers — compute log fields from live data                  |
+//+------------------------------------------------------------------+
+
+// Find trend of a specific TF from g_mtfData[] (loop by timeframe value).
+// Returns: 1=bull, -1=bear, 0=neutral/not loaded
+int SL_GetMTFTrendForTF(int targetTF)
+{
+   for(int i = 0; i < g_mtfCount; i++)
+      if(g_mtfData[i].timeframe == targetTF) return(g_mtfData[i].trend);
+   return(0);
+}
+
+// ATR_RATIO: current ATR / 50-bar average ATR — numeric vol regime.
+// 1.0 = normal, <0.7 = quiet, >1.5 = elevated, >1.8 = event
+// Cache per bar — iATR with period 50 creates a separate indicator buffer;
+// caching avoids redundant handle lookups when multiple signals fire on same bar.
+double SL_GetATRRatio(int barShift)
+{
+   static int    s_lastShift = -1;
+   static double s_lastRatio = 1.0;
+   if(barShift == s_lastShift) return(s_lastRatio);
+   s_lastShift = barShift;
+
+   double cur = iATR(NULL, 0, InpATRPeriod, barShift);
+   double avg = iATR(NULL, 0, 50,           barShift);
+   s_lastRatio = (avg > 0 && cur > 0) ? NormalizeDouble(cur / avg, 3) : 1.0;
+   return(s_lastRatio);
+}
+
+// Pip size without depending on Normalize.mqh
+double SL_PipSize()
+{
+   string s = Symbol();
+   if(StringFind(s,"XAU")>=0||StringFind(s,"GOLD")>=0) return(0.1);
+   if(StringFind(s,"XAG")>=0||StringFind(s,"SILVER")>=0) return(0.01);
+   if(StringFind(s,"BTC")>=0||StringFind(s,"ETH")>=0||StringFind(s,"LTC")>=0) return(1.0);
+   if(StringFind(s,"JPY")>=0) return(_Digits<=2 ? _Point : (_Digits==3 ? _Point*10 : _Point));
+   if(StringFind(s,"US30")>=0||StringFind(s,"NAS")>=0||StringFind(s,"SPX")>=0||
+      StringFind(s,"DAX")>=0) return(1.0);
+   return((_Digits==5||_Digits==3) ? _Point*10 : _Point);
+}
+
+// SPREAD_PIPS: absolute spread in pips (not ratio)
+double SL_GetSpreadPips()
+{
+   double pip = SL_PipSize();
+   if(pip <= 0) return(0);
+   return(NormalizeDouble(MarketInfo(Symbol(), MODE_SPREAD) * _Point / pip, 2));
+}
+
+// TIME_IN_SESSION_MIN: minutes elapsed since the session opened
+int SL_GetTimeInSessionMin(datetime signalTime, int sessionBlock)
+{
+   MqlDateTime mdt;
+   TimeToStruct(signalTime, mdt);
+   int sigMinUTC = GetUTCHour(signalTime) * 60 + mdt.min;
+   int sessStartMin;
+   switch(sessionBlock)
+   {
+      case 0: sessStartMin =  0*60; break; // Asian   00:00 UTC
+      case 1: sessStartMin =  8*60; break; // London  08:00 UTC
+      case 2: sessStartMin = 12*60; break; // Overlap 12:00 UTC
+      case 3: sessStartMin = 16*60; break; // LateNY  16:00 UTC
+      default: sessStartMin = 0; break;
+   }
+   int diff = sigMinUTC - sessStartMin;
+   if(diff < 0) diff += 24 * 60;
+   return(diff);
+}
+
+// Check if a TP level was hit between fromBarNS and toBarNS (inclusive).
+// barNS = bar number from most-recent (0=current), same as Bars-1-i convention.
+int SL_CheckTPHit(bool isBuy, double tpLevel, int fromBarNS, int toBarNS)
+{
+   if(tpLevel <= 0) return(0);
+   int lo = MathMin(fromBarNS, toBarNS);
+   int hi = MathMax(fromBarNS, toBarNS);
+   for(int bs = lo; bs <= hi; bs++)
+   {
+      if(bs < 0 || bs >= Bars) continue;
+      if(isBuy  && iHigh(NULL, 0, bs) >= tpLevel) return(1);
+      if(!isBuy && iLow(NULL, 0, bs)  <= tpLevel) return(1);
+   }
+   return(0);
+}
+
+// P&L_PIPS: signed result in pips (positive = profit)
+double SL_CalcPLPips(bool isBuy, double entry, double exitPrice)
+{
+   double pip = SL_PipSize();
+   if(pip <= 0 || entry <= 0 || exitPrice <= 0) return(0);
+   double delta = isBuy ? (exitPrice - entry) : (entry - exitPrice);
+   return(NormalizeDouble(delta / pip, 1));
+}
+
+//+------------------------------------------------------------------+
 //| Helper: Tên timeframe ngắn gọn                                    |
 //+------------------------------------------------------------------+
 string SL_GetTFName()
@@ -190,10 +286,27 @@ string SL_GetScoringPath()
 //+------------------------------------------------------------------+
 int SL_OpenAppend(string path, string header, bool &isNew)
 {
-   // Kiểm tra file tồn tại
    int fCheck = FileOpen(path, FILE_READ|FILE_ANSI|FILE_TXT);
    isNew = (fCheck == INVALID_HANDLE);
-   if(!isNew) FileClose(fCheck);
+
+   if(!isNew)
+   {
+      // Schema version check: count commas in stored header vs expected header.
+      // If column count differs (old file), delete and recreate with new schema.
+      string storedHeader = FileReadString(fCheck);
+      FileClose(fCheck);
+      int storedCols = 0, expectedCols = 0;
+      for(int c = 0; c < StringLen(storedHeader); c++)
+         if(StringGetCharacter(storedHeader, c) == ',') storedCols++;
+      for(int c = 0; c < StringLen(header); c++)
+         if(StringGetCharacter(header, c) == ',') expectedCols++;
+      if(storedCols != expectedCols)
+      {
+         FileDelete(path);
+         isNew = true;
+      }
+   }
+   else FileClose(fCheck);
 
    int mode = isNew ? (FILE_WRITE|FILE_ANSI|FILE_TXT)
                     : (FILE_READ|FILE_WRITE|FILE_ANSI|FILE_TXT);
@@ -201,13 +314,10 @@ int SL_OpenAppend(string path, string header, bool &isNew)
    if(fh == INVALID_HANDLE) return(INVALID_HANDLE);
 
    if(isNew)
-   {
       FileWriteString(fh, header + "\n");
-   }
    else
-   {
       FileSeek(fh, 0, SEEK_END);
-   }
+
    return(fh);
 }
 
@@ -260,40 +370,56 @@ void LogSignalEntry(datetime signalTime,
                     double   tp3,
                     double   atr,
                     int      sessionBlock,
-                    double   angleZ = 0.0)
+                    double   angleZ,
+                    // P1 additions:
+                    double   rsiAtSignal,
+                    double   atrRatio,
+                    double   spreadPips,
+                    int      d1Trend,
+                    int      sltpMethod,
+                    bool     autoConfig,
+                    int      timeInSessionMin)
 {
    if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
-   double slDist    = MathAbs(entry - sl);
-   double tp1Dist   = MathAbs(tp1 - entry);
-   double slDistATR = (atr > 0) ? NormalizeDouble(slDist / atr, 3)  : -1;
-   double tp1DistATR= (atr > 0) ? NormalizeDouble(tp1Dist / atr, 3) : -1;
-   double rrRatio   = (slDist > 0) ? NormalizeDouble(tp1Dist / slDist, 3) : -1;
+   double slDist     = MathAbs(entry - sl);
+   double tp1Dist    = MathAbs(tp1 - entry);
+   double slDistATR  = (atr > 0) ? NormalizeDouble(slDist / atr, 3)  : -1;
+   double tp1DistATR = (atr > 0) ? NormalizeDouble(tp1Dist / atr, 3) : -1;
+   double rrRatio    = (slDist > 0) ? NormalizeDouble(tp1Dist / slDist, 3) : -1;
 
    MqlDateTime sigDt;
    TimeToStruct(signalTime, sigDt);
 
    string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
-              + Symbol()                           + ","
-              + SL_GetTFName()                     + ","
-              + SL_FmtDT(signalTime)               + ","
-              + SL_FmtDT(TimeCurrent())            + ","
-              + (isBuy ? "BUY" : "SELL")           + ","
-              + IntegerToString(caseNum)            + ","
-              + SL_GetCaseName(caseNum)             + ","
-              + DoubleToString(entry, _Digits)      + ","
-              + DoubleToString(sl, _Digits)         + ","
-              + DoubleToString(tp1, _Digits)        + ","
-              + DoubleToString(tp2, _Digits)        + ","
-              + DoubleToString(tp3, _Digits)        + ","
-              + DoubleToString(atr, _Digits)        + ","
-              + DoubleToString(slDistATR, 3)        + ","
-              + DoubleToString(tp1DistATR, 3)       + ","
-              + DoubleToString(rrRatio, 3)          + ","
-              + SL_GetSessionName(sessionBlock)     + ","
-              + DoubleToString(angleZ, 2)           + ","
-              + IntegerToString(sigDt.hour)         + ","
-              + IntegerToString(sigDt.day_of_week);
+              + Symbol()                              + ","
+              + SL_GetTFName()                        + ","
+              + SL_FmtDT(signalTime)                  + ","
+              + SL_FmtDT(TimeCurrent())               + ","
+              + (isBuy ? "BUY" : "SELL")              + ","
+              + IntegerToString(caseNum)               + ","
+              + SL_GetCaseName(caseNum)                + ","
+              + DoubleToString(entry, _Digits)         + ","
+              + DoubleToString(sl, _Digits)            + ","
+              + DoubleToString(tp1, _Digits)           + ","
+              + DoubleToString(tp2, _Digits)           + ","
+              + DoubleToString(tp3, _Digits)           + ","
+              + DoubleToString(atr, _Digits)           + ","
+              + DoubleToString(slDistATR, 3)           + ","
+              + DoubleToString(tp1DistATR, 3)          + ","
+              + DoubleToString(rrRatio, 3)             + ","
+              + SL_GetSessionName(sessionBlock)        + ","
+              + DoubleToString(angleZ, 2)              + ","
+              + IntegerToString(sigDt.hour)            + ","
+              + IntegerToString(sigDt.day_of_week)     + ","
+              // P1 new columns:
+              + DoubleToString(rsiAtSignal, 2)         + ","
+              + DoubleToString(atrRatio, 3)            + ","
+              + DoubleToString(spreadPips, 2)          + ","
+              + IntegerToString(d1Trend)               + ","
+              + IntegerToString(sltpMethod)            + ","
+              + (autoConfig ? "1" : "0")               + ","
+              + IntegerToString(timeInSessionMin);
 
    QueueSignalRow(row);
 }
@@ -309,7 +435,7 @@ void LogOutcomePending(datetime signalTime, int caseNum, bool isBuy)
    string row = SL_BuildSignalID(caseNum, isBuy, signalTime) + ","
               + Symbol()               + ","
               + SL_FmtDT(signalTime)   + ","
-              + "PENDING,0,0,0,PENDING,0,0";
+              + "PENDING,0,0,0,PENDING,0,0,0,0,0"; // TP2_HIT,TP3_HIT,PL_PIPS = 0
 
    QueueOutcomeRow(row);
 }
@@ -326,7 +452,11 @@ void LogOutcomeResolved(datetime signalTime,
                         double   exitPrice,
                         int      barsHeld,
                         double   mfe,
-                        double   mae)
+                        double   mae,
+                        // P1/P3 additions:
+                        int      tp2Hit,
+                        int      tp3Hit,
+                        double   plPips)
 {
    if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
@@ -345,7 +475,11 @@ void LogOutcomeResolved(datetime signalTime,
               + IntegerToString(barsHeld)             + ","
               + reason                                + ","
               + DoubleToString(mfe, _Digits)          + ","
-              + DoubleToString(mae, _Digits);
+              + DoubleToString(mae, _Digits)          + ","
+              // P1/P3 new columns:
+              + IntegerToString(tp2Hit)               + ","
+              + IntegerToString(tp3Hit)               + ","
+              + DoubleToString(plPips, 1);
 
    QueueOutcomeRow(row);
 }
@@ -390,6 +524,30 @@ void CheckAndLogNewlyResolved()
                      ? iLow(NULL, 0, outShift)    // BUY hit SL = low
                      : iHigh(NULL, 0, outShift);  // SELL hit SL = high
 
+      // TP2/TP3 hit detection — look up matching signal for TP2/TP3 levels
+      int tp2Hit = 0, tp3Hit = 0;
+      double plPips = 0;
+      for(int s = 0; s < g_signalCount; s++)
+      {
+         if(g_signals[s].signalTime != g_outcomes[i].signalTime) continue;
+         if(g_signals[s].isBuySignal != g_outcomes[i].isBuy)     continue;
+         // Scan from signal bar+1 to outcome bar (inclusive) for TP2/TP3
+         int sigBS  = Bars - 1 - g_signals[s].barIndex;
+         int outBS  = (outShift >= 0) ? outShift : 0;
+         int scanLo = MathMin(sigBS - 1, outBS);  // bar shifts go from sigBS-1 down
+         int scanHi = outBS;
+         if(scanLo >= 0)
+         {
+            tp2Hit = SL_CheckTPHit(g_signals[s].isBuySignal,
+                                   g_signals[s].takeProfit2, scanHi, scanLo);
+            tp3Hit = SL_CheckTPHit(g_signals[s].isBuySignal,
+                                   g_signals[s].takeProfit3, scanHi, scanLo);
+         }
+         plPips = SL_CalcPLPips(g_outcomes[i].isBuy,
+                                g_outcomes[i].entryPrice, exitPrice);
+         break;
+      }
+
       LogOutcomeResolved(
          g_outcomes[i].signalTime,
          g_outcomes[i].caseNumber,
@@ -399,7 +557,10 @@ void CheckAndLogNewlyResolved()
          exitPrice,
          barsHeld,
          g_outcomes[i].mfe,
-         g_outcomes[i].mae
+         g_outcomes[i].mae,
+         tp2Hit,
+         tp3Hit,
+         plPips
       );
 
       g_outcomes[i].loggedToFile = true;
@@ -416,7 +577,10 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
                         double ev, double rr,
                         int mtfAgreePct, string mtfTrend,
                         double angleZ, int hour, int dow,
-                        double spreadRatio, bool wfRobust)
+                        double spreadRatio, bool wfRobust,
+                        // P2 additions:
+                        int h4Trend,
+                        int h1Trend)
 {
    if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
@@ -434,7 +598,10 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
               + IntegerToString(hour)              + ","
               + IntegerToString(dow)               + ","
               + DoubleToString(spreadRatio, 2)     + ","
-              + (wfRobust ? "1" : "0");
+              + (wfRobust ? "1" : "0")             + ","
+              // P2 new columns:
+              + IntegerToString(h4Trend)           + ","
+              + IntegerToString(h1Trend);
 
    QueueScoringRow(row);
 }
@@ -451,7 +618,9 @@ void FlushLogQueues()
    {
       string header = "SIGNAL_ID,SYMBOL,TF,SIGNAL_TIME,LOG_TIME,DIR,CASE_NUM,CASE_NAME"
                       ",ENTRY,SL,TP1,TP2,TP3,ATR,SL_DIST_ATR,TP1_DIST_ATR,RR_RATIO"
-                      ",SESSION,ANGLE_Z,HOUR,DOW";
+                      ",SESSION,ANGLE_Z,HOUR,DOW"
+                      ",RSI_AT_SIGNAL,ATR_RATIO,SPREAD_PIPS,D1_TREND"
+                      ",SLTP_METHOD,AUTO_CONFIG,TIME_IN_SESSION_MIN";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetSignalPath(), header, isNew);
       if(fh != INVALID_HANDLE)
@@ -468,7 +637,8 @@ void FlushLogQueues()
    if(s_scoringQueueCount > 0)
    {
       string header = "SIGNAL_ID,SCORE,REC_LEVEL,PROB_TP1,PROB_SL,PROB_N,EV,RR"
-                      ",MTF_AGREE_PCT,MTF_TREND,ANGLE_Z,HOUR,DOW,SPREAD_RATIO,WF_ROBUST";
+                      ",MTF_AGREE_PCT,MTF_TREND,ANGLE_Z,HOUR,DOW,SPREAD_RATIO,WF_ROBUST"
+                      ",MTF_H4_TREND,MTF_H1_TREND";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetScoringPath(), header, isNew);
       if(fh != INVALID_HANDLE)
@@ -485,7 +655,8 @@ void FlushLogQueues()
    if(s_outcomeQueueCount > 0)
    {
       string header = "SIGNAL_ID,SYMBOL,SIGNAL_TIME,OUTCOME,OUTCOME_TIME"
-                      ",EXIT_PRICE,BARS_HELD,REASON,MFE,MAE";
+                      ",EXIT_PRICE,BARS_HELD,REASON,MFE,MAE"
+                      ",TP2_HIT,TP3_HIT,PL_PIPS";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetOutcomePath(), header, isNew);
       if(fh != INVALID_HANDLE)

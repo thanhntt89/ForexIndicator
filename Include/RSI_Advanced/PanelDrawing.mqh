@@ -553,7 +553,8 @@ void DrawInfoPanel(int signalIndex)
             g_entryZones[z].zoneName+":"+DoubleToString(g_entryZones[z].price, _Digits)+
             " "+DoubleToString(g_entryZones[z].lotSize, 2)+"lot"+
             " R:R1:"+DoubleToString(g_entryZones[z].rrRatio, 1)+
-            " P:"+DoubleToString(g_entryZones[z].probReach*100, 0)+"%"+
+            " Reach:"+DoubleToString(g_entryZones[z].probReach*100, 0)+"%"+
+            " Win:"+DoubleToString(g_entryZones[z].probTP1, 0)+"%"+
             " EV:"+DoubleToString(g_entryZones[z].expectedValue, 2)+"R"+evStar;
          CreateTextLabel(PREFIX_PANEL+"EZ_"+IntegerToString(z), px+pad+3, cy, zLine, zClr, fs-2, false);
          cy += lh;

@@ -260,6 +260,7 @@ int OnCalculate(const int rates_total,
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       ArrayResize(g_signals, 0);
+      LoggerInit(true);   // reset CSV files on fullRecalc (prevents duplicate rows on restart)
       if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
       MTF_InitRamBuffers();  // Rebuild MTF RAM buffers from historical iRSI data
    }
@@ -496,8 +497,17 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
-         LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
-                        sigSessBlock, angleZ);
+         {
+            int    _bs        = rates_total - 1 - i;
+            double _atrRatio  = SL_GetATRRatio(_bs);
+            double _spreadPips= SL_GetSpreadPips();
+            int    _d1Trend   = SL_GetMTFTrendForTF(TF_D1);
+            int    _timeInSess= SL_GetTimeInSessionMin(time[i], sigSessBlock);
+            LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
+                           sigSessBlock, angleZ,
+                           BufferGreen[i], _atrRatio, _spreadPips, _d1Trend,
+                           GetActiveSLTPMethod(), (bool)InpAutoTFConfig, _timeInSess);
+         }
          LogOutcomePending(time[i], buySignal, true);
       }
       if(sellSignal > 0)
@@ -531,8 +541,17 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
-         LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
-                        sigSessBlock, angleZ);
+         {
+            int    _bs        = rates_total - 1 - i;
+            double _atrRatio  = SL_GetATRRatio(_bs);
+            double _spreadPips= SL_GetSpreadPips();
+            int    _d1Trend   = SL_GetMTFTrendForTF(TF_D1);
+            int    _timeInSess= SL_GetTimeInSessionMin(time[i], sigSessBlock);
+            LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
+                           sigSessBlock, angleZ,
+                           BufferGreen[i], _atrRatio, _spreadPips, _d1Trend,
+                           GetActiveSLTPMethod(), (bool)InpAutoTFConfig, _timeInSess);
+         }
          LogOutcomePending(time[i], sellSignal, false);
       }
 
@@ -728,7 +747,8 @@ int OnCalculate(const int rates_total,
                   g_currentProb.probTP1, g_currentProb.probSL, g_currentProb.totalSamples,
                   rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
                   activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
-                  g_spreadRegime.spreadRatio, g_walkForward.isRobust);
+                  g_spreadRegime.spreadRatio, g_walkForward.isRobust,
+                  SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1));
             }
          }
 
