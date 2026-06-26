@@ -68,7 +68,7 @@ void CreateTextLabel(string name,int x,int y,string text,color clr,int fs,bool b
 //+------------------------------------------------------------------+
 void DrawInfoPanel(int signalIndex)
 {
-   if(!InpShowPanel) return;
+   if(InpEAMode || !InpShowPanel) return;
    if(signalIndex < 0 || signalIndex >= g_signalCount)
    {
       static int s_lastNoSigHeight = 0;
@@ -366,6 +366,7 @@ void DrawInfoPanel(int signalIndex)
       calcY += lh; calcY += lh; calcY += lh;
       calcY += lh; calcY += lh; calcY += lh; calcY += lh;
       calcY += lh; // time-decay line
+      calcY += lh; // DQ metrics line
    }
    if(hasMTF)
    {
@@ -631,6 +632,20 @@ void DrawInfoPanel(int signalIndex)
       if(g_currentProb.avgBarsToSL > 0) avgEdge += "SL~"+IntegerToString((int)g_currentProb.avgBarsToSL)+"bars ";
       avgEdge += "Edge:"+DoubleToString(edge*100,1)+"%";
       CreateTextLabel(PREFIX_PANEL+"P_AE", px+pad, cy, " "+avgEdge, InpPanelDimColor, fs-2, false);
+      cy += lh;
+
+      // Data quality breakdown (V11.30)
+      string dqLine = " T1:"+IntegerToString((int)MathRound(g_currentProb.nEffT1))
+                     +"("+IntegerToString(g_currentProb.rawCountT1)+")"
+                     +" T2:"+IntegerToString((int)MathRound(g_currentProb.nEffT2))
+                     +"("+IntegerToString(g_currentProb.rawCountT2)+")"
+                     +" T3:"+IntegerToString(g_currentProb.countT3)
+                     +" Real:"+IntegerToString((int)g_currentProb.realPct)+"%"
+                     +" Span:"+IntegerToString((int)g_currentProb.oldestDays)+"d";
+      color dqClr = (g_currentProb.realPct >= 50) ? clrLime
+                  : (g_currentProb.realPct >= 20) ? clrYellow
+                  : clrOrange;
+      CreateTextLabel(PREFIX_PANEL+"P_DQ", px+pad, cy, dqLine, dqClr, fs-2, false);
       cy += lh;
 
       // Time-decay survival line: shows elapsed bars vs avg and remaining edge %

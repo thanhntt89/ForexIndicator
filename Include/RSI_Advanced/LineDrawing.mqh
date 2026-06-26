@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                             LineDrawing.mqh        |
 //|                         RSI Advanced - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
@@ -25,6 +25,7 @@ double GetCachedATROffset()
 //+------------------------------------------------------------------+
 void CreateHorizontalLine(string name, double price, color clr, int style, int width, string tip)
 {
+   if(InpEAMode) return;
    if(ObjectFind(name) >= 0) ObjectDelete(name);
    ObjectCreate(name, OBJ_HLINE, 0, 0, price);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);

@@ -17,7 +17,7 @@
 #property indicator_separate_window
 #property indicator_minimum  0
 #property indicator_maximum  100
-#property indicator_buffers  7
+#property indicator_buffers  11
 #property indicator_label1  "RSI Fast"
 #property indicator_type1   DRAW_LINE
 #property indicator_color1  clrLime
@@ -63,6 +63,11 @@ double BufferBBLower[];
 double BufferOrange[];
 double BufferBuySignal[];
 double BufferSellSignal[];
+//--- SLTP output buffers (readable by EA via iCustom)
+double BufferEntry[];  // 7: entry price at signal bar
+double BufferSL[];     // 8: stop loss price
+double BufferTP1[];    // 9: take profit 1 price
+double BufferTP2[];    // 10: take profit 2 price
 //--- Includes
 #include <RSI_Advanced/Config.mqh>
 #include <RSI_Advanced/Structs.mqh>
@@ -98,6 +103,10 @@ int OnInit()
    SetIndexBuffer(4, BufferOrange);
    SetIndexBuffer(5, BufferBuySignal);
    SetIndexBuffer(6, BufferSellSignal);
+   SetIndexBuffer(7, BufferEntry);
+   SetIndexBuffer(8, BufferSL);
+   SetIndexBuffer(9, BufferTP1);
+   SetIndexBuffer(10, BufferTP2);
    ArraySetAsSeries(BufferGreen, false);
    ArraySetAsSeries(BufferRed, false);
    ArraySetAsSeries(BufferBBUpper, false);
@@ -105,12 +114,20 @@ int OnInit()
    ArraySetAsSeries(BufferOrange, false);
    ArraySetAsSeries(BufferBuySignal, false);
    ArraySetAsSeries(BufferSellSignal, false);
+   ArraySetAsSeries(BufferEntry, false);
+   ArraySetAsSeries(BufferSL, false);
+   ArraySetAsSeries(BufferTP1, false);
+   ArraySetAsSeries(BufferTP2, false);
    int mb = GetMinBarsRequired();
-   for(int i = 0; i < 7; i++)
+   for(int i = 0; i < 11; i++)
    {
       SetIndexEmptyValue(i, EMPTY_VALUE);
       SetIndexDrawBegin(i, mb);
    }
+   SetIndexStyle(7,  DRAW_NONE);
+   SetIndexStyle(8,  DRAW_NONE);
+   SetIndexStyle(9,  DRAW_NONE);
+   SetIndexStyle(10, DRAW_NONE);
    IndicatorShortName("RSI Advanced (" + IntegerToString(InpRSIPeriod) +
                       ") SL:" + DoubleToString(InpSLRatio, 1) +
                       " TP:" + DoubleToString(InpTPRatio, 1));
@@ -124,7 +141,7 @@ int OnInit()
    ArrayResize(g_outcomes, 0);
    InitSessionStats();
    LoadPanelPosition();
-   ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
+   if(!InpEAMode) ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
 
    // Apply auto TF config profile (scalping params per TF when InpAutoTFConfig=true)
@@ -247,6 +264,10 @@ int OnCalculate(const int rates_total,
       ArrayInitialize(BufferOrange, EMPTY_VALUE);
       ArrayInitialize(BufferBuySignal, EMPTY_VALUE);
       ArrayInitialize(BufferSellSignal, EMPTY_VALUE);
+      ArrayInitialize(BufferEntry, EMPTY_VALUE);
+      ArrayInitialize(BufferSL, EMPTY_VALUE);
+      ArrayInitialize(BufferTP1, EMPTY_VALUE);
+      ArrayInitialize(BufferTP2, EMPTY_VALUE);
    }
    else
    {
@@ -290,6 +311,10 @@ int OnCalculate(const int rates_total,
    {
       BufferBuySignal[i]  = EMPTY_VALUE;
       BufferSellSignal[i] = EMPTY_VALUE;
+      BufferEntry[i]      = EMPTY_VALUE;
+      BufferSL[i]         = EMPTY_VALUE;
+      BufferTP1[i]        = EMPTY_VALUE;
+      BufferTP2[i]        = EMPTY_VALUE;
       bool isCurrentBar = (i == rates_total - 1);
       if(BufferGreen[i]   == EMPTY_VALUE || BufferGreen[i-1]  == EMPTY_VALUE) continue;
       if(BufferRed[i]     == EMPTY_VALUE || BufferRed[i-1]    == EMPTY_VALUE) continue;
@@ -412,6 +437,10 @@ int OnCalculate(const int rates_total,
             slDist = MathAbs(entryPrice - sl);
             if(slDist < minSLDist) { sl = entryPrice - minSLDist; slDist = minSLDist; }
          }
+         BufferEntry[i] = entryPrice;
+         BufferSL[i]    = sl;
+         BufferTP1[i]   = tp1;
+         BufferTP2[i]   = tp2;
          double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -457,6 +486,10 @@ int OnCalculate(const int rates_total,
             slDist = MathAbs(sl - entryPrice);
             if(slDist < minSLDist) { sl = entryPrice + minSLDist; slDist = minSLDist; }
          }
+         BufferEntry[i] = entryPrice;
+         BufferSL[i]    = sl;
+         BufferTP1[i]   = tp1;
+         BufferTP2[i]   = tp2;
          double angleZ = CalculateAngleStrength(i);
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -556,7 +589,11 @@ int OnCalculate(const int rates_total,
          g_userSelectedSignal = false;
       }
       if(g_activeSignalIndex != s_lastDrawSignalIdx)
+      {
          s_invalidatedSticky = false;
+         s_zonesDrawn = false;
+         s_sltpDrawn  = false;
+      }
       SignalData activeSig = g_signals[g_activeSignalIndex];
       double curPrice = iClose(NULL, 0, 0);
 
@@ -578,6 +615,7 @@ int OnCalculate(const int rates_total,
 
       if(signalInvalidated && !s_invalidatedSticky)
       {
+         DeleteObjectsByPrefix(PREFIX_LINE);
          DeleteObjectsByPrefix(PREFIX_PROB);
          DeleteObjectsByPrefix(PREFIX_ZONE);
          g_validZoneCount = 0;
@@ -585,15 +623,25 @@ int OnCalculate(const int rates_total,
          s_sltpDrawn  = false;
          s_zonesDrawn = false;
 
-         // Auto-switch to latest signal when current is invalidated
-         if(g_userSelectedSignal && g_signalCount > 0 &&
-            g_activeSignalIndex < g_signalCount - 1)
+         for(int s = g_signalCount - 1; s >= 0; s--)
          {
-            g_activeSignalIndex = g_signalCount - 1;
-            g_userSelectedSignal = false;
+            if(s == g_activeSignalIndex) continue;
+            bool sigInvalid = false;
+            if(g_signals[s].isBuySignal && curPrice <= g_signals[s].stopLoss)
+               sigInvalid = true;
+            if(!g_signals[s].isBuySignal && curPrice >= g_signals[s].stopLoss)
+               sigInvalid = true;
+            if(!sigInvalid)
+            {
+               g_activeSignalIndex = s;
+               g_userSelectedSignal = true;
+               signalInvalidated = false;
+               break;
+            }
          }
       }
       s_invalidatedSticky = signalInvalidated;
+      activeSig = g_signals[g_activeSignalIndex]; // refresh: auto-switch may have changed index
 
       uint currentTick = GetTickCount();
       bool forceRedraw = false;
@@ -649,7 +697,9 @@ int OnCalculate(const int rates_total,
                   rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
                   activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
                   g_spreadRegime.spreadRatio, g_walkForward.isRobust,
-                  SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1));
+                  SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1),
+                  g_currentProb.rawCountT1, g_currentProb.rawCountT2,
+                  g_currentProb.countT3, g_currentProb.realPct);
             }
          }
 
@@ -665,9 +715,11 @@ int OnCalculate(const int rates_total,
                DrawSLTPLines(g_activeSignalIndex, suppressDisplay);
                s_sltpDrawn = true;
             }
+            if(s_zonesDrawn && g_validZoneCount > 0 &&
+               MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point)
+               s_zonesDrawn = false;
             bool needZoneRedraw = !s_zonesDrawn
-                                   || g_activeSignalIndex != s_lastDrawSignalIdx
-                                   || isNewBar;
+                                   || g_activeSignalIndex != s_lastDrawSignalIdx;
             if(!suppressDisplay && needZoneRedraw)
             {
                CalculateEntryZones(
@@ -686,17 +738,19 @@ int OnCalculate(const int rates_total,
          }
          else
          {
-            if(!s_sltpDrawn || forceRedraw)
+            if(s_sltpDrawn)
             {
-               DrawSLTPLines(g_activeSignalIndex, true);
-               s_sltpDrawn = true;
+               DeleteObjectsByPrefix(PREFIX_LINE);
+               s_sltpDrawn = false;
             }
             if(s_zonesDrawn)
             {
                DeleteObjectsByPrefix(PREFIX_ZONE);
                s_zonesDrawn = false;
             }
+            DeleteObjectsByPrefix(PREFIX_PROB);
          }
+         ChartRedraw();
       }
    }
    else

@@ -48,6 +48,7 @@ input int                InpSignalMAPeriod = 7;           // Signal MA Period (R
 input int                InpBBPeriod       = 34;          // Bollinger / Baseline Period
 input double             InpBBDeviation    = 1.685;       // BB Deviation (Fibonacci)
 input ENUM_APPLIED_PRICE InpPrice          = PRICE_CLOSE; // Applied Price
+input bool               InpEAMode         = false;       // Disable visuals when loaded via iCustom (EA use)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Signal Detection                                      |

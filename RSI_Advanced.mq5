@@ -642,7 +642,11 @@ int OnCalculate(const int rates_total,
          g_userSelectedSignal = false;
       }
       if(g_activeSignalIndex != s_lastDrawSignalIdx)
+      {
          s_invalidatedSticky = false;
+         s_zonesDrawn = false;
+         s_sltpDrawn  = false;
+      }
       SignalData activeSig = g_signals[g_activeSignalIndex];
       double curPrice = iClose(NULL, 0, 0);
 
@@ -664,6 +668,7 @@ int OnCalculate(const int rates_total,
 
       if(signalInvalidated && !s_invalidatedSticky)
       {
+         DeleteObjectsByPrefix(PREFIX_LINE);
          DeleteObjectsByPrefix(PREFIX_PROB);
          DeleteObjectsByPrefix(PREFIX_ZONE);
          g_validZoneCount = 0;
@@ -671,15 +676,25 @@ int OnCalculate(const int rates_total,
          s_sltpDrawn  = false;
          s_zonesDrawn = false;
 
-         // Auto-switch to latest signal when current is invalidated
-         if(g_userSelectedSignal && g_signalCount > 0 &&
-            g_activeSignalIndex < g_signalCount - 1)
+         for(int s = g_signalCount - 1; s >= 0; s--)
          {
-            g_activeSignalIndex = g_signalCount - 1;
-            g_userSelectedSignal = false;
+            if(s == g_activeSignalIndex) continue;
+            bool sigInvalid = false;
+            if(g_signals[s].isBuySignal && curPrice <= g_signals[s].stopLoss)
+               sigInvalid = true;
+            if(!g_signals[s].isBuySignal && curPrice >= g_signals[s].stopLoss)
+               sigInvalid = true;
+            if(!sigInvalid)
+            {
+               g_activeSignalIndex = s;
+               g_userSelectedSignal = true;
+               signalInvalidated = false;
+               break;
+            }
          }
       }
       s_invalidatedSticky = signalInvalidated;
+      activeSig = g_signals[g_activeSignalIndex]; // refresh: auto-switch may have changed index
 
       //--- Throttle: only redraw display at controlled intervals
 
@@ -748,7 +763,9 @@ int OnCalculate(const int rates_total,
                   rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
                   activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
                   g_spreadRegime.spreadRatio, g_walkForward.isRobust,
-                  SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1));
+                  SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1),
+                  g_currentProb.rawCountT1, g_currentProb.rawCountT2,
+                  g_currentProb.countT3, g_currentProb.realPct);
             }
          }
 
@@ -765,9 +782,11 @@ int OnCalculate(const int rates_total,
                s_sltpDrawn = true;
             }
 
+            if(s_zonesDrawn && g_validZoneCount > 0 &&
+               MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point)
+               s_zonesDrawn = false;
             bool needZoneRedraw = !s_zonesDrawn
-                                  || g_activeSignalIndex != s_lastDrawSignalIdx
-                                  || isNewBar;
+                                  || g_activeSignalIndex != s_lastDrawSignalIdx;
             if(!suppressDisplay && needZoneRedraw)
             {
                CalculateEntryZones(
@@ -787,17 +806,19 @@ int OnCalculate(const int rates_total,
          }
          else
          {
-            if(!s_sltpDrawn || forceRedraw)
+            if(s_sltpDrawn)
             {
-               DrawSLTPLines(g_activeSignalIndex, true);
-               s_sltpDrawn = true;
+               DeleteObjectsByPrefix(PREFIX_LINE);
+               s_sltpDrawn = false;
             }
             if(s_zonesDrawn)
             {
                DeleteObjectsByPrefix(PREFIX_ZONE);
                s_zonesDrawn = false;
             }
+            DeleteObjectsByPrefix(PREFIX_PROB);
          }
+         ChartRedraw();
       }
    }
    else

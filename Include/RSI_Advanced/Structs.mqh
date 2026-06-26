@@ -92,6 +92,18 @@ struct ProbabilityData
    double originalProbTP1;  // pre-decay probabilities (for display: "68%<-72%")
    double originalProbTP2;
    double originalProbTP3;
+   // Data quality metrics (V11.30)
+   int    rawCountT1;     // Tier 1 (same-case) raw signal count
+   int    rawCountT2;     // Tier 2 (other-case) raw signal count
+   int    countT3;        // Tier 3 (ATR scan) sample count
+   double nEffT1;         // Tier 1 effective N
+   double nEffT2;         // Tier 2 effective N
+   int    timeoutCount;   // Signals that timed out (no TP/SL hit)
+   double oldestDays;     // Age of oldest contributing signal (days)
+   double realPct;        // % of nEff from real signals: (nEffT1+nEffT2)/totalSamples
+   double wrT1;           // Tier 1 win rate (TP1 hit %)
+   double wrT2;           // Tier 2 win rate
+   double wrT3;           // Tier 3 win rate
 };
 
 struct EntryZone

@@ -11,6 +11,7 @@
 //+------------------------------------------------------------------+
 void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
 {
+   if(InpEAMode) return;
    string name = PREFIX_ARROW + (isBuy ? "BUY_" : "SELL_")
                + IntegerToString(caseNum) + "_"
                + IntegerToString((int)barTime);

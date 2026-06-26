@@ -1077,6 +1077,10 @@ void CalculateProbability(int currentSignalIndex)
    g_currentProb.survivalRatio=1.0; g_currentProb.elapsedBars=0;
    g_currentProb.expiresMinutes=0;
    g_currentProb.originalProbTP1=0; g_currentProb.originalProbTP2=0; g_currentProb.originalProbTP3=0;
+   g_currentProb.rawCountT1=0; g_currentProb.rawCountT2=0; g_currentProb.countT3=0;
+   g_currentProb.nEffT1=0; g_currentProb.nEffT2=0; g_currentProb.timeoutCount=0;
+   g_currentProb.oldestDays=0; g_currentProb.realPct=0;
+   g_currentProb.wrT1=0; g_currentProb.wrT2=0; g_currentProb.wrT3=0;
 
    // [GMT-FIX-A2c] Reset data quality warning each recalc cycle
    g_gmtDataQualityWarn = false;
@@ -1217,14 +1221,36 @@ void CalculateProbability(int currentSignalIndex)
       }
    }
 
-   // [DEBUG] Per-tier breakdown: where does n come from?
+   // Data quality metrics (V11.30)
+   double t1NE = (t1_sumW2 > 0) ? t1_tw*t1_tw/t1_sumW2 : 0;
+   double t2NE = (t2_sumW2 > 0) ? t2_tw*t2_tw/t2_sumW2 : 0;
+   double t1WR = (t1_tw > 0) ? t1_w1/t1_tw*100.0 : 0;
+   double t2WR = (t2_tw > 0) ? t2_w1/t2_tw*100.0 : 0;
+   double t3WR = (t3_t > 0) ? (double)t3_1/t3_t*100.0 : 0;
+   g_currentProb.rawCountT1  = t1_rawN;
+   g_currentProb.rawCountT2  = t2_rawN;
+   g_currentProb.countT3     = t3_t;
+   g_currentProb.nEffT1      = t1NE;
+   g_currentProb.nEffT2      = t2NE;
+   g_currentProb.timeoutCount = t1_to + t2_to + t3_to;
+   g_currentProb.wrT1 = t1WR;
+   g_currentProb.wrT2 = t2WR;
+   g_currentProb.wrT3 = t3WR;
+   double realN = t1NE + t2NE;
+   g_currentProb.realPct = (totalUsed > 0) ? realN / totalUsed * 100.0 : 0;
+   // Oldest contributing signal age
+   double oldDays = 0;
+   for(int sOld = 0; sOld < g_signalCount; sOld++)
+   {
+      if(g_signals[sOld].isBuySignal != curSig.isBuySignal) continue;
+      double dd = (double)(curSig.signalTime - g_signals[sOld].signalTime) / 86400.0;
+      if(dd > oldDays) oldDays = dd;
+   }
+   g_currentProb.oldestDays = oldDays;
+
+   // [DEBUG] Per-tier breakdown
    if(InpDebugMode)
    {
-      double t1NE = (t1_sumW2 > 0) ? t1_tw*t1_tw/t1_sumW2 : 0;
-      double t2NE = (t2_sumW2 > 0) ? t2_tw*t2_tw/t2_sumW2 : 0;
-      double t1WR = (t1_tw > 0) ? t1_w1/t1_tw*100 : 0;
-      double t2WR = (t2_tw > 0) ? t2_w1/t2_tw*100 : 0;
-      double t3WR = (t3_t > 0) ? (double)t3_1/t3_t*100 : 0;
       Print("[PROB-TIER] ChartSig=", g_signalCount,
             " | T1(case): raw=", t1_rawN, " nEff=", DoubleToString(t1NE,1),
             " tw=", DoubleToString(t1_tw,2), " WR=", DoubleToString(t1WR,1), "%",

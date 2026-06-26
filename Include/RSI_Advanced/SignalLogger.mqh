@@ -578,9 +578,9 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
                         int mtfAgreePct, string mtfTrend,
                         double angleZ, int hour, int dow,
                         double spreadRatio, bool wfRobust,
-                        // P2 additions:
                         int h4Trend,
-                        int h1Trend)
+                        int h1Trend,
+                        int rawT1, int rawT2, int countT3, double realPct)
 {
    if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
@@ -599,9 +599,12 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
               + IntegerToString(dow)               + ","
               + DoubleToString(spreadRatio, 2)     + ","
               + (wfRobust ? "1" : "0")             + ","
-              // P2 new columns:
               + IntegerToString(h4Trend)           + ","
-              + IntegerToString(h1Trend);
+              + IntegerToString(h1Trend)           + ","
+              + IntegerToString(rawT1)             + ","
+              + IntegerToString(rawT2)             + ","
+              + IntegerToString(countT3)           + ","
+              + DoubleToString(realPct, 1);
 
    QueueScoringRow(row);
 }
@@ -638,7 +641,7 @@ void FlushLogQueues()
    {
       string header = "SIGNAL_ID,SCORE,REC_LEVEL,PROB_TP1,PROB_SL,PROB_N,EV,RR"
                       ",MTF_AGREE_PCT,MTF_TREND,ANGLE_Z,HOUR,DOW,SPREAD_RATIO,WF_ROBUST"
-                      ",MTF_H4_TREND,MTF_H1_TREND";
+                      ",MTF_H4_TREND,MTF_H1_TREND,RAW_T1,RAW_T2,COUNT_T3,REAL_PCT";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetScoringPath(), header, isNew);
       if(fh != INVALID_HANDLE)
