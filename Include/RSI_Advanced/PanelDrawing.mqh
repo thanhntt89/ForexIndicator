@@ -595,36 +595,119 @@ void DrawInfoPanel(int signalIndex)
    if(hasProb)
    {
       cy += 3;
+      // Determine active TP (same logic as LineDrawing)
+      int activeTP = 0;
+      if(!g_tpHit[0])      activeTP = 1;
+      else if(!g_tpHit[1]) activeTP = 2;
+      else if(!g_tpHit[2]) activeTP = 3;
+
       color confClr = clrGray;
       string confTxt = GetConfidenceText(g_currentProb.totalSamples, g_currentProb.probTP1, confClr);
+      string probTitle = "Prob [n="+IntegerToString(g_currentProb.totalSamples)+"]  "+confTxt;
+      if(activeTP >= 2) probTitle += "  >>TP"+IntegerToString(activeTP);
       CreateTextLabel(PREFIX_PANEL+"P_T", px+pad, cy,
-         "Prob [n="+IntegerToString(g_currentProb.totalSamples)+"]  "+confTxt,
-         InpPanelTitleColor, fs-1, true);
+         probTitle, InpPanelTitleColor, fs-1, true);
       cy += lh;
+
+      // Win/Loss: shift to active TP's conditional probability
       double winP = g_currentProb.probTP1, lossP = g_currentProb.probSL;
+      double origWinP = g_currentProb.originalProbTP1;
+      if(g_tpHit[0] && g_currentProb.samplesTP1 > 0)
+      {
+         // P(TP2|TP1 hit) = samplesTP2 / samplesTP1
+         winP = (g_currentProb.samplesTP2 * 100.0) / g_currentProb.samplesTP1;
+         origWinP = winP;
+         lossP = 100.0 - winP;
+         if(g_tpHit[1] && g_currentProb.samplesTP2 > 0)
+         {
+            winP = (g_currentProb.samplesTP3 * 100.0) / g_currentProb.samplesTP2;
+            origWinP = winP;
+            lossP = 100.0 - winP;
+         }
+      }
       color wlClr = winP >= lossP ? clrLime : clrOrange;
       string wlText;
-      if(g_currentProb.originalProbTP1 > 0 && g_currentProb.elapsedBars > 0)
+      if(activeTP == 1 && g_currentProb.originalProbTP1 > 0 && g_currentProb.elapsedBars > 0)
          wlText = "Win:"+DoubleToString(g_currentProb.originalProbTP1,1)+
-                  "%->"+DoubleToString(winP,1)+"%  |  Loss:"+DoubleToString(lossP,1)+"%";
+                  "%->"+DoubleToString(g_currentProb.probTP1,1)+"%  |  Loss:"+DoubleToString(g_currentProb.probSL,1)+"%";
       else
          wlText = "Win:"+DoubleToString(winP,1)+"%  |  Loss:"+DoubleToString(lossP,1)+"%";
       CreateTextLabel(PREFIX_PANEL+"P_WL", px+pad, cy, wlText, wlClr, fs, true);
       cy += lh;
-      CreateTextLabel(PREFIX_PANEL+"P_1", px+pad, cy,
-         " TP1:"+DoubleToString(g_currentProb.probTP1,1)+"%"+ProbBar(g_currentProb.probTP1)+
-         "("+IntegerToString(g_currentProb.samplesTP1)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
-         InpTP1LineColor, fs-2, false);
+
+      // TP1 line: show original (pre-decay) prob when HIT
+      string tp1Txt; color tp1Clr;
+      if(g_tpHit[0])
+      {
+         double tp1Show = (g_currentProb.originalProbTP1 > 0) ? g_currentProb.originalProbTP1 : g_currentProb.probTP1;
+         tp1Txt = " TP1:HIT "+DoubleToString(tp1Show,1)+"%"
+                 +"("+IntegerToString(g_currentProb.samplesTP1)+"/"+IntegerToString(g_currentProb.totalSamples)+")";
+         tp1Clr = clrLime;
+      }
+      else
+      {
+         tp1Txt = " TP1:"+DoubleToString(g_currentProb.probTP1,1)+"%"+ProbBar(g_currentProb.probTP1)
+                 +"("+IntegerToString(g_currentProb.samplesTP1)+"/"+IntegerToString(g_currentProb.totalSamples)+")";
+         tp1Clr = InpTP1LineColor;
+      }
+      CreateTextLabel(PREFIX_PANEL+"P_1", px+pad, cy, tp1Txt, tp1Clr, fs-2, false);
       cy += lh;
-      CreateTextLabel(PREFIX_PANEL+"P_2", px+pad, cy,
-         " TP2:"+DoubleToString(g_currentProb.probTP2,1)+"%"+ProbBar(g_currentProb.probTP2)+
-         "("+IntegerToString(g_currentProb.samplesTP2)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
-         InpTP2LineColor, fs-2, false);
+
+      // TP2 line: conditional P(TP2|TP1) when TP1 hit
+      string tp2Txt; color tp2Clr;
+      if(g_tpHit[1])
+      {
+         double tp2Show = (g_currentProb.originalProbTP2 > 0) ? g_currentProb.originalProbTP2 : g_currentProb.probTP2;
+         tp2Txt = " TP2:HIT "+DoubleToString(tp2Show,1)+"%"
+                 +"("+IntegerToString(g_currentProb.samplesTP2)+"/"+IntegerToString(g_currentProb.totalSamples)+")";
+         tp2Clr = clrLime;
+      }
+      else if(g_tpHit[0] && g_currentProb.samplesTP1 > 0)
+      {
+         double condTP2 = (g_currentProb.samplesTP2 * 100.0) / g_currentProb.samplesTP1;
+         tp2Txt = " TP2:"+DoubleToString(condTP2,1)+"%"+ProbBar(condTP2)
+                 +"("+IntegerToString(g_currentProb.samplesTP2)+"/"+IntegerToString(g_currentProb.samplesTP1)+") <<";
+         tp2Clr = InpTP2LineColor;
+      }
+      else
+      {
+         tp2Txt = " TP2:"+DoubleToString(g_currentProb.probTP2,1)+"%"+ProbBar(g_currentProb.probTP2)
+                 +"("+IntegerToString(g_currentProb.samplesTP2)+"/"+IntegerToString(g_currentProb.totalSamples)+")";
+         tp2Clr = InpTP2LineColor;
+      }
+      CreateTextLabel(PREFIX_PANEL+"P_2", px+pad, cy, tp2Txt, tp2Clr, fs-2, false);
       cy += lh;
-      CreateTextLabel(PREFIX_PANEL+"P_3", px+pad, cy,
-         " TP3:"+DoubleToString(g_currentProb.probTP3,1)+"%"+ProbBar(g_currentProb.probTP3)+
-         "("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.totalSamples)+")",
-         InpTP3LineColor, fs-2, false);
+
+      // TP3 line: conditional P(TP3|TP2) when TP2 hit, or P(TP3|TP1) when only TP1 hit
+      string tp3Txt; color tp3Clr;
+      if(g_tpHit[2])
+      {
+         double tp3Show = (g_currentProb.originalProbTP3 > 0) ? g_currentProb.originalProbTP3 : g_currentProb.probTP3;
+         tp3Txt = " TP3:HIT "+DoubleToString(tp3Show,1)+"%"
+                 +"("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.totalSamples)+")";
+         tp3Clr = clrLime;
+      }
+      else if(g_tpHit[1] && g_currentProb.samplesTP2 > 0)
+      {
+         double condTP3 = (g_currentProb.samplesTP3 * 100.0) / g_currentProb.samplesTP2;
+         tp3Txt = " TP3:"+DoubleToString(condTP3,1)+"%"+ProbBar(condTP3)
+                 +"("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.samplesTP2)+") <<";
+         tp3Clr = InpTP3LineColor;
+      }
+      else if(g_tpHit[0] && g_currentProb.samplesTP1 > 0)
+      {
+         double condTP3 = (g_currentProb.samplesTP3 * 100.0) / g_currentProb.samplesTP1;
+         tp3Txt = " TP3:"+DoubleToString(condTP3,1)+"%"+ProbBar(condTP3)
+                 +"("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.samplesTP1)+")";
+         tp3Clr = InpTP3LineColor;
+      }
+      else
+      {
+         tp3Txt = " TP3:"+DoubleToString(g_currentProb.probTP3,1)+"%"+ProbBar(g_currentProb.probTP3)
+                 +"("+IntegerToString(g_currentProb.samplesTP3)+"/"+IntegerToString(g_currentProb.totalSamples)+")";
+         tp3Clr = InpTP3LineColor;
+      }
+      CreateTextLabel(PREFIX_PANEL+"P_3", px+pad, cy, tp3Txt, tp3Clr, fs-2, false);
       cy += lh;
       double edge = g_cachedEdge;
       string avgEdge = "";
