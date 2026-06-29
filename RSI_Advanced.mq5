@@ -97,6 +97,8 @@ double BufferSellSignal[];
 #include <RSI_Advanced/SessionStatistics.mqh>
 #include <RSI_Advanced/WalkForward.mqh>
 #include <RSI_Advanced/ProbabilityEngine.mqh>
+#include <RSI_Advanced/CalibrationEngine.mqh>
+#include <RSI_Advanced/RiskManager.mqh>
 #include <RSI_Advanced/ArrowManager.mqh>
 #include <RSI_Advanced/LineDrawing.mqh>
 #include <RSI_Advanced/PanelDrawing.mqh>
@@ -151,6 +153,7 @@ int OnInit()
    ArrayResize(g_outcomes, 0);
 
    InitSessionStats();
+   InitPortfolioRisk();
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
@@ -466,6 +469,8 @@ int OnCalculate(const int rates_total,
 
       if(buySignal > 0)
       {
+         if(i >= rates_total - 2 && !CanTakeNewSignal())
+         { buySignal = 0; continue; }
          BufferBuySignal[i] = (double)buySignal;
          CreateSignalArrow(time[i], low[i], true, buySignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
@@ -482,21 +487,19 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice - maxSLDist;
          slDist = MathAbs(entryPrice - sl);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice - tp1Dist;
-         // SL floor: signal bar ATR may be tiny (quiet moment before a spike).
-         // Without floor, SL = 2 pts vs TP1 = 55 pts → Gambler's Ruin outputs W:1%,
-         // wasting signal display. Minimum = 30% of current-bar ATR × ratio.
          {
             double curATR = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
             double minSLDist = curATR * InpSLRatio * 0.3;
             slDist = MathAbs(entryPrice - sl);
             if(slDist < minSLDist) { sl = entryPrice - minSLDist; slDist = minSLDist; }
          }
-         double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
+         double angleZ = CalculateAngleStrength(i);
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
+         if(i >= rates_total - 2) OnNewSignalAccepted();
          {
             int    _bs        = rates_total - 1 - i;
             double _atrRatio  = SL_GetATRRatio(_bs);
@@ -512,6 +515,8 @@ int OnCalculate(const int rates_total,
       }
       if(sellSignal > 0)
       {
+         if(i >= rates_total - 2 && !CanTakeNewSignal())
+         { sellSignal = 0; continue; }
          BufferSellSignal[i] = (double)sellSignal;
          CreateSignalArrow(time[i], high[i], false, sellSignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
@@ -528,19 +533,19 @@ int OnCalculate(const int rates_total,
          if(slDist > maxSLDist * 1.5) sl = entryPrice + maxSLDist;
          slDist = MathAbs(sl - entryPrice);
          if(slDist > 0 && tp1Dist / slDist < 1.0) sl = entryPrice + tp1Dist;
-         // SL floor: same as BUY — prevent degenerate SL from low-ATR signal bar.
          {
             double curATR = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
             double minSLDist = curATR * InpSLRatio * 0.3;
             slDist = MathAbs(sl - entryPrice);
             if(slDist < minSLDist) { sl = entryPrice + minSLDist; slDist = minSLDist; }
          }
-         double angleZ = CalculateAngleStrength(i); // Z-score of Green momentum
+         double angleZ = CalculateAngleStrength(i);
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
+         if(i >= rates_total - 2) OnNewSignalAccepted();
          {
             int    _bs        = rates_total - 1 - i;
             double _atrRatio  = SL_GetATRRatio(_bs);
@@ -601,6 +606,8 @@ int OnCalculate(const int rates_total,
       UpdateSessionStats();
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
+      UpdateBrierMetrics();
+      UpdatePortfolioRisk();
 
       // Memory management: cap outcomes at 500
       if(g_outcomeCount > 500)
@@ -730,6 +737,9 @@ int OnCalculate(const int rates_total,
 
          if(InpShowMTF && (isNewBar || forceRedraw)) RefreshMTFData();
          if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
+         if(InpShowProbability && g_activeSignalIndex >= 0 &&
+            g_signals[g_activeSignalIndex].predictedProb <= 0 && g_currentProb.probTP1 > 0)
+            g_signals[g_activeSignalIndex].predictedProb = g_currentProb.probTP1;
          if(g_intermarket.isAvailable)
             GetIntermarketScore(activeSig.isBuySignal);
 

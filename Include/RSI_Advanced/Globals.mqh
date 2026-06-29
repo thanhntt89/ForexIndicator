@@ -52,6 +52,7 @@ bool     g_mtfRamReady  [6];
 //+------------------------------------------------------------------+
 ProbabilityData g_currentProb;
 double          g_cachedEdge = 0.51;
+BrierMetrics    g_brierMetrics;
 
 //+------------------------------------------------------------------+
 //| Entry Zone data                                                    |
@@ -137,6 +138,7 @@ void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
    g_signals[idx].spreadAtSignal = spread;
    g_signals[idx].sessionBlock   = (sessBlock >= 0) ? sessBlock : GetSessionBlock(t);
    g_signals[idx].rsiAtSignal    = rsiVal;
+   g_signals[idx].predictedProb  = 0;
 }
 
 int FindSignalByArrowName(string arrowName)
@@ -165,6 +167,8 @@ WalkForwardData   g_walkForward;
 RollingPerformance g_rollingPerf;
 SpreadRegime      g_spreadRegime;
 VolRegimeData     g_volRegime;
+MarketStateData   g_marketState;
+PortfolioRisk     g_portfolioRisk;
 
 // [GMT-FIX-0] GMT normalization state
 bool   g_gmtNormActive      = false;   // true when H4 normalization is active

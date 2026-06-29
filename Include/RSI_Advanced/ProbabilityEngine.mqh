@@ -741,12 +741,48 @@ void UpdateVolRegime()
 //+------------------------------------------------------------------+
 double GetVolRegimeEdgeAdjustment()
 {
-   switch(g_volRegime.regime)
+   return(0.0);
+}
+
+void UpdateMarketState()
+{
+   static datetime s_msLastBar = 0;
+   datetime curBar = iTime(NULL, 0, 0);
+   if(curBar == s_msLastBar) return;
+   s_msLastBar = curBar;
+
+   double atr = g_volRegime.atrRatio;
+   int trend = DetectMarketRegime(0);
+   double bbPct = GetBBWidthPercentile(0, 50);
+   bool spreadBad = (g_spreadRegime.isSpike || g_spreadRegime.isExtreme);
+
+   if(atr > 1.5 || spreadBad)
    {
-      case VOL_QUIET:    return(+0.02);  // mean-revert favors RSI OB/OS signals
-      case VOL_EVENT:    return(-0.05);  // unpredictable spike, reduce confidence
-      case VOL_TRENDING: return( 0.00);  // directional market, neutral for RSI
-      default:           return( 0.00);  // NORMAL: no adjustment
+      g_marketState.state = STATE_VOLATILE;
+      g_marketState.probMultiplier = 0.80;
+      g_marketState.confidence = MathMin(atr / 2.0, 1.0);
+      g_marketState.label = "VOLATILE";
+   }
+   else if(bbPct < 30 && atr < 0.8 && trend == 0)
+   {
+      g_marketState.state = STATE_MEAN_REVERT;
+      g_marketState.probMultiplier = 1.10;
+      g_marketState.confidence = (30.0 - bbPct) / 30.0;
+      g_marketState.label = "MEAN_REVERT";
+   }
+   else if(atr >= 0.9 && atr <= 1.5 && trend != 0 && bbPct > 40)
+   {
+      g_marketState.state = STATE_TRENDING;
+      g_marketState.probMultiplier = 1.05;
+      g_marketState.confidence = MathMin(MathAbs(atr - 1.0) + 0.5, 1.0);
+      g_marketState.label = "TRENDING";
+   }
+   else
+   {
+      g_marketState.state = STATE_TRANSITION;
+      g_marketState.probMultiplier = 0.95;
+      g_marketState.confidence = 0.3;
+      g_marketState.label = "TRANSITION";
    }
 }
 
@@ -1326,6 +1362,9 @@ void CalculateProbability(int currentSignalIndex)
    }
    double adjustedEdge = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + edgeAdjustment));
 
+   UpdateMarketState();
+   adjustedEdge = MathMax(0.48, MathMin(edgeCeiling, adjustedEdge * g_marketState.probMultiplier));
+
    //=================================================================
    // STEP 4: Theoretical probability using adjusted edge
    //=================================================================
@@ -1517,6 +1556,22 @@ void CalculateProbability(int currentSignalIndex)
             }
          }
       }
+   }
+
+   //=================================================================
+   // STEP 5.65: BRIER CALIBRATION SHRINK
+   //=================================================================
+   // When Brier Score shows probability is unreliable, shrink toward 50%.
+   // shrinkFactor ramps linearly: Brier 0.20→1.0 (no shrink), 0.35→0.0 (full shrink to 50%).
+   // 0 free parameters: 0.20 = well-calibrated threshold, 0.35 = worse than random (0.25) + margin.
+   // Requires minimum 20 resolved samples — below that, Brier is noise.
+   if(g_brierMetrics.samples >= 20 && g_brierMetrics.brierScore > 0.20)
+   {
+      double brierShrink = MathMax(0.0, 1.0 - (g_brierMetrics.brierScore - 0.20) / 0.15);
+      g_currentProb.probTP1 = 50.0 + (g_currentProb.probTP1 - 50.0) * brierShrink;
+      g_currentProb.probTP2 = 50.0 + (g_currentProb.probTP2 - 50.0) * brierShrink;
+      g_currentProb.probTP3 = 50.0 + (g_currentProb.probTP3 - 50.0) * brierShrink;
+      g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
    }
 
    //=================================================================

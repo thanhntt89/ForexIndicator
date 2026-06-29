@@ -237,6 +237,15 @@ input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside 
 
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Risk Manager                                          |
+//+------------------------------------------------------------------+
+input string inp_grp_risk       = "========== Risk Manager =========="; // ---
+input int    InpMaxOpenSignals   = 3;      // Max concurrent signals
+input double InpMaxDailyRiskPct  = 2.0;    // Max total risk %
+input double InpMaxDailyDrawdown = 3.0;    // Circuit breaker DD %
+input int    InpMaxDailyTrades   = 15;     // Max trades per day
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Debug                                                 |
 //+------------------------------------------------------------------+
 input string inp_grp_debug      = "========== Debug =========="; // ---

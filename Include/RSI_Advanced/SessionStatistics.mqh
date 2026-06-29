@@ -580,7 +580,8 @@ bool LoadSessionStatsBinary()
 // Lịch sử:
 //   v1 = 0x52534901 (RSI\x01): struct gốc không có signalTimeUTC
 //   v2 = 0x52534902 (RSI\x02): thêm signalTimeUTC (datetime = 8 bytes) — ISSUE #4 FIX
-#define SIG_BINARY_MAGIC 0x52534902
+//   v3 = 0x52534903 (RSI\x03): thêm predictedProb (double = 8 bytes) — Brier calibration
+#define SIG_BINARY_MAGIC 0x52534903
 
 void SaveSignalsBinary()
 {

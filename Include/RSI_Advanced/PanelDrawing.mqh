@@ -841,14 +841,16 @@ void DrawInfoPanel(int signalIndex)
          CreateTextLabel(PREFIX_PANEL+"V_IM", px+pad+3, cy, interText, interClr, fs-2, false);
          cy += lh;
       }
-      // Vol-regime display
+      // Unified regime display
       {
          color vrClr = clrGray;
-         if(g_volRegime.regime == VOL_QUIET)         vrClr = clrLime;
-         else if(g_volRegime.regime == VOL_EVENT)     vrClr = clrRed;
-         else if(g_volRegime.regime == VOL_TRENDING)  vrClr = clrYellow;
+         if(g_marketState.state == STATE_MEAN_REVERT)      vrClr = clrCyan;
+         else if(g_marketState.state == STATE_TRENDING)     vrClr = clrLime;
+         else if(g_marketState.state == STATE_VOLATILE)     vrClr = clrRed;
+         else if(g_marketState.state == STATE_TRANSITION)   vrClr = clrYellow;
+         string multStr = DoubleToString(g_marketState.probMultiplier, 2);
          CreateTextLabel(PREFIX_PANEL+"V_VR", px+pad+3, cy,
-            "Vol:"+g_volRegime.label+" (ATR:"+DoubleToString(g_volRegime.atrRatio, 2)+"x)",
+            "Regime:"+g_marketState.label+" (x"+multStr+") ATR:"+DoubleToString(g_volRegime.atrRatio, 2)+"x",
             vrClr, fs-2, false);
          cy += lh;
       }
@@ -931,6 +933,50 @@ void DrawInfoPanel(int signalIndex)
          string rpText = GetRollingPerfDisplay();
          color rpClr = GetRollingPerfColor();
          CreateTextLabel(PREFIX_PANEL+"V_RP", px+pad+3, cy, rpText, rpClr, fs-2, false);
+         cy += lh;
+      }
+      // Brier Score calibration display
+      if(g_brierMetrics.samples >= 5)
+      {
+         color brClr = clrLime;
+         if(g_brierMetrics.brierScore >= 0.30)      brClr = clrRed;
+         else if(g_brierMetrics.brierScore >= 0.25)  brClr = clrOrange;
+         else if(g_brierMetrics.brierScore >= 0.20)  brClr = clrYellow;
+         string brText = "Brier:" + DoubleToString(g_brierMetrics.brierScore, 3)
+                       + " Cal:" + DoubleToString(g_brierMetrics.calibrationGap * 100, 1) + "%"
+                       + " n=" + IntegerToString(g_brierMetrics.samples);
+         if(g_brierMetrics.samples >= 20 && g_brierMetrics.brierScore > 0.20)
+         {
+            double shrk = MathMax(0.0, 1.0 - (g_brierMetrics.brierScore - 0.20) / 0.15);
+            brText += " Shrk:" + DoubleToString(shrk * 100, 0) + "%";
+         }
+         if(!g_brierMetrics.isReliable && g_brierMetrics.samples >= 20)
+            brText += " UNRELIABLE";
+         CreateTextLabel(PREFIX_PANEL+"V_BR", px+pad+3, cy, brText, brClr, fs-2, false);
+         cy += lh;
+      }
+      // Portfolio risk display
+      {
+         double riskPct = g_portfolioRisk.totalExposurePct;
+         double maxRisk = g_portfolioRisk.maxExposurePct;
+         double ddPct   = g_portfolioRisk.dailyDrawdownPct;
+         double maxDD   = g_portfolioRisk.maxDailyDD;
+         int    trades  = g_portfolioRisk.dailyTradeCount;
+         int    maxTr   = g_portfolioRisk.maxDailyTrades;
+         color rkClr = clrLime;
+         double usage = (maxRisk > 0) ? riskPct / maxRisk : 0;
+         if(usage >= 1.0)      rkClr = clrRed;
+         else if(usage >= 0.8) rkClr = clrOrange;
+         else if(usage >= 0.5) rkClr = clrYellow;
+         string rkText = "Risk:" + DoubleToString(riskPct, 1) + "/" + DoubleToString(maxRisk, 1) + "%"
+                       + " DD:" + DoubleToString(ddPct, 1) + "/" + DoubleToString(maxDD, 1) + "%"
+                       + " T:" + IntegerToString(trades) + "/" + IntegerToString(maxTr);
+         if(g_portfolioRisk.circuitBreakerActive)
+         {
+            rkText = "CIRCUIT BREAKER - signals blocked";
+            rkClr = clrRed;
+         }
+         CreateTextLabel(PREFIX_PANEL+"V_RK", px+pad+3, cy, rkText, rkClr, fs-2, false);
          cy += lh;
       }
    }

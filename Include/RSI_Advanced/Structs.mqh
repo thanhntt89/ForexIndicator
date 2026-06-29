@@ -40,6 +40,15 @@ struct SignalData
    double   spreadAtSignal;    // broker spread at signal detection (SELL simulation fix)
    int      sessionBlock;      // 0=Asian 1=London 2=Overlap 3=LateNY at signal time
    double   rsiAtSignal;       // BufferGreen[i] — exact RSI value at signal bar
+   double   predictedProb;    // probTP1 at signal creation time (for Brier Score calibration)
+};
+
+struct BrierMetrics
+{
+   double brierScore;      // Mean squared error: 0=perfect, 0.25=random coin flip
+   int    samples;         // Resolved outcomes that had a stored probability
+   double calibrationGap;  // mean(predicted) - mean(actual), negative = overconfident
+   bool   isReliable;      // brierScore < 0.25 && samples >= 20
 };
 
 struct SignalScore
@@ -205,5 +214,35 @@ struct VolRegimeData
    string          label;      // display text
 };
 
+enum ENUM_MARKET_STATE
+{
+   STATE_MEAN_REVERT = 0,
+   STATE_TRENDING    = 1,
+   STATE_VOLATILE    = 2,
+   STATE_TRANSITION  = 3
+};
+
+struct MarketStateData
+{
+   ENUM_MARKET_STATE state;
+   double confidence;
+   double probMultiplier;
+   string label;
+};
+
+struct PortfolioRisk
+{
+   int      openSignals;
+   int      maxSignals;
+   double   totalExposurePct;
+   double   maxExposurePct;
+   double   dailyPnLPips;
+   double   dailyDrawdownPct;
+   double   maxDailyDD;
+   bool     circuitBreakerActive;
+   int      dailyTradeCount;
+   int      maxDailyTrades;
+   datetime lastResetDate;
+};
 
 #endif
