@@ -431,11 +431,11 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
          if(level == 2)
          {
             bool isRev=(caseNum==1||caseNum==2||caseNum==3||caseNum==5);
-            bool isTrend=(caseNum==4||caseNum==6||caseNum==7);
+            bool isTrend=(caseNum==4||caseNum==6||caseNum==7||caseNum==8);
             bool sigRev=(g_signals[s].caseNumber==1||g_signals[s].caseNumber==2||
                          g_signals[s].caseNumber==3||g_signals[s].caseNumber==5);
             bool sigTrend=(g_signals[s].caseNumber==4||g_signals[s].caseNumber==6||
-                           g_signals[s].caseNumber==7);
+                           g_signals[s].caseNumber==7||g_signals[s].caseNumber==8);
             if(isRev && !sigRev) continue;
             if(isTrend && !sigTrend) continue;
          }

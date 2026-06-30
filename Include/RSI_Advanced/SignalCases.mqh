@@ -260,4 +260,21 @@ bool ConfirmedCrossDown(int i)
    return(wasAboveRecently && (BufferGreen[i] < BufferRed[i]) && (BufferGreen[i] < BufferGreen[i-1]));
 }
 
+//+------------------------------------------------------------------+
+//| CASE 8: Basic Crossover (core RSI rule)                           |
+//| Green crosses above/below Red with 2-bar confirmation + rising/   |
+//| falling momentum. The strong-angle gate is applied in the main    |
+//| loop (same as Case 2/3/5). Lowest scan priority: only fires when  |
+//| no higher-quality pattern (Case 6/2/4/3/1/5/7) matched the bar.   |
+//+------------------------------------------------------------------+
+bool CheckCase8_Buy(int i)
+{
+   return(ConfirmedCrossUp(i));
+}
+
+bool CheckCase8_Sell(int i)
+{
+   return(ConfirmedCrossDown(i));
+}
+
 #endif

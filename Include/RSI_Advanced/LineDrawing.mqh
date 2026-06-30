@@ -129,8 +129,11 @@ void DrawProbabilityLabels(bool dimMode = false)
    if(!InpShowProbability || g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount) return;
    if(g_currentProb.probTP1 <= 0 && g_currentProb.probSL <= 0) return;
    SignalData sig = g_signals[g_activeSignalIndex];
+   // [CASE8-FIX3] Show real-signal nEff (T1+T2) alongside pool size so a Tier-3-
+   // inflated pool cannot look data-rich on the chart label.
+   int realN = (int)MathRound(g_currentProb.nEffT1 + g_currentProb.nEffT2);
    string ni = (g_currentProb.totalSamples > 0)
-      ? " [n=" + IntegerToString(g_currentProb.totalSamples) + "]"
+      ? " [n=" + IntegerToString(realN) + "/" + IntegerToString(g_currentProb.totalSamples) + "]"
       : " [theo]";
 
    if(dimMode)

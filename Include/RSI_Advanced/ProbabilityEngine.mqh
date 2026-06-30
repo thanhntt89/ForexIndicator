@@ -607,16 +607,23 @@ void ScanHistoricalATRBased(const SignalData &curSig,
       if(rsi == 0 || atr == 0) continue;
 
       bool similar = false;
+      // [CASE8-OPTION-B] Case 8 = crossover, RSI-agnostic. Don't fall into the
+      // generic mid-band (which drops continuation crosses at RSI>=50 and biases
+      // the estimate downward). Use a loose sanity range gated by RSI momentum
+      // direction so the pool matches rising/falling-RSI bars, not an RSI level.
+      double rsiPrev8 = (curSig.caseNumber==8) ? iRSI(NULL,0,InpRSIPeriod,InpPrice,bs+1) : 0.0;
       if(curSig.isBuySignal)
       {
          if((curSig.caseNumber==1||curSig.caseNumber==5) && rsi<35 && rsi>10) similar=true;
          else if((curSig.caseNumber==2||curSig.caseNumber==3) && rsi<45 && rsi>20) similar=true;
+         else if(curSig.caseNumber==8 && rsi>5 && rsi<95 && rsiPrev8>0 && rsi>rsiPrev8) similar=true;
          else if(rsi<50 && rsi>15) similar=true;
       }
       else
       {
          if((curSig.caseNumber==1||curSig.caseNumber==5) && rsi>65 && rsi<90) similar=true;
          else if((curSig.caseNumber==2||curSig.caseNumber==3) && rsi>55 && rsi<80) similar=true;
+         else if(curSig.caseNumber==8 && rsi>5 && rsi<95 && rsiPrev8>0 && rsi<rsiPrev8) similar=true;
          else if(rsi>50 && rsi<85) similar=true;
       }
       if(!similar) continue;
@@ -1565,13 +1572,41 @@ void CalculateProbability(int currentSignalIndex)
    // shrinkFactor ramps linearly: Brier 0.20→1.0 (no shrink), 0.35→0.0 (full shrink to 50%).
    // 0 free parameters: 0.20 = well-calibrated threshold, 0.35 = worse than random (0.25) + margin.
    // Requires minimum 20 resolved samples — below that, Brier is noise.
-   if(g_brierMetrics.samples >= 20 && g_brierMetrics.brierScore > 0.20)
+   //
+   // PER-CASE (anti-overconfidence for new/low-frequency cases like Case 8):
+   // - Case has >=20 resolved outcomes  -> shrink on THIS case's own Brier (isolated).
+   // - Case has <20 resolved outcomes   -> calibration UNVALIDATED: (a) still apply the
+   //   global Brier shrink if the global forecaster is unreliable, then (b) an uncertainty
+   //   shrink ramping 0.5→1.0 with validation count, so a brand-new case cannot display a
+   //   high-confidence number before its own predictions are validated.
    {
-      double brierShrink = MathMax(0.0, 1.0 - (g_brierMetrics.brierScore - 0.20) / 0.15);
-      g_currentProb.probTP1 = 50.0 + (g_currentProb.probTP1 - 50.0) * brierShrink;
-      g_currentProb.probTP2 = 50.0 + (g_currentProb.probTP2 - 50.0) * brierShrink;
-      g_currentProb.probTP3 = 50.0 + (g_currentProb.probTP3 - 50.0) * brierShrink;
-      g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
+      int    cbn        = curSig.caseNumber;
+      int    caseBrierN = (cbn >= 0 && cbn <= 8) ? g_brierCaseSamples[cbn] : 0;
+      double caseBrier  = (cbn >= 0 && cbn <= 8) ? g_brierCaseScore[cbn]   : 0.0;
+
+      double shrink = 1.0;   // 1.0 = no shrink
+      if(caseBrierN >= 20)
+      {
+         if(caseBrier > 0.20)
+            shrink = MathMax(0.0, 1.0 - (caseBrier - 0.20) / 0.15);
+      }
+      else
+      {
+         // (a) global Brier shrink (legacy behavior) when global is unreliable
+         if(g_brierMetrics.samples >= 20 && g_brierMetrics.brierScore > 0.20)
+            shrink = MathMax(0.0, 1.0 - (g_brierMetrics.brierScore - 0.20) / 0.15);
+         // (b) uncertainty shrink for an unvalidated case (compounds with (a))
+         double valRatio = (double)caseBrierN / 20.0;   // 0..1
+         shrink *= (0.5 + 0.5 * valRatio);              // [0.5,1.0]
+      }
+
+      if(shrink < 1.0)
+      {
+         g_currentProb.probTP1 = 50.0 + (g_currentProb.probTP1 - 50.0) * shrink;
+         g_currentProb.probTP2 = 50.0 + (g_currentProb.probTP2 - 50.0) * shrink;
+         g_currentProb.probTP3 = 50.0 + (g_currentProb.probTP3 - 50.0) * shrink;
+         g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
+      }
    }
 
    //=================================================================

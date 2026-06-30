@@ -83,7 +83,7 @@ input bool   InpHardCase6LateNY  = true;   // Block Case 6 in LateNY session
 //| INPUT GROUP: Case Filters                                          |
 //+------------------------------------------------------------------+
 input string inp_grp_filter = "========== Case Filters =========="; // ---
-input bool InpEnableCase0   = true;  // Case 0: Basic Crossover (core rule)
+input bool InpEnableCase0   = true;  // Case 0: (deprecated, not wired - use Case 8)
 input bool InpEnableCase1   = true;  // Case 1: OB/OS Bounce
 input bool InpEnableCase2   = true;  // Case 2: Regular Divergence
 input bool InpEnableCase3   = true;  // Case 3: Hidden Divergence
@@ -91,6 +91,7 @@ input bool InpEnableCase4   = true;  // Case 4: Strong Trend
 input bool InpEnableCase5   = true;  // Case 5: Orange Near Level
 input bool InpEnableCase6   = true;  // Case 6: Trend Continuation
 input bool InpEnableCase7   = true;  // Case 7: Sideway Breakout
+input bool InpEnableCase8   = true;  // Case 8: Basic Crossover (Green x Red + strong angle)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Arrow Display                                         |
@@ -232,7 +233,7 @@ input bool   InpAutoTFConfig     = true;  // Auto-adapt SL/TP/cases per TF (scal
 //| INPUT GROUP: Signal Logging                                        |
 //+------------------------------------------------------------------+
 input string inp_grp_log        = "========== Signal Logging =========="; // ---
-input bool   InpEnableSignalLog = false;                  // Enable signal logging to CSV
+input bool   InpEnableSignalLog = true;                   // Enable signal logging to CSV (persists actual outcomes across TF switch/restart)
 input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside MQL4/Files/)
 
 

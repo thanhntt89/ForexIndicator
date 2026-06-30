@@ -385,7 +385,7 @@ double GetSessionQualityNormalized(int caseNum, datetime signalTime)
       case 2: case 3:
          if(isAsian) return(0.45); if(isLondon) return(0.7);
          if(isOverlap) return(0.65); return(0.5);
-      case 4: case 7:
+      case 4: case 7: case 8:
          if(isAsian) return(0.35); if(isLondon) return(0.75);
          if(isOverlap) return(0.7); return(0.45);
       case 6:
@@ -543,6 +543,13 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       {
          outcome = g_signals[s].edgeCachedOutcome;
       }
+      else if(g_signals[s].barIndex == -1)
+      {
+         // [BINARY-CACHE-GUARD] Signal loaded from binary (old session) has a stale
+         // barIndex; edgeCachedOutcome==99 means outcome unknown -> skip to avoid
+         // invalid bar access (mirrors simCachedTP guard in ScanStoredSignals).
+         continue;
+      }
       else
       {
          outcome = 0;
@@ -590,12 +597,19 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
          else if((caseNum==2||caseNum==3) && rsi<42 && rsi>18) rel=true;
          else if((caseNum==4||caseNum==7) && rsi>47 && rsi<53) rel=true;
          else if(caseNum==6 && rsi>42 && rsi<62) rel=true;
+         // [CASE8-OPTION-B] Case 8 = crossover, RSI-agnostic. Loose sanity range
+         // only (no mid-band conditioning); the rsi>rsiPrev momentum gate below is
+         // the real filter. Avoids excluding continuation crosses at RSI>=48.
+         else if(caseNum==8 && rsi>5 && rsi<95) rel=true;
          else if(caseNum<=0 && rsi<48 && rsi>18) rel=true;
       } else {
          if((caseNum==1||caseNum==5) && rsi>67 && rsi<88) rel=true;
          else if((caseNum==2||caseNum==3) && rsi>58 && rsi<82) rel=true;
          else if((caseNum==4||caseNum==7) && rsi>47 && rsi<53) rel=true;
          else if(caseNum==6 && rsi>38 && rsi<58) rel=true;
+         // [CASE8-OPTION-B] Case 8 = crossover, RSI-agnostic (sell side). Loose
+         // sanity range only; rsi<rsiPrev momentum gate below is the real filter.
+         else if(caseNum==8 && rsi>5 && rsi<95) rel=true;
          else if(caseNum<=0 && rsi>52 && rsi<82) rel=true;
       }
       if(!rel) continue;
@@ -653,7 +667,10 @@ double CombineTheoreticalHistorical(double theoProb, double histProb,
 
    double z = 1.96;
    double z2 = z * z;
-   double pWilson = (p * n + z2 / 2.0) / (n + z2);
+   // NOTE: Wilson point estimate intentionally NOT applied to the central value
+   // (the combine below uses raw histProb). Only the Wilson SE feeds the
+   // inverse-variance weighting. To enable small-n shrink of the point estimate,
+   // wire pWilson = (p*n + z2/2)/(n + z2) into histProb — left out by design.
    double wilsonSE = MathSqrt((p * (1.0 - p) / n + z2 / (4.0 * n * n)) / (1.0 + z2 / n));
    wilsonSE = MathMax(wilsonSE, 0.05);
 

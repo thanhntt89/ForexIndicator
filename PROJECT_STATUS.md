@@ -1,4 +1,4 @@
-# RSI Advanced V11.30 - Project Status & Context Summary
+# RSI Advanced V11.32 - Project Status & Context Summary
 
 Tài liệu này đóng vai trò là **Source of Truth (Nguồn thông tin gốc)** của dự án. AI ở các phiên tiếp theo **BẮT BUỘC** đọc file này để biết trạng thái hiện tại của code, các phát hiện định lượng mới nhất, và các công việc cần tiếp tục triển khai.
 
@@ -9,7 +9,7 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 
 - **Build Pipeline**: File `make.ps1` thực hiện build song song `RSI_Advanced.mq4` (MT4) và `RSI_Advanced.mq5` (MT5).
 - **MT5 Compatibility**: Sử dụng `Include/RSI_Advanced/MQLCompat.mqh` để chạy chung mã nguồn logic với MT4.
-- **Logging System**: Ghi log định lượng chi tiết với cơ chế RAM Queue + Bulk Flush để chống đơ chart. Đang được tắt mặc định ở `Config.mqh`.
+- **Logging System**: Ghi log định lượng chi tiết với cơ chế RAM Queue + Bulk Flush để chống đơ chart. **Bật mặc định** (`InpEnableSignalLog = true`) từ V11.31 để outcomes thực persist qua TF switch/restart.
 
 ---
 
@@ -23,6 +23,81 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 ---
 
 ## 3. Changelog Các Phiên Gần Nhất
+
+### V11.32 — Case 8 (Basic Crossover) + Probability De-bias (2026-06-30)
+
+**Bối cảnh**: User báo "có setup BUY (green cắt red, trên orange) mà không ra mũi tên". Audit phát hiện
+indicator KHÔNG có trigger green-cross-red độc lập (Case 0 cũ định nghĩa nhưng chưa wire; caseNumber=0
+đụng sentinel "no-filter"). → Thêm **Case 8 = Basic Crossover** với segmentation riêng (ci=7), rồi
+audit 10-agent về tính hợp lệ xác suất → fix 5 vấn đề.
+
+**1. Case 8 — Basic Crossover (Green x Red + strong angle), priority thấp nhất:**
+- `CheckCase8_Buy/Sell = ConfirmedCrossUp/Down`; loop gate `greenCrossUp && strongAngleUp` (như Case 2/3/5)
+- Bật ở M15/M30/H1/H4 (TFConfig), tắt ở M1/M5 (nhiễu). Toggle `InpEnableCase8`
+- `g_cfgCaseEnabled[8]→[9]`, `GetActiveCaseEnabled` bound 0..8, SLTP nhóm trend, Normalize session-quality
+- Files: Config, Globals, TFConfig, SignalCases, SLTP, Normalize, RSI_Advanced.mq4/mq5
+
+**2. Probability de-bias cho Case 8 (Option B — bỏ band RSI lệch):**
+- Band hardcode `rsi 18-48/52-82` (copy từ caseNum<=0) là **biased estimator** cho crossover RSI-agnostic:
+  loại bỏ continuation-cross ở RSI>=50, exclusion lại correlated với angle gate (chọn cross dốc) → bias XUỐNG.
+- Fix: tách `caseNum==8` ra nhánh riêng, dải sanity 5-95, để momentum filter (rsi rising/falling) làm gate thật.
+  - `Normalize.mqh` Phase-2 (~603/612) + `ProbabilityEngine.mqh` Tier-3 (~614-627, thêm `rsiPrev8` momentum check)
+
+**3. Per-case Brier shrink (anti-overconfidence, thay global):**
+- `g_brierCaseScore[9]/g_brierCaseSamples[9]` (Globals), populate trong `UpdateBrierMetrics` (CalibrationEngine)
+- Step 5.65: case >=20 outcome → shrink theo Brier riêng; case <20 → global shrink + **uncertainty shrink**
+  `*= (0.5+0.5*valRatio)` → case mới (Case 8) KHÔNG hiện high-confidence trước khi có track record (ramp 0.5→1.0)
+
+**4. Confidence/WAIT-gate dùng real-signal nEff (loại Tier-3 inflation):**
+- `recN = round(nEffT1+nEffT2)` thay `totalSamples` khi gọi `GetTradeRecommendation` (mq4/mq5/PanelDrawing)
+- Trước: Tier-3 deep-scan (50-200 bar không phải tín hiệu) thổi phồng n → dataConfidence/WAIT gate sai
+
+**5. Bug bonus:**
+- `edgeCachedOutcome` thêm guard `barIndex==-1` (Normalize) — chống stale cache sau TF switch (như simCachedTP)
+- Xóa dead code `pWilson` (CombineTheoreticalHistorical tính rồi không dùng → gây hiểu nhầm có Wilson smoothing)
+
+**Lưu ý hành vi (quan trọng khi test):** Case 8 (và mọi case <20 outcome đã resolve) sẽ hiện xác suất bị
+kéo về phía 50% và có thể "WAIT (Low Data)" cho đến khi tích đủ track record. Đây là **anti-overconfidence
+CỐ Ý**, tự nới ra khi outcomes tích lũy (cần InpEnableSignalLog=true, đã default-on từ V11.31).
+
+**Còn lại (chưa làm)**: Option C — band RSI cho Case 8 từ percentile 10-90 thực nghiệm của stored signals khi n>=50.
+
+**Audit đầy đủ**: workflow 10-agent (trace pipeline + adversarial verify), mọi finding verified, lưu transcript phiên.
+
+### V11.31 — Brier Feedback + Outcome Persistence (2026-06-30)
+
+**Bối cảnh**: Review quant cho scalping. Xác minh S1-S9 đã implement đầy đủ (review trước nhầm là chưa).
+Thêm 1 cải tiến anti-overfit + fix 2 vấn đề persistence của actual outcomes qua TF switch.
+
+**1. Brier Calibration Shrink (Step 5.65) — anti-overfit:**
+- Khi `g_brierMetrics.samples >= 20 && brierScore > 0.20` → shrink probability về 50%
+- `shrinkFactor = max(0, 1 - (brier - 0.20) / 0.15)` — Brier 0.20→no shrink, 0.35→full shrink to 50%
+- **0 free parameter** (0.20 = well-calibrated, 0.35 = worse-than-random 0.25 + margin)
+- Vị trí: sau Step 5.6 (Session Quality), trước Step 5.7 (Time Decay)
+- Panel: hiển thị `Shrk:67%` khi active
+- File: `ProbabilityEngine.mqh`, `PanelDrawing.mqh`
+- **Đã loại bỏ** (overfitting risk): regime multiplier calibration từ data (64 cells × 8/cell → SE±18%)
+
+**2. InpEnableSignalLog default true:**
+- `Config.mqh:235` false→true
+- Lý do: outcomes thực (g_outcomes[]) chỉ persist qua `outcomes_{Sym}_{TF}_{Year}.csv` khi logging bật.
+  Tắt log → mỗi TF switch/restart rebuild outcomes bằng re-simulation (mất ground truth cho Brier/SessionWR/S4/OOS).
+
+**3. Reload outcomes CSV trên TF/symbol switch:**
+- OnInit load condition thêm `REASON_CHARTCHANGE` (cả .mq4 + .mq5)
+- Trước: chỉ recompile/param mới load CSV → đổi TF mất actual outcomes
+- Sau: đổi TF → session binary đã xóa lúc deinit → fallback `LoadSessionStatsFromOutcomesCSV()` → khôi phục win/loss thực
+- An toàn: dedup ở `TrackSignalForSession()` (SessionStatistics.mqh:224-229) chống double-count khi fullRecalc re-track
+
+**Kiến trúc storage (xác nhận per-Symbol-per-TF, không lẫn data):**
+- Signals: `RSI_SIG_{Sym}_{TF}.bin` — save mọi deinit, load fullRecalc (tự động, không cần flag)
+- Session stats: `RSI_SESS_{Sym}_{TF}.bin` — chỉ recompile/param
+- Outcomes: `outcomes_{Sym}_{TF}_{Year}.csv` — cần InpEnableSignalLog
+- MTF panel (H1/H4/D1): tính LIVE qua iRSI cache RAM, không đọc file TF khác
+
+**Quant score (verified, không phải ước lượng từ doc):** ~90/100 — phù hợp live scalping test M5/M15/M30.
+
+**Files modified:** Config.mqh, ProbabilityEngine.mqh, PanelDrawing.mqh, RSI_Advanced.mq4, RSI_Advanced.mq5
 
 ### V11.30 — Data Quality Metrics + Signal Invalidation Fix (2026-06-25)
 

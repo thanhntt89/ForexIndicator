@@ -157,10 +157,14 @@ int OnInit()
    g_gmtMTFNormNeeded = (g_gmtBrokerOffset != 0);
    if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
 
-   // Only load cached session stats on recompile/param change (quick restart).
-   // TF switch / remove / chart close → fullRecalc rebuilds everything fresh.
+   // Restore stats on restart AND on TF/symbol switch.
+   //   RECOMPILE/PARAMETERS: load session-stats binary (fast warm restart).
+   //   CHARTCHANGE (TF/symbol switch): binary was deleted on deinit, so fall through
+   //     to outcomes CSV -> restores ACTUAL win/loss instead of pure re-simulation.
+   //   Dedup in TrackSignalForSession() prevents double-count when fullRecalc re-tracks.
    int prevReason = UninitializeReason();
-   if(prevReason == REASON_RECOMPILE || prevReason == REASON_PARAMETERS)
+   if(prevReason == REASON_RECOMPILE || prevReason == REASON_PARAMETERS ||
+      prevReason == REASON_CHARTCHANGE)
    {
       if(!LoadSessionStatsBinary())
          LoadSessionStatsFromOutcomesCSV();
@@ -383,6 +387,13 @@ int OnCalculate(const int rates_total,
          if(CheckCase7_Buy(i))       buySignal  = 7;
          else if(CheckCase7_Sell(i)) sellSignal = 7;
       }
+      // Case 8: Basic Crossover (lowest priority) — Green x Red + strong angle.
+      // Catches the core RSI rule when no higher-quality pattern fired.
+      if(GetActiveCaseEnabled(8) && buySignal == 0 && sellSignal == 0)
+      {
+         if(greenCrossUp && strongAngleUp && CheckCase8_Buy(i))            buySignal  = 8;
+         else if(greenCrossDown && strongAngleDown && CheckCase8_Sell(i))  sellSignal = 8;
+      }
 
       // [SESSION-HARD] Post-detection: Case 6 block in Asian/LateNY
       if(buySignal == 6 || sellSignal == 6)
@@ -415,8 +426,11 @@ int OnCalculate(const int rates_total,
       }
       if(buySignal > 0)
       {
-         if(i >= rates_total - 2 && !CanTakeNewSignal())
-         { buySignal = 0; continue; }
+         // [STALE-FIX] Always store/display the signal so the panel reflects the
+         // CURRENT bar. The risk gate only blocks counting it as a taken trade
+         // (circuit-breaker/limits are surfaced separately on the panel). Prevents
+         // the panel from freezing on an old pre-breaker signal.
+         bool _buyBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferBuySignal[i] = (double)buySignal;
          CreateSignalArrow(time[i], low[i], true, buySignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
@@ -449,7 +463,7 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
-         if(i >= rates_total - 2) OnNewSignalAccepted();
+         if(i >= rates_total - 2 && !_buyBlocked) OnNewSignalAccepted();
          //--- Log signal new + pending status
          {
             int   _bs        = rates_total - 1 - i;
@@ -466,8 +480,9 @@ int OnCalculate(const int rates_total,
       }
       if(sellSignal > 0)
       {
-         if(i >= rates_total - 2 && !CanTakeNewSignal())
-         { sellSignal = 0; continue; }
+         // [STALE-FIX] Always store/display the signal (see buy branch). Risk gate
+         // only blocks counting it as a taken trade, not recording/display.
+         bool _sellBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferSellSignal[i] = (double)sellSignal;
          CreateSignalArrow(time[i], high[i], false, sellSignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
@@ -500,7 +515,7 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
-         if(i >= rates_total - 2) OnNewSignalAccepted();
+         if(i >= rates_total - 2 && !_sellBlocked) OnNewSignalAccepted();
          {
             int    _bs        = rates_total - 1 - i;
             double _atrRatio  = SL_GetATRRatio(_bs);
@@ -633,6 +648,11 @@ int OnCalculate(const int rates_total,
          for(int s = g_signalCount - 1; s >= 0; s--)
          {
             if(s == g_activeSignalIndex) continue;
+            // [STALE-FIX] Recency guard: only fall back to a RECENT still-valid
+            // signal. Without this, an invalidated newest signal would resurrect an
+            // ancient/expired signal (e.g. 99 bars old) and lock the display on it.
+            // If no valid signal within the window, keep showing the newest (invalid).
+            if(iBarShift(NULL, 0, g_signals[s].signalTime, false) > 10) continue;
             bool sigInvalid = false;
             if(g_signals[s].isBuySignal && curPrice <= g_signals[s].stopLoss)
                sigInvalid = true;
@@ -684,10 +704,13 @@ int OnCalculate(const int rates_total,
             if(InpShowMTF && g_mtfCount > 0) mtfAgree = CalculateMTFAgreement();
             double slDist  = MathAbs(activeSig.entryPrice - activeSig.stopLoss);
             double tp1Dist = MathAbs(activeSig.takeProfit1 - activeSig.entryPrice);
+            // [CASE8-FIX2] Confidence + WAIT gate from real-signal nEff (T1+T2),
+            // excluding Tier-3 deep-scan bars that inflate the pooled sample count.
+            int recN = (int)MathRound(g_currentProb.nEffT1 + g_currentProb.nEffT2);
             TradeRecommendation rec = GetTradeRecommendation(
                activeSig.caseNumber, activeSig.isBuySignal,
                g_currentProb.probTP1, g_currentProb.probSL,
-               g_currentProb.totalSamples, mtfAgree,
+               recN, mtfAgree,
                slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
             if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
                suppressDisplay = true;

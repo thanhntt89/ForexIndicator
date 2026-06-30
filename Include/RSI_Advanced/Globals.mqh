@@ -53,6 +53,10 @@ bool     g_mtfRamReady  [6];
 ProbabilityData g_currentProb;
 double          g_cachedEdge = 0.51;
 BrierMetrics    g_brierMetrics;
+// Per-case Brier calibration (index by caseNumber 0-8). Lets the shrink isolate
+// a single case's calibration instead of pooling all cases globally.
+double          g_brierCaseScore[9];   // mean squared error per case (0 = no data)
+int             g_brierCaseSamples[9]; // resolved outcomes matched per case
 
 //+------------------------------------------------------------------+
 //| Entry Zone data                                                    |
@@ -252,6 +256,6 @@ int    g_cfgMinMTFAgree    = 40;
 double g_cfgRiskPct        = 1.0;
 int    g_cfgZoneCount      = 3;
 int    g_cfgPriceDistLB    = 50;
-bool   g_cfgCaseEnabled[8];  // index 0-7 → Case 0-7
+bool   g_cfgCaseEnabled[9];  // index 0-8 → Case 0-8 (Case 8 = Basic Crossover)
 
 #endif

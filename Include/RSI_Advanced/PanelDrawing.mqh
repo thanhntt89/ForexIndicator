@@ -282,9 +282,12 @@ void DrawInfoPanel(int signalIndex)
    TradeRecommendation rec;
    if(!isInvalidated)
    {
+      // [CASE8-FIX2] Confidence + WAIT gate from real-signal nEff (T1+T2),
+      // excluding Tier-3 deep-scan bars that inflate the pooled sample count.
+      int recN = (int)MathRound(g_currentProb.nEffT1 + g_currentProb.nEffT2);
       rec = GetTradeRecommendation(
          sig.caseNumber, isBuy, g_currentProb.probTP1, g_currentProb.probSL,
-         g_currentProb.totalSamples, mtfAgree, slDist, tp1Dist, sig.atrValue, sig.signalTime);
+         recN, mtfAgree, slDist, tp1Dist, sig.atrValue, sig.signalTime);
    }
    // V11: Suppress entry zones when recommendation is AVOID/WAIT/COUNTER_TREND
    bool suppressZones = false;
@@ -433,6 +436,13 @@ void DrawInfoPanel(int signalIndex)
          titleClr = clrLime;
       else
          titleClr = clrYellow;
+   }
+   // [STALE-FIX] Mark a signal that cannot be taken right now (circuit breaker /
+   // risk limits) so a blocked signal is never read as a fresh actionable entry.
+   if(!isInvalidated && !CanTakeNewSignal())
+   {
+      titleText += " [BLOCKED]";
+      titleClr = clrOrange;
    }
    CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText, titleClr, fs+1, true);
    cy += titleBarH + 2 - 3;
@@ -602,8 +612,12 @@ void DrawInfoPanel(int signalIndex)
       else if(!g_tpHit[2]) activeTP = 3;
 
       color confClr = clrGray;
-      string confTxt = GetConfidenceText(g_currentProb.totalSamples, g_currentProb.probTP1, confClr);
-      string probTitle = "Prob [n="+IntegerToString(g_currentProb.totalSamples)+"]  "+confTxt;
+      // [CASE8-FIX3] Headline n + confidence from REAL-signal nEff (T1+T2), not the
+      // Tier-3-inflated pool. Show "real/pool" so a thin case (e.g. Case 8) cannot
+      // look data-rich. Confidence text already gates LOW DATA on n<minSamples.
+      int realN = (int)MathRound(g_currentProb.nEffT1 + g_currentProb.nEffT2);
+      string confTxt = GetConfidenceText(realN, g_currentProb.probTP1, confClr);
+      string probTitle = "Prob [n="+IntegerToString(realN)+"/"+IntegerToString(g_currentProb.totalSamples)+"]  "+confTxt;
       if(activeTP >= 2) probTitle += "  >>TP"+IntegerToString(activeTP);
       CreateTextLabel(PREFIX_PANEL+"P_T", px+pad, cy,
          probTitle, InpPanelTitleColor, fs-1, true);
