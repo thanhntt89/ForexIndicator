@@ -34,11 +34,13 @@ void HandleChartEvent(const int id, const long &lparam,
                DeleteObjectsByPrefix(PREFIX_ZONE);
                g_activeSignalIndex = g_signalCount - 1;
                g_userSelectedSignal = false;
+               g_autoFallbackActive = false;   // [STALE-FIX2] deselect clears auto flag
             }
             else
             {
                g_activeSignalIndex = sigIdx;
                g_userSelectedSignal = true;
+               g_autoFallbackActive = false;   // [STALE-FIX2] explicit human pin -> never auto-released
                if(InpShowMTF) RefreshMTFData();
                if(InpShowProbability) CalculateProbability(sigIdx);
                DrawInfoPanel(sigIdx);

@@ -591,26 +591,15 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       double rsi=iRSI(NULL,0,InpRSIPeriod,InpPrice,bs);
       double atr=iATR(NULL,0,InpATRPeriod,bs);
       if(rsi==0 || atr==0) continue;
+      // [ANTI-OVERFIT] Unified RSI windows aligned with Tier 3.
+      // Old per-case windows were 20-25pt wide (e.g., Case 6 SELL: 38-58)
+      // vs Tier 3's 35pt (50-85) → different populations → inconsistent edge.
+      // Unified window eliminates sensitivity to case number differences.
       bool rel=false;
       if(isBuy) {
-         if((caseNum==1||caseNum==5) && rsi<33 && rsi>12) rel=true;
-         else if((caseNum==2||caseNum==3) && rsi<42 && rsi>18) rel=true;
-         else if((caseNum==4||caseNum==7) && rsi>47 && rsi<53) rel=true;
-         else if(caseNum==6 && rsi>42 && rsi<62) rel=true;
-         // [CASE8-OPTION-B] Case 8 = crossover, RSI-agnostic. Loose sanity range
-         // only (no mid-band conditioning); the rsi>rsiPrev momentum gate below is
-         // the real filter. Avoids excluding continuation crosses at RSI>=48.
-         else if(caseNum==8 && rsi>5 && rsi<95) rel=true;
-         else if(caseNum<=0 && rsi<48 && rsi>18) rel=true;
+         if(rsi<50 && rsi>15) rel=true;
       } else {
-         if((caseNum==1||caseNum==5) && rsi>67 && rsi<88) rel=true;
-         else if((caseNum==2||caseNum==3) && rsi>58 && rsi<82) rel=true;
-         else if((caseNum==4||caseNum==7) && rsi>47 && rsi<53) rel=true;
-         else if(caseNum==6 && rsi>38 && rsi<58) rel=true;
-         // [CASE8-OPTION-B] Case 8 = crossover, RSI-agnostic (sell side). Loose
-         // sanity range only; rsi<rsiPrev momentum gate below is the real filter.
-         else if(caseNum==8 && rsi>5 && rsi<95) rel=true;
-         else if(caseNum<=0 && rsi>52 && rsi<82) rel=true;
+         if(rsi>50 && rsi<85) rel=true;
       }
       if(!rel) continue;
       double rsiPrev=iRSI(NULL,0,InpRSIPeriod,InpPrice,bs+1);

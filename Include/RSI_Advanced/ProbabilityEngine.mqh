@@ -606,44 +606,36 @@ void ScanHistoricalATRBased(const SignalData &curSig,
       double atr = iATR(NULL, 0, InpATRPeriod, bs);
       if(rsi == 0 || atr == 0) continue;
 
+      // [ANTI-OVERFIT] Unified RSI windows — all cases use same wide fallback.
+      // Old per-case windows (Case 1/5: 25pt, Case 2/3: 25pt, Case 6: 35pt)
+      // caused different sample populations when case detection differed between
+      // brokers. Unified window = same samples regardless of case number.
       bool similar = false;
-      // [CASE8-OPTION-B] Case 8 = crossover, RSI-agnostic. Don't fall into the
-      // generic mid-band (which drops continuation crosses at RSI>=50 and biases
-      // the estimate downward). Use a loose sanity range gated by RSI momentum
-      // direction so the pool matches rising/falling-RSI bars, not an RSI level.
-      double rsiPrev8 = (curSig.caseNumber==8) ? iRSI(NULL,0,InpRSIPeriod,InpPrice,bs+1) : 0.0;
       if(curSig.isBuySignal)
       {
-         if((curSig.caseNumber==1||curSig.caseNumber==5) && rsi<35 && rsi>10) similar=true;
-         else if((curSig.caseNumber==2||curSig.caseNumber==3) && rsi<45 && rsi>20) similar=true;
-         else if(curSig.caseNumber==8 && rsi>5 && rsi<95 && rsiPrev8>0 && rsi>rsiPrev8) similar=true;
-         else if(rsi<50 && rsi>15) similar=true;
+         if(rsi<50 && rsi>15) similar=true;
       }
       else
       {
-         if((curSig.caseNumber==1||curSig.caseNumber==5) && rsi>65 && rsi<90) similar=true;
-         else if((curSig.caseNumber==2||curSig.caseNumber==3) && rsi>55 && rsi<80) similar=true;
-         else if(curSig.caseNumber==8 && rsi>5 && rsi<95 && rsiPrev8>0 && rsi<rsiPrev8) similar=true;
-         else if(rsi>50 && rsi<85) similar=true;
+         if(rsi>50 && rsi<85) similar=true;
       }
       if(!similar) continue;
 
       // --- Angle-tier stratification (Spec: AngleStrength_Probability_Spec.md)
-      // Only compare bars with similar angle momentum to current signal.
-      // Divergence cases (2,3) rely on price structure, not angle → skip filter.
-      // Falls back to full pool when curSig.angleStrength is not computed (= 0).
-      if(curSig.angleStrength > 0.5 &&
+      // [ANTI-OVERFIT] Dead zone [0.3, 0.7]: skip filter when angleStrength
+      // is ambiguous. Old sharp threshold at 0.5 caused binary flip between
+      // brokers (0.49 vs 0.51 → completely different sample populations).
+      // Only filter when angle is clearly strong (>0.7) or clearly weak (<0.3).
+      if(curSig.angleStrength > 0.7 &&
          curSig.caseNumber != 2 && curSig.caseNumber != 3)
       {
-         // Proxy for historical bar's angle: RSI change over 2 bars / ATR-scaled
          double rsiPrev2 = iRSI(NULL, 0, InpRSIPeriod, InpPrice, bs + 2);
          double histAngle = 0.0;
          if(rsiPrev2 > 0 && atr > 0)
             histAngle = MathAbs(rsi - rsiPrev2) / MathMax(atr * 0.5, 0.01);
 
-         bool curStrong  = (curSig.angleStrength >= 1.0);
-         bool histStrong = (histAngle >= 1.0);
-         // Exclude bars from the opposite angle tier
+         bool curStrong  = (curSig.angleStrength >= 1.5);
+         bool histStrong = (histAngle >= 1.5);
          if(curStrong != histStrong) continue;
       }
 
@@ -1482,9 +1474,12 @@ void CalculateProbability(int currentSignalIndex)
       int block = GetSessionBlock(curSig.signalTime);
       int ci = MathMax(0, MathMin(curSig.caseNumber - 1, CASE_COUNT - 1));
 
-      bool hasCaseData    = (g_sessionStats.totalPerCase[block][ci] >= 20 &&
+      // [ANTI-OVERFIT] n>=50 (was 20): 20 samples per (session×case) cell
+      // is statistically noisy — Wilson SE≈0.107 at p=0.60, n=20.
+      // At n=50, SE≈0.068 — much more reliable calibration signal.
+      bool hasCaseData    = (g_sessionStats.totalPerCase[block][ci] >= 50 &&
                              g_sessionStats.winRatePerCase[block][ci] >= 0.0);
-      bool hasSessionData = (g_sessionStats.totalPerSession[block] >= 20);
+      bool hasSessionData = (g_sessionStats.totalPerSession[block] >= 50);
 
       if(hasCaseData || hasSessionData)
       {
@@ -1546,15 +1541,18 @@ void CalculateProbability(int currentSignalIndex)
                double blended = (baselineWR * modelWeight + measuredWR * measuredWeight) / totalW;
                double ratio = blended / MathMax(baselineWR, 0.01);
 
-               // [GMT-FIX-A2b] Floor ratio at 0.30 — prevent session WR=0% from
-               // crushing probability below 30% of model. Without floor, A2a cap
-               // saves Step 5 but Step 5.6 re-crushes via 0% session data.
-               if(ratio < 0.30)
+               // [ANTI-OVERFIT] Cap ratio to [0.85, 1.15] — prevent session stats
+               // from reversing trading decisions. Old [0.30, inf) allowed 3x crush
+               // or unlimited boost → same signal showed AVOID on one broker, ENTRY
+               // on another due to different per-terminal outcome CSVs.
+               // ±15% max adjustment preserves calibration value without overfitting.
+               if(ratio < 0.85)
                {
-                  ratio = 0.30;
+                  ratio = 0.85;
                   g_gmtDataQualityWarn = true;
                   g_gmtWarnReason = "Session ratio floored";
                }
+               if(ratio > 1.15) ratio = 1.15;
 
                g_currentProb.probTP1 *= ratio;
                g_currentProb.probTP2 *= ratio;

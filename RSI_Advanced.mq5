@@ -266,6 +266,8 @@ int OnCalculate(const int rates_total,
       DeleteObjectsByPrefix(PREFIX_ZONE);
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
+      g_userSelectedSignal = false;   // [STALE-FIX2] clear any pin on full rebuild
+      g_autoFallbackActive = false;   // [STALE-FIX2] clear auto-fallback flag on full rebuild
       ArrayResize(g_signals, 0);
       LoggerInit(true);   // reset CSV files on fullRecalc (prevents duplicate rows on restart)
       if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
@@ -652,9 +654,34 @@ int OnCalculate(const int rates_total,
 
       // Auto-switch to latest signal when new signal appears
       static int s_prevSignalCount = 0;
-      if(g_signalCount > s_prevSignalCount && s_prevSignalCount > 0)
+      static datetime s_prevNewestTime = 0;
+      datetime newestTime = (g_signalCount > 0) ? g_signals[g_signalCount-1].signalTime : 0;
+      // [STALE-FIX2] Release any override when a genuinely NEWER signal exists.
+      // Count alone is masked by the per-tick prune+re-detect (g_signalCount stays
+      // constant across ticks); the newest signalTime advancing is NOT masked.
+      if((g_signalCount > s_prevSignalCount && s_prevSignalCount > 0) ||
+         (newestTime > s_prevNewestTime && s_prevNewestTime > 0))
+      {
          g_userSelectedSignal = false;
+         g_autoFallbackActive = false;
+      }
+      // [STALE-FIX2] Release an AUTO fallback selection as soon as the newest signal is
+      // valid again -- do NOT wait for g_signalCount to strictly increase. A genuine
+      // manual arrow-click (g_autoFallbackActive==false) is never auto-released here.
+      if(g_autoFallbackActive && g_userSelectedSignal && g_signalCount > 0)
+      {
+         int    _ni = g_signalCount - 1;
+         double _cp = iClose(NULL, 0, 0);
+         bool   _newestInvalid = ( g_signals[_ni].isBuySignal && _cp <= g_signals[_ni].stopLoss) ||
+                                 (!g_signals[_ni].isBuySignal && _cp >= g_signals[_ni].stopLoss);
+         if(!_newestInvalid)
+         {
+            g_userSelectedSignal = false;
+            g_autoFallbackActive = false;
+         }
+      }
       s_prevSignalCount = g_signalCount;
+      s_prevNewestTime  = newestTime;
 
       if(!g_userSelectedSignal)
          g_activeSignalIndex = g_signalCount - 1;
@@ -715,6 +742,7 @@ int OnCalculate(const int rates_total,
             {
                g_activeSignalIndex = s;
                g_userSelectedSignal = true;
+               g_autoFallbackActive = true;   // [STALE-FIX2] auto selection -> releasable when newest valid again
                signalInvalidated = false;
                break;
             }

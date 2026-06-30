@@ -1,4 +1,4 @@
-# RSI Advanced V11.32 - Project Status & Context Summary
+# RSI Advanced V11.34 - Project Status & Context Summary
 
 Tài liệu này đóng vai trò là **Source of Truth (Nguồn thông tin gốc)** của dự án. AI ở các phiên tiếp theo **BẮT BUỘC** đọc file này để biết trạng thái hiện tại của code, các phát hiện định lượng mới nhất, và các công việc cần tiếp tục triển khai.
 
@@ -23,6 +23,68 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 ---
 
 ## 3. Changelog Các Phiên Gần Nhất
+
+### V11.34 — Stale-Display Fallback Lock Fix (2026-06-30)
+
+**Bối cảnh**: User báo lại "tín hiệu gần nhất SELL mà entry zone hiển thị BUY" (XAUUSD M5, panel
+BUY Case 1, Age 50m, P/L +118 pip — đã chạy quá TP3). Workflow 9-agent (5 hypothesis trace +
+synthesis + 3 adversarial verify) kết luận đây là **regression của fallback V11.33**, KHÔNG phải
+stale-arrow / repaint / sticky-band (H2/H3/H5 đều REFUTED).
+
+**Root cause (CONFIRMED)**: Fallback `[STALE-FIX]` V11.33 và click tay **dùng CHUNG 1 cờ**
+`g_userSelectedSignal`. Cờ này chỉ được nhả khi `g_signalCount` **tăng nghiêm ngặt** (mq5:655 cũ),
+mà prune+re-detect mỗi tick giữ count không đổi → một khi panel "pin" sang BUY cũ (do fallback khi
+SELL mới nhất bị invalidate lúc giá vọt lên, HOẶC do click tay) thì **kẹt vĩnh viễn** ở BUY tới khi
+có tín hiệu mới toanh. PanelDrawing đọc hướng chỉ từ `g_signals[g_activeSignalIndex].isBuySignal`
+(verify H5: chỉ 2 nơi ghi cờ = fallback mq5:717 + click ChartEvents:41).
+> **Lưu ý chẩn đoán (verifier flag)**: KHÔNG phân biệt được từ screenshot là do fallback hay do
+> click tay — cả hai set cùng cờ. Fix xử lý CẢ HAI: pin tay vẫn giữ tới khi có tín hiệu mới hơn.
+
+**Fix (tag `[STALE-FIX2]`, mq4+mq5 đồng bộ, 8 edit):**
+1. **Globals.mqh:29** — thêm cờ riêng `g_autoFallbackActive` (auto-releasable, tách khỏi pin tay).
+2. **Auto-switch block** (mq5 ~655-684 / mq4 ~600-629) — nhả override khi:
+   (a) `g_signalCount` tăng **HOẶC** `newestTime` (signalTime tín hiệu mới nhất) tiến lên — không bị
+   prune che; **và** (b) auto-fallback đang bật mà tín hiệu mới nhất hợp lệ trở lại → nhả ngay, không
+   chờ count tăng.
+3. **Fallback loop** (mq5:717 / mq4:664) — set `g_autoFallbackActive=true` (đánh dấu là auto).
+4. **ChartEvents:41/36** — click tay set `g_autoFallbackActive=false` (pin tay KHÔNG bị auto-nhả);
+   deselect cũng clear.
+5. **fullRecalc reset** (mq5 ~268 / mq4 ~246) — reset `g_userSelectedSignal=false` + `g_autoFallbackActive=false`.
+
+**Giữ nguyên intent V11.33**: vẫn fallback khi tín hiệu active invalidate; recency guard `iBarShift>10`
+KHÔNG đổi (không hồi sinh tín hiệu cổ); chỉ bỏ phần "kẹt" ngoài ý muốn → panel quay về tín hiệu mới
+nhất (SELL) ngay khi nó hợp lệ trở lại.
+
+**Còn lại / khuyến nghị**:
+- Hỏi user: có **tự click mũi tên BUY** trước khi chụp không? Nếu có → là behavior đúng (H4-prongB);
+  fix vẫn hợp lý (auto-nhả khi có SELL mới hơn).
+- Optional: thêm debug tag panel (g_userSelectedSignal / g_autoFallbackActive / activeIdx vs count-1)
+  để screenshot lần sau phân biệt rõ fallback-lock vs pin tay.
+- "Entry zone" trên chart thực ra là DIM-MODE SLTP+EN label (DrawSLTPLines dim + EN tag `[n=4/250]`),
+  KHÔNG phải PREFIX_ZONE band (bị xóa khi WAIT). Không phải lỗi hướng.
+- **KHÔNG build** — user tự compile. mq4+mq5 đã đồng bộ.
+
+### V11.33 — Stale-Display / Cross-Platform Diagnosis (2026-06-30)
+
+**Bối cảnh**: User báo (a) tín hiệu mới nhất nhưng panel hiện vị trí tín hiệu CŨ; (b) cùng H4: MT5 SELL
+vs MT4 BUY. Workflow 8-agent (trace + adversarial verify) kết luận:
+- **MT5 SELL vs MT4 BUY KHÔNG phải bug normalization.** Normalization GMT+3 căn UTC đúng (không off-by-one).
+  Nguyên nhân: (1) **khác broker feed** XAUUSDc(MT5) vs XAUUSD(MT4) → lật crossover biên [bản chất, không fix code được trừ khi cùng symbol];
+  (2) **stale-display freeze** — cả 2 panel kẹt ở tín hiệu CŨ khác nhau (MT5 7 nến, MT4 13 nến; MT4 circuit-breaker chặn tín hiệu mới).
+
+**3 fix display (mq4+mq5 đồng bộ, tag `[STALE-FIX]`):**
+
+1. **Tách StoreSignal khỏi risk gate** (mq5 buy:487/sell:534, mq4 buy:433/sell:485):
+   - Trước: `if(!CanTakeNewSignal()){ buySignal=0; continue; }` → BỎ lưu tín hiệu → panel đóng băng ở tín hiệu cũ.
+   - Sau: `bool _buyBlocked = ...` (bỏ continue) → LUÔN StoreSignal/arrow/track; chỉ chặn `OnNewSignalAccepted` (đếm trade) khi blocked.
+   - Lợi: panel phản ánh nến hiện tại; stats empirical thu cả tín hiệu bị block (data tốt hơn).
+
+2. **Title `[BLOCKED]`** (PanelDrawing ~442): khi `!CanTakeNewSignal()` → title thêm `[BLOCKED]` màu cam → tín hiệu không actionable không bị hiểu nhầm là entry tươi.
+
+3. **Recency guard ở invalidation fallback** (mq5 ~708, mq4 ~655): vòng quét ngược thêm `if(iBarShift(signalTime) > 10) continue;` → không "hồi sinh" tín hiệu cổ/expired (vd 99 nến); không có tín hiệu hợp lệ gần → giữ tín hiệu mới nhất (invalidated).
+
+**Lưu ý hành vi**: alert giờ kêu cả khi blocked (panel hiện `[BLOCKED]`). Cap recency = 10 bar (heuristic, tunable).
+**Còn lại (optional)**: Case 8 min |Green−Red| separation để giảm lật cross biên giữa 2 platform; unify offset source (signalTimeUTC dùng GuessEUBrokerOffset tách khỏi GetBrokerGMTOffset — lệch 1h cho non-EU GMT+3 mùa đông).
 
 ### V11.32 — Case 8 (Basic Crossover) + Probability De-bias (2026-06-30)
 
