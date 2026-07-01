@@ -1,4 +1,4 @@
-# RSI Advanced V11.34 - Project Status & Context Summary
+# RSI Advanced V11.35 - Project Status & Context Summary
 
 Tài liệu này đóng vai trò là **Source of Truth (Nguồn thông tin gốc)** của dự án. AI ở các phiên tiếp theo **BẮT BUỘC** đọc file này để biết trạng thái hiện tại của code, các phát hiện định lượng mới nhất, và các công việc cần tiếp tục triển khai.
 
@@ -23,6 +23,49 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 ---
 
 ## 3. Changelog Các Phiên Gần Nhất
+
+### V11.35 — Dead Code Cleanup + Xác Nhận Priority Table Đã Hoàn Thành (2026-07-01)
+
+**Bối cảnh**: User đưa bảng priority "nâng điểm 72 → 82-85" (spread bias + missing context fields,
+IC gate cho angle, **S5 continuous similarity weighting + S6 n_eff**, Rolling WF, Permutation test,
+MQL4 performance throttle) và hỏi còn mục nào cần xử lý ngay. Verify lại toàn bộ code hiện tại →
+**TẤT CẢ các mục đã được implement**. Bảng trong ảnh là **roadmap CŨ** (từ trước khi S1-S9 build ở
+thời V11.31, verified 2026-06-10). Con số "72 → 82-85" không còn đúng với code hiện tại.
+
+**Trạng thái verified toàn bộ priority table**:
+
+| Mục | Trạng thái | Vị trí |
+|-----|-----------|--------|
+| P0 Spread bias + context fields | Done | `spreadAtSignal` cả 3 tier + SELL bias fix (S2); sessionBlock/rsiAtSignal/angleStrength/atrValue lưu (S3) + dùng weight (S5/S7/S8/S9) |
+| P0 IC gate cho angle | Done | ProbabilityEngine.mqh:1334-1341 (icSamples>=20 && infoCoeff>=0.05) |
+| P1 S5 similarity + S6 n_eff | Done | ProbabilityEngine.mqh:1002-1089 (session+angle+recency+RSI+ATR kernel); nEff feed Wilson @1385 |
+| P1 Rolling WF | Done | WalkForward.mqh:217-286 (K=5 windows, median overfit ratio) |
+| P2 Permutation test | Done | WalkForward.mqh:295-338 (100 perms, LCG RNG, p-value) |
+| P2 MQL4 perf throttle | Done | RSI_Advanced.mq4:709 / mq5:774 (throttle 200ms + new-bar/price/signal gate) |
+
+**Phát hiện + fix (dead code)**: Trong lúc verify phát hiện hàm `ScanStoredSignals` (bản integer-count
+Tier-1, ProbabilityEngine.mqh) **KHÔNG được gọi ở bất kỳ đâu**. Hàm active thực sự là
+`ScanStoredSignalsBoth` (ProbabilityEngine.mqh:914 — weighted S5-S9 đầy đủ). Dead code này đã **2 lần**
+khiến phân tích hiểu nhầm "Tier 1 dùng integer count" (dẫn tới đề xuất re-implement S5/S6 vốn đã có).
+Xóa để tránh nhầm lẫn về sau.
+
+**Changes (4 edit, Include dùng chung mq4+mq5 — không cần sync riêng 2 platform)**:
+1. **ProbabilityEngine.mqh** — Xóa banner + toàn bộ hàm `ScanStoredSignals` (55 dòng). Bonus: xóa 1 ký
+   tự non-ASCII `->` trong comment (đúng quy tắc comment ASCII).
+2. **Sửa 3 comment tham chiếu tên hàm đã xóa** (chỉ đổi chữ, không đổi logic):
+   - ProbabilityEngine.mqh (~911, trong `ScanStoredSignalsBoth`): "Same cap as ScanStoredSignals" →
+     "Same forward-window cap as the Tier1+2 scan (symmetric window)"
+   - Structs.mqh:34 + Normalize.mqh:556: đổi `ScanStoredSignals` → `ScanStoredSignalsBoth`
+
+**Verify**: grep `ScanStoredSignals\b` → 0 kết quả; `ScanStoredSignalsBoth` → 8 occurrences còn nguyên.
+Không call site → không thể gây lỗi biên dịch. Panel + probability KHÔNG đổi hành vi (hàm đã chết,
+không nằm trong pipeline).
+
+**Đòn bẩy nâng điểm còn lại**: chủ yếu là **tích lũy data** (anti-overconfidence shrink giữ prob ~50%
+tới khi đủ outcomes) — KHÔNG phải code. Các mục quant "Còn lại" nhỏ (không nằm trong bảng): Case 8
+empirical RSI band từ percentile khi n>=50 (Option C); Case 8 min |Green-Red| separation cross-broker.
+
+**Files changed**: ProbabilityEngine.mqh, Structs.mqh, Normalize.mqh. **KHÔNG build** — user tự compile.
 
 ### V11.34 — Stale-Display Fallback Lock Fix (2026-06-30)
 

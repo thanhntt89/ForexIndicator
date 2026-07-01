@@ -493,62 +493,6 @@ int SimulateSignalOutcomeH1(datetime sigTime, bool isBuy, double entryPrice,
 }
 
 //+------------------------------------------------------------------+
-//| Scan stored signals                                                |
-//+------------------------------------------------------------------+
-void ScanStoredSignals(const SignalData &curSig, bool matchCase, int maxFwd,
-                       int &total, int &timeout, int &tp1, int &tp2, int &tp3, int &sl,
-                       double &bTP1, double &bSL)
-{
-   total=0; timeout=0; tp1=0; tp2=0; tp3=0; sl=0; bTP1=0; bSL=0;
-
-   for(int s = 0; s < g_signalCount; s++)
-   {
-      if(g_signals[s].signalTime == curSig.signalTime) continue;
-      if(g_signals[s].isBuySignal != curSig.isBuySignal) continue;
-      if(matchCase && g_signals[s].caseNumber != curSig.caseNumber) continue;
-
-      // [FIX-P0] Cap forward window: old code gave M1 1440 bars (24h) while Tier 3 used 40.
-      // Signals >2h old on M1 measure random walk, not signal edge. Cap at 3x TF-forward.
-      // M1: min(1440,120)=120 bars (2h), M5: min(288,150)=150 (12.5h), H1+: maxFwd wins.
-      int timeBasedMax = 1440 / MathMax(Period(), 1);
-      timeBasedMax = MathMin(timeBasedMax, maxFwd * 3);
-      timeBasedMax = MathMax(timeBasedMax, maxFwd);
-      if(g_signals[s].barIndex + timeBasedMax >= Bars) continue;
-
-      int out, btr;
-      if(g_signals[s].simCachedTP != 99)
-      {
-         out = g_signals[s].simCachedTP;
-         btr = g_signals[s].simCachedBTR;
-      }
-      else if(g_signals[s].barIndex == -1)
-      {
-         // [BINARY-CACHE-GUARD] Signal loaded from binary (old session) has stale barIndex.
-         // simCachedTP==99 means outcome unknown → skip to avoid invalid bar array access.
-         continue;
-      }
-      else
-      {
-         btr = 0;
-         out = SimulateSignalOutcome(
-            g_signals[s].barIndex, g_signals[s].isBuySignal,
-            g_signals[s].entryPrice, g_signals[s].stopLoss,
-            g_signals[s].takeProfit1, g_signals[s].takeProfit2, g_signals[s].takeProfit3,
-            timeBasedMax, btr, g_signals[s].spreadAtSignal);
-         g_signals[s].simCachedTP  = out;
-         g_signals[s].simCachedBTR = btr;
-      }
-
-      if(out == 0) { timeout++; continue; }
-      total++;
-      if(out >= 1) { tp1++; bTP1 += btr; }
-      if(out >= 2) tp2++;
-      if(out >= 3) tp3++;
-      if(out == -1) { sl++; bSL += btr; }
-   }
-}
-
-//+------------------------------------------------------------------+
 //| ATR-based historical scan                                          |
 //+------------------------------------------------------------------+
 void ScanHistoricalATRBased(const SignalData &curSig,
@@ -650,7 +594,7 @@ void ScanHistoricalATRBased(const SignalData &curSig,
       else                   { s1=ep+sd; t1=ep-td1; t2=ep-td2; t3=ep-td3; }
 
       int btr = 0;
-      int out = SimulateSignalOutcome(i, curSig.isBuySignal, ep, s1, t1, t2, t3, maxFwd, btr);
+      int out = SimulateSignalOutcome(i, curSig.isBuySignal, ep, s1, t1, t2, t3, maxFwd, btr, curSig.spreadAtSignal);
 
       if(out == 0) { timeout++; continue; }
       total++;
@@ -963,7 +907,7 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
       if(g_signals[s].signalTime == curSig.signalTime) continue;
       if(g_signals[s].isBuySignal != curSig.isBuySignal) continue;
 
-      // [FIX-P0] Same cap as ScanStoredSignals — symmetric Tier1+2 forward window.
+      // [FIX-P0] Same forward-window cap as the Tier1+2 scan (symmetric window).
       int timeBasedMax = 1440 / MathMax(Period(), 1);
       timeBasedMax = MathMin(timeBasedMax, maxFwd * 3);
       timeBasedMax = MathMax(timeBasedMax, maxFwd);
@@ -1641,6 +1585,8 @@ void CalculateProbability(int currentSignalIndex)
    }
    g_currentProb.probTP2 = NormalizeDouble(MathMin(g_currentProb.probTP2, g_currentProb.probTP1), 1);
    g_currentProb.probTP3 = NormalizeDouble(MathMin(g_currentProb.probTP3, g_currentProb.probTP2), 1);
+
+   CalculateKellyFraction();
 }
 
 #endif

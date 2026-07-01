@@ -506,16 +506,22 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
    static int    s_efhCase   = -99;
    static bool   s_efhBuy    = false;
    static int    s_efhMaxFwd = -1;
+   static int    s_efhRegime = 99;
    static double s_efhResult = 0.51;
+   int curRegime = DetectMarketRegime(Bars - 1);
    if(s_efhN == g_signalCount && s_efhCase == caseNum &&
-      s_efhBuy == isBuy && s_efhMaxFwd == maxForward)
+      s_efhBuy == isBuy && s_efhMaxFwd == maxForward && s_efhRegime == curRegime)
       return(s_efhResult);
    s_efhN      = g_signalCount;
    s_efhCase   = caseNum;
    s_efhBuy    = isBuy;
    s_efhMaxFwd = maxForward;
+   s_efhRegime = curRegime;
 
    int correctCount=0, totalCount=0;
+   bool isTrending = (curRegime != 0);
+   int correctTrend=0, totalTrend=0;
+   int correctRange=0, totalRange=0;
 
    // Anti-overfitting: only use in-sample (training) signals to measure edge.
    // OOS signals are held out for walk-forward validation; including them would
@@ -547,7 +553,7 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       {
          // [BINARY-CACHE-GUARD] Signal loaded from binary (old session) has a stale
          // barIndex; edgeCachedOutcome==99 means outcome unknown -> skip to avoid
-         // invalid bar access (mirrors simCachedTP guard in ScanStoredSignals).
+         // invalid bar access (mirrors simCachedTP guard in ScanStoredSignalsBoth).
          continue;
       }
       else
@@ -570,7 +576,13 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
          }
          g_signals[s].edgeCachedOutcome = outcome;
       }
-      if(outcome!=0) { totalCount++; if(outcome==1) correctCount++; }
+      if(outcome!=0)
+      {
+         totalCount++; if(outcome==1) correctCount++;
+         int sigRegime = DetectMarketRegime(g_signals[s].barIndex);
+         if(sigRegime != 0) { totalTrend++; if(outcome==1) correctTrend++; }
+         else               { totalRange++; if(outcome==1) correctRange++; }
+      }
    }
 
    // [CROSS-BROKER-FIX v2] Time-based boundary + NEW→OLD scan for Phase 2.
@@ -591,16 +603,21 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       double rsi=iRSI(NULL,0,InpRSIPeriod,InpPrice,bs);
       double atr=iATR(NULL,0,InpATRPeriod,bs);
       if(rsi==0 || atr==0) continue;
-      // [ANTI-OVERFIT] Unified RSI windows aligned with Tier 3.
-      // Old per-case windows were 20-25pt wide (e.g., Case 6 SELL: 38-58)
-      // vs Tier 3's 35pt (50-85) → different populations → inconsistent edge.
-      // Unified window eliminates sensitivity to case number differences.
-      bool rel=false;
-      if(isBuy) {
-         if(rsi<50 && rsi>15) rel=true;
-      } else {
-         if(rsi>50 && rsi<85) rel=true;
+      // Case-aware RSI windows: tighter windows for cases with specific RSI zones,
+      // unified window for cases where RSI range is broad.
+      // caseNum==0 (global edge) keeps unified window for consistency with Tier 3.
+      double rsiLo = 15, rsiHi = 50;
+      if(!isBuy) { rsiLo = 50; rsiHi = 85; }
+      if(caseNum == 1) {
+         if(isBuy)  { rsiLo = 15; rsiHi = 38; }
+         else       { rsiLo = 62; rsiHi = 85; }
       }
+      else if(caseNum == 4) {
+         if(isBuy)  { rsiLo = 42; rsiHi = 65; }
+         else       { rsiLo = 35; rsiHi = 58; }
+      }
+      bool rel=false;
+      if(rsi > rsiLo && rsi < rsiHi) rel=true;
       if(!rel) continue;
       double rsiPrev=iRSI(NULL,0,InpRSIPeriod,InpPrice,bs+1);
       if(rsiPrev==0) continue;
@@ -625,20 +642,49 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
             if(bL<=entry-atr) { outcome= 1; break; }
          }
       }
-      if(outcome!=0) { totalCount++; if(outcome==1) correctCount++; }
+      if(outcome!=0)
+      {
+         totalCount++; if(outcome==1) correctCount++;
+         // ATR ratio proxy for regime (buffers unavailable for deep history)
+         double atrSlow = iATR(NULL, 0, 50, bs);
+         bool barTrending = (atrSlow > 0 && atr / atrSlow > 1.2);
+         if(barTrending) { totalTrend++; if(outcome==1) correctTrend++; }
+         else            { totalRange++; if(outcome==1) correctRange++; }
+      }
    }
 
    // [PROB-FIX-1] Store result in cache before every return path
    if(totalCount<5) { s_efhResult = 0.51; return(s_efhResult); }
-   double edge=(double)correctCount/(double)totalCount;
+
+   // Regime-aware edge: blend global with regime-specific when enough samples
+   double edgeGlobal = (double)correctCount/(double)totalCount;
+   double edge = edgeGlobal;
+   if(isTrending && totalTrend >= 10)
+   {
+      double edgeTrend = (double)correctTrend / (double)totalTrend;
+      edge = edgeTrend * 0.7 + edgeGlobal * 0.3;
+   }
+   else if(!isTrending && totalRange >= 10)
+   {
+      double edgeRange = (double)correctRange / (double)totalRange;
+      edge = edgeRange * 0.7 + edgeGlobal * 0.3;
+   }
+
    double shrink=50.0/(50.0+(double)totalCount);
    edge=edge*(1.0-shrink)+0.50*shrink;
-   // Anti-overfitting: clamp to realistic edge range for liquid markets.
-   // Empirical research (Menkhoff 2010, Osler 2000): sustained edge >0.62 is
-   // not achievable in XAUUSD/Forex. Upper bound 0.70 allows Gambler's Ruin
-   // to output P(TP)≈84% — unrealistic and causes overconfident position sizing.
-   // [0.48, 0.62] matches actual profitable system edge distributions.
-   s_efhResult = MathMax(0.48, MathMin(0.62, edge));
+   // TF-adaptive edge ceiling — synchronized with CalculateProbability() ceiling.
+   // Lower TFs have more noise → tighter ceiling. Higher TFs allow wider edge.
+   // Empirical: sustained edge > ceiling is not achievable in liquid markets.
+   double edgeCeil = 0.65;
+   {
+      int tf = Period();
+      if(tf <= TF_M1)       edgeCeil = 0.56;
+      else if(tf <= TF_M5)  edgeCeil = 0.58;
+      else if(tf <= TF_M15) edgeCeil = 0.60;
+      else if(tf <= TF_M30) edgeCeil = 0.62;
+      else if(tf <= TF_H1)  edgeCeil = 0.63;
+   }
+   s_efhResult = MathMax(0.48, MathMin(edgeCeil, edge));
    return(s_efhResult);
 }
 

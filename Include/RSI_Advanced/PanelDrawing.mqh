@@ -370,6 +370,7 @@ void DrawInfoPanel(int signalIndex)
       calcY += lh; calcY += lh; calcY += lh; calcY += lh;
       calcY += lh; // time-decay line
       calcY += lh; // DQ metrics line
+      calcY += lh; // Kelly + P-value line
    }
    if(hasMTF)
    {
@@ -393,6 +394,8 @@ void DrawInfoPanel(int signalIndex)
       // Note: Period() returns minutes via MQLCompat; PERIOD_H4 is enum 16388 in MT5.
       // Compare against 240 (minutes) for cross-platform compatibility.
       if(Period() >= TF_H4) calcY += lh;
+      if(g_brierMetrics.samples >= 5) calcY += lh;
+      calcY += lh;  // portfolio risk (always shown)
    }
    calcY += lh + 4;
    int totalH = calcY;
@@ -729,6 +732,20 @@ void DrawInfoPanel(int signalIndex)
       if(g_currentProb.avgBarsToSL > 0) avgEdge += "SL~"+IntegerToString((int)g_currentProb.avgBarsToSL)+"bars ";
       avgEdge += "Edge:"+DoubleToString(edge*100,1)+"%";
       CreateTextLabel(PREFIX_PANEL+"P_AE", px+pad, cy, " "+avgEdge, InpPanelDimColor, fs-2, false);
+      cy += lh;
+
+      // Kelly fraction + Permutation p-value
+      string klLine = " Kelly:"+DoubleToString(g_walkForward.kellyFraction,1)+"%";
+      if(g_walkForward.permPValue < 1.0)
+         klLine += " | P-val:"+DoubleToString(g_walkForward.permPValue,3);
+      if(g_walkForward.rollingCount >= 2)
+         klLine += " | MedR:"+DoubleToString(g_walkForward.medianRatio,2);
+      color klClr = clrOrange;
+      if(g_walkForward.kellyFraction > 0 && g_walkForward.permPValue < 0.05)
+         klClr = clrLime;
+      else if(g_walkForward.permPValue < 0.10)
+         klClr = clrYellow;
+      CreateTextLabel(PREFIX_PANEL+"P_KL", px+pad, cy, klLine, klClr, fs-2, false);
       cy += lh;
 
       // Data quality breakdown (V11.30)

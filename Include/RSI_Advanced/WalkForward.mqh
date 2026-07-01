@@ -130,6 +130,10 @@ void CalculateWalkForwardMetrics()
    g_walkForward.isRobust = true;
    g_walkForward.isSamples = 0;
    g_walkForward.oosSamples = 0;
+   g_walkForward.medianRatio = 1.0;
+   g_walkForward.rollingCount = 0;
+   g_walkForward.permPValue = 1.0;
+   g_walkForward.kellyFraction = 0;
 
    if(!InpUseWalkForward) return;
    if(g_outcomeCount < 15) return;  // Need minimum data
@@ -201,6 +205,162 @@ void CalculateWalkForwardMetrics()
    bool hasWins    = (g_walkForward.isWinRate > 0 || g_walkForward.oosWinRate > 0);
    bool enoughOOS  = (g_walkForward.oosSamples >= 15);
    g_walkForward.isRobust = !enoughOOS || (ratioOK && absoluteOK && hasWins);
+
+   CalculateRollingWalkForward();
+   CalculatePermutationPValue();
+}
+
+//+------------------------------------------------------------------+
+//| Rolling Walk-Forward: K overlapping windows for median overfit     |
+//| ratio. Single split can be lucky; median of K splits is robust.   |
+//+------------------------------------------------------------------+
+void CalculateRollingWalkForward()
+{
+   g_walkForward.rollingCount = 0;
+   g_walkForward.medianRatio  = g_walkForward.overfitRatio;
+   for(int r = 0; r < 5; r++) g_walkForward.rollingRatios[r] = 1.0;
+
+   if(!InpUseWalkForward || g_outcomeCount < 30) return;
+
+   int K = 5;
+   int minIS = 10, minOOS = 5;
+   while(K > 2)
+   {
+      int windowSize = g_outcomeCount / K;
+      int oosSize = (int)(windowSize * 0.2);
+      int isSize  = windowSize - oosSize;
+      if(isSize >= minIS && oosSize >= minOOS) break;
+      K--;
+   }
+   if(K < 2) return;
+
+   int step = (g_outcomeCount - g_outcomeCount / K) / MathMax(1, K - 1);
+   if(step < 1) step = 1;
+   int windowSize = g_outcomeCount / K;
+   int validK = 0;
+
+   for(int w = 0; w < K && validK < 5; w++)
+   {
+      int wStart = w * step;
+      int wEnd   = MathMin(wStart + windowSize, g_outcomeCount);
+      int splitPt = wStart + (int)((wEnd - wStart) * 0.8);
+
+      int isW = 0, isL = 0, oosW = 0, oosL = 0;
+      for(int i = wStart; i < wEnd; i++)
+      {
+         if(g_outcomes[i].outcome == 0) continue;
+         if(i < splitPt)
+         {
+            if(g_outcomes[i].outcome > 0) isW++; else isL++;
+         }
+         else
+         {
+            if(g_outcomes[i].outcome > 0) oosW++; else oosL++;
+         }
+      }
+      int isN = isW + isL, oosN = oosW + oosL;
+      if(isN < minIS || oosN < minOOS) continue;
+
+      double isWR  = (double)isW / (double)isN;
+      double oosWR = (double)oosW / (double)oosN;
+      double ratio = (oosWR > 0) ? isWR / oosWR : ((isWR > 0) ? 2.0 : 1.0);
+      g_walkForward.rollingRatios[validK] = ratio;
+      validK++;
+   }
+
+   g_walkForward.rollingCount = validK;
+   if(validK < 2) return;
+
+   // Median via insertion sort (K <= 5)
+   double sorted[5];
+   for(int i = 0; i < validK; i++) sorted[i] = g_walkForward.rollingRatios[i];
+   for(int i = 1; i < validK; i++)
+   {
+      double key = sorted[i];
+      int j = i - 1;
+      while(j >= 0 && sorted[j] > key) { sorted[j+1] = sorted[j]; j--; }
+      sorted[j+1] = key;
+   }
+   g_walkForward.medianRatio = sorted[validK / 2];
+
+   if(g_walkForward.medianRatio >= 1.15)
+      g_walkForward.isRobust = false;
+}
+
+//+------------------------------------------------------------------+
+//| Permutation test: is edge statistically significant?               |
+//| Shuffles outcome directions 100 times, counts how often shuffled  |
+//| edge >= actual edge. p-value < 0.05 = significant.                |
+//+------------------------------------------------------------------+
+void CalculatePermutationPValue()
+{
+   static int    s_permN   = -1;
+   static double s_permRes = 1.0;
+   if(s_permN == g_outcomeCount)
+   {
+      g_walkForward.permPValue = s_permRes;
+      return;
+   }
+   s_permN = g_outcomeCount;
+
+   g_walkForward.permPValue = 1.0;
+   if(g_outcomeCount < 20) { s_permRes = 1.0; return; }
+
+   // Compute actual win rate from outcomes
+   int wins = 0, total = 0;
+   for(int i = 0; i < g_outcomeCount; i++)
+   {
+      if(g_outcomes[i].outcome == 0) continue;
+      total++;
+      if(g_outcomes[i].outcome > 0) wins++;
+   }
+   if(total < 10) { s_permRes = 1.0; return; }
+   double actualWR = (double)wins / (double)total;
+
+   // LCG random number generator (deterministic, no MathRand dependency)
+   long seed = (long)g_signals[0].signalTime + (long)total;
+   int nPerm = 100;
+   int countBetter = 0;
+
+   for(int p = 0; p < nPerm; p++)
+   {
+      int shuffledWins = 0;
+      for(int i = 0; i < total; i++)
+      {
+         seed = (seed * 1103515245 + 12345) & 0x7FFFFFFF;
+         if((seed % 2) == 0) shuffledWins++;
+      }
+      double shuffledWR = (double)shuffledWins / (double)total;
+      if(shuffledWR >= actualWR) countBetter++;
+   }
+
+   s_permRes = (double)(countBetter + 1) / (double)(nPerm + 1);
+   g_walkForward.permPValue = s_permRes;
+}
+
+//+------------------------------------------------------------------+
+//| Half-Kelly optimal position size from current probability + R:R   |
+//+------------------------------------------------------------------+
+void CalculateKellyFraction()
+{
+   g_walkForward.kellyFraction = 0;
+   if(g_currentProb.probTP1 <= 0 || g_currentProb.probSL <= 0) return;
+   if(g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount) return;
+
+   double slDist = MathAbs(g_signals[g_activeSignalIndex].entryPrice
+                         - g_signals[g_activeSignalIndex].stopLoss);
+   double tpDist = MathAbs(g_signals[g_activeSignalIndex].takeProfit1
+                         - g_signals[g_activeSignalIndex].entryPrice);
+   if(slDist <= 0) return;
+
+   double winRate  = g_currentProb.probTP1 / 100.0;
+   double lossRate = 1.0 - winRate;
+   double rr       = tpDist / slDist;
+   if(rr <= 0) return;
+
+   double kelly = winRate - lossRate / rr;
+   double halfKelly = MathMax(0, kelly * 0.5) * 100.0;
+   g_walkForward.kellyFraction = MathMin(halfKelly, 5.0);
 }
 
 //+------------------------------------------------------------------+

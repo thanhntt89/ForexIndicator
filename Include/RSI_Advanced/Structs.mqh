@@ -31,7 +31,7 @@ struct SignalData
    // --- Per-signal simulation cache (RAM only, rebuilt on fullRecalc) ---
    // Avoids re-running SimulateSignalOutcome for resolved historical signals.
    // Once a signal has all forward bars available, its outcome is deterministic.
-   // ScanStoredSignals: multi-level outcome (-1=SL, 0=timeout, 1/2/3=TP)
+   // ScanStoredSignalsBoth: multi-level outcome (-1=SL, 0=timeout, 1/2/3=TP)
    int      simCachedTP;      // 99 = not cached
    int      simCachedBTR;     // bars-to-result for above
    // MeasureEdgeFromHistory: binary outcome (-1=SL first, 1=target first)
@@ -173,6 +173,11 @@ struct WalkForwardData
    // Computed on IS-only resolved signals to avoid lookahead bias.
    double infoCoeff;          // Pearson(angleStrength, outcome ∈ {+1,-1})
    int    icSamples;          // Sample count (IS resolved signals with angleStrength > 0)
+   double rollingRatios[5];   // K rolling overfit ratios (median used for robustness)
+   double medianRatio;        // Median of rolling overfit ratios
+   int    rollingCount;       // Number of completed rolling windows
+   double permPValue;         // Permutation test p-value for edge significance
+   double kellyFraction;      // Half-Kelly optimal position size (%)
 };
 
 struct RollingPerformance
