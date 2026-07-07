@@ -136,21 +136,13 @@ void DrawProbabilityLabels(bool dimMode = false)
       ? " [n=" + IntegerToString(realN) + "/" + IntegerToString(g_currentProb.totalSamples) + "]"
       : " [theo]";
 
-   if(dimMode)
-   {
-      string dimTxt = "EN " + DoubleToString(sig.entryPrice,_Digits)
-                    + " | W:" + DoubleToString(g_currentProb.probTP1,1)
-                    + "% L:" + DoubleToString(g_currentProb.probSL,1) + "%"
-                    + ni;
-      ObjectSetString(0, PREFIX_LINE+"T_EN", OBJPROP_TEXT, dimTxt);
-      ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_FONTSIZE, 8);
-      return;
-   }
+   color dimClr = clrDarkGray;
 
    // SL: append prob to price tag
    ObjectSetString(0, PREFIX_LINE+"T_SL", OBJPROP_TEXT,
       "SL " + DoubleToString(sig.stopLoss,_Digits) + "  " +
       DoubleToString(g_currentProb.probSL,1) + "%" + ni);
+   if(dimMode) ObjectSetInteger(0, PREFIX_LINE+"T_SL", OBJPROP_COLOR, dimClr);
 
    UpdateTPHitStatus(g_activeSignalIndex);
 
@@ -164,11 +156,11 @@ void DrawProbabilityLabels(bool dimMode = false)
 
    // TP1
    string p1 = "";
-   color  c1 = InpTP1LineColor;
+   color  c1 = dimMode ? dimClr : InpTP1LineColor;
    if(g_tpHit[0])
    {
       p1 = "HIT " + DoubleToString(g_currentProb.probTP1,1) + "%";
-      c1 = clrLime;
+      c1 = dimMode ? dimClr : clrLime;
    }
    else if(hasDecay && activeTP == 1)
    {
@@ -176,7 +168,8 @@ void DrawProbabilityLabels(bool dimMode = false)
       if(g_currentProb.avgBarsToTP1 > 0)
          p1 += " ~" + IntegerToString((int)g_currentProb.avgBarsToTP1) + "bars";
       p1 += " Edge:" + DoubleToString(edgePct, 0) + "%";
-      c1 = (g_currentProb.probTP1 >= g_currentProb.originalProbTP1) ? clrLime : clrOrange;
+      if(!dimMode)
+         c1 = (g_currentProb.probTP1 >= g_currentProb.originalProbTP1) ? clrLime : clrOrange;
    }
    else
    {
@@ -190,17 +183,18 @@ void DrawProbabilityLabels(bool dimMode = false)
 
    // TP2
    string p2 = "";
-   color  c2 = InpTP2LineColor;
+   color  c2 = dimMode ? dimClr : InpTP2LineColor;
    if(g_tpHit[1])
    {
       p2 = "HIT " + DoubleToString(g_currentProb.probTP2,1) + "%";
-      c2 = clrLime;
+      c2 = dimMode ? dimClr : clrLime;
    }
    else if(hasDecay && activeTP == 2)
    {
       p2 = DoubleToString(g_currentProb.originalProbTP2,1) + "%->" + DoubleToString(g_currentProb.probTP2,1) + "%";
       p2 += " Edge:" + DoubleToString(edgePct, 0) + "%";
-      c2 = (g_currentProb.probTP2 >= g_currentProb.originalProbTP2) ? clrLime : clrOrange;
+      if(!dimMode)
+         c2 = (g_currentProb.probTP2 >= g_currentProb.originalProbTP2) ? clrLime : clrOrange;
    }
    else
       p2 = DoubleToString(g_currentProb.probTP2,1) + "%";
@@ -210,17 +204,18 @@ void DrawProbabilityLabels(bool dimMode = false)
 
    // TP3
    string p3 = "";
-   color  c3 = InpTP3LineColor;
+   color  c3 = dimMode ? dimClr : InpTP3LineColor;
    if(g_tpHit[2])
    {
       p3 = "HIT " + DoubleToString(g_currentProb.probTP3,1) + "%";
-      c3 = clrLime;
+      c3 = dimMode ? dimClr : clrLime;
    }
    else if(hasDecay && activeTP == 3)
    {
       p3 = DoubleToString(g_currentProb.originalProbTP3,1) + "%->" + DoubleToString(g_currentProb.probTP3,1) + "%";
       p3 += " Edge:" + DoubleToString(edgePct, 0) + "%";
-      c3 = (g_currentProb.probTP3 >= g_currentProb.originalProbTP3) ? clrLime : clrOrange;
+      if(!dimMode)
+         c3 = (g_currentProb.probTP3 >= g_currentProb.originalProbTP3) ? clrLime : clrOrange;
    }
    else
       p3 = DoubleToString(g_currentProb.probTP3,1) + "%";
@@ -233,7 +228,7 @@ void DrawProbabilityLabels(bool dimMode = false)
       "EN " + DoubleToString(sig.entryPrice,_Digits) +
       " | W:" + DoubleToString(g_currentProb.probTP1,1) +
       "% L:" + DoubleToString(g_currentProb.probSL,1) + "%");
-   ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_COLOR, clrWhite);
+   ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_COLOR, dimMode ? dimClr : clrWhite);
    ObjectSetInteger(0, PREFIX_LINE+"T_EN", OBJPROP_FONTSIZE, 8);
 }
 //+------------------------------------------------------------------+

@@ -122,18 +122,33 @@ void BuildNormalizedH4Candles()
    }
    int h1Count = MathMin(h1BarsNeeded, h1Available);
 
+   // [PERF] Bulk-fetch all H1 OHLC+time in ONE CopyRates call instead of 5 single-element
+   // CopyXXX per bar. On MT5 (broker GMT!=0, non-H1 chart) the old per-bar path issued
+   // ~h1Count*5 (~10k) fallback copies on every rebuild -> the biggest TF-switch cost on
+   // MT5 GMT+3. CopyRates works on MT4+MT5; TFPeriod() keeps the H1 arg correct on both.
+   MqlRates h1r[];
+   ArraySetAsSeries(h1r, true);   // index 0 = newest (matches iTime(NULL,TF_H1,shift))
+   int h1Got = CopyRates(_Symbol, TFPeriod(TF_H1), 0, h1Count, h1r);
+   if(h1Got <= 0)
+   {
+      // H1 not loaded yet (async on MT5) — leave counts at 0 so the next tick retries.
+      g_normH4Count = 0;
+      g_normRSICount = 0;
+      return;
+   }
+
    // Build H4 candles by grouping H1 bars into GMT+0 4-hour blocks
    // Scan from oldest to newest for proper OHLC construction
    g_normH4Count = 0;
    datetime prevBoundary = 0;
 
-   for(int i = h1Count - 1; i >= 0; i--)
+   for(int i = h1Got - 1; i >= 0; i--)
    {
-      datetime h1Time  = iTime(NULL, TF_H1, i);
-      double   h1Open  = iOpen(NULL, TF_H1, i);
-      double   h1High  = iHigh(NULL, TF_H1, i);
-      double   h1Low   = iLow(NULL, TF_H1, i);
-      double   h1Close = iClose(NULL, TF_H1, i);
+      datetime h1Time  = h1r[i].time;
+      double   h1Open  = h1r[i].open;
+      double   h1High  = h1r[i].high;
+      double   h1Low   = h1r[i].low;
+      double   h1Close = h1r[i].close;
 
       if(h1Time == 0 || h1Open == 0) continue;
 

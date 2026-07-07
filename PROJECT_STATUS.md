@@ -1,4 +1,4 @@
-# RSI Advanced V11.35 - Project Status & Context Summary
+# RSI Advanced V11.37 - Project Status & Context Summary
 
 Tài liệu này đóng vai trò là **Source of Truth (Nguồn thông tin gốc)** của dự án. AI ở các phiên tiếp theo **BẮT BUỘC** đọc file này để biết trạng thái hiện tại của code, các phát hiện định lượng mới nhất, và các công việc cần tiếp tục triển khai.
 
@@ -23,6 +23,111 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 ---
 
 ## 3. Changelog Các Phiên Gần Nhất
+
+### V11.37 — TF-Switch Performance Fix (load lâu → 16ms) (2026-07-06)
+
+**Bối cảnh**: User báo "chuyển time frame load lâu" (cả MT4 lẫn MT5, mọi TF). Cắm `[PERF]`
+instrument (GetTickCount quanh từng phase OnCalculate, Print chỉ khi fullRecalc) để khoanh vùng
+bằng số thật thay vì đoán. Kết quả: **3000-4766ms → 16ms** (user verify trên MT4 XAUUSDc).
+
+**3 hotspot trong fullRecalc (mỗi lần đổi TF / attach đều chạy fullRecalc):**
+
+1. **MTF_InitRamBuffers dựng 250 bar × 4-6 slot HTF** — nhưng `GetMTFTrend` CHỈ đọc bar `[0]` và
+   `[2]`. Fix: `MTF_INIT_BUILD_BARS = 8` (Globals.mqh); buffer vẫn tự lớn dần qua `MTF_UpdateRamBuffer`.
+   (Bản bulk CopyBuffer/CopyTime thử trước đã **REVERT** — build-8 đủ nhanh, CopyTime HTF có nguy cơ
+   block trên MT4.)
+
+2. **`MeasureOptimalTPRatios` (SLTP.mqh) deep history scan KHÔNG cache, gọi 1 lần/tín hiệu** trong
+   detection loop. `barIndex` param không dùng; Phase 1 skip lúc fullRecalc; Phase 2 thuần lịch sử →
+   kết quả giống nhau mọi tín hiệu cùng `(isBuy, caseNum)` trong 1 pass. Fix: **memo-cache** bảng 20
+   slot (index `caseNum*2+dir`, invalidate `(Period, totalBars)`; KHÔNG key g_signalCount — tăng giữa
+   loop → thrash). `return`→`break`+store 1 chỗ.
+
+3. **[DOMINANT ~2953-4766ms] `LoggerInit(true)` xóa 3 file CSV (`FileDelete×3`) mỗi fullRecalc.** Vừa
+   chậm ~3s vừa là **bug data-loss** (log quant bị xóa mỗi lần đổi TF). Fix: `LoggerInit(false)` trong
+   fullRecalc + **forward-only logging** — `LogSignalEntry`/`LogOutcomePending` chỉ ghi khi nến vừa đóng
+   (`i >= rates_total-2`); `TrackSignalForSession` thêm param `willLog` → tín hiệu lịch sử đặt
+   `loggedToFile=true` để `CheckAndLogNewlyResolved` không ghi lại (không dup dù không wipe). → Log giờ
+   **bền qua TF switch**.
+
+**Chống trùng (do bỏ wipe — bảo đảm KHÔNG double-count kết quả):**
+- `LoadSessionStatsFromOutcomesCSV` (đường DUY NHẤT nạp g_outcomes thiếu dedup; chỉ chạy fallback khi
+  thiếu `.bin`): thêm pass dedup O(n) theo (signalTime, case, dir) sau `SortOutcomesByTime`, trước
+  `UpdateSessionStats`.
+- `tools/zone_edge.py`: thêm dedup signals theo SIGNAL_ID (outcomes đã dedup sẵn qua dict last-wins).
+- `g_outcomes` (tính live) LUÔN đủ vì re-resolve mỗi phiên qua `CheckPendingOutcomes`; forward-only +
+  willLog chỉ ảnh hưởng FILE CSV, không ảnh hưởng probability/session stats.
+
+**Helper mới**: `TFPeriod(int)` (MathUtils.mqh — MT5 `MinutesToTimeframe` / MT4 identity) cho `CopyRates`
+bulk H1 trong `BuildNormalizedH4Candles` (MT5 GMT≠0 — giữ). Tránh bẫy `TF_*` vs `PERIOD_*`.
+
+**Files changed**: Globals.mqh, MathUtils.mqh, MTFEngine.mqh, SLTP.mqh, CandleNormalize.mqh,
+SessionStatistics.mqh, RSI_Advanced.mq4, RSI_Advanced.mq5, tools/zone_edge.py.
+**KHÔNG struct change → KHÔNG cần xóa `.bin`.** `[PERF-PROBE]` đã gỡ sạch sau verify.
+**Còn lại (optional)**: outcomes CSV có thể phình dần theo phiên (đã dedup lúc đọc nên KHÔNG sai kết quả);
+Tier-3 `ScanHistoricalATRBased` cold scan (display=16ms nên OK, chưa đụng).
+
+### V11.36 — AngIC Diagnostic + OS-Cross Monitor + Case 9 (OB/OS Raw Crossover) (2026-07-01)
+
+**Boi canh**: User dieu tra vi sao mot so cu "green cat red" khong ra mui ten (M30/H1/H4),
+va vi sao cung thi truong nhung H4 co tin hieu ma H1/M30 khong. Ket luan: **khong phai bug** —
+(1) trong trend khong co cross moi; (2) ngưỡng goc thich nghi tang trong trend loc cross non;
+(3) closed-bar guard hoan mui ten o nen dang chay; (4) moi TF tinh RSI rieng nen le nhau (ban chat
+MTF). Case bat dao chieu SOM = Case 1 (OB/OS Bounce, chi ban khi RSI green < 32). Sau do user de xuat
+rule "green cat red duoi 32" va yeu cau dua vao he thong de tu theo doi.
+
+**3 thay doi (Include dung chung mq4+mq5; 2 file root sync):**
+
+1. **AngIC panel diagnostic** (PanelDrawing.mqh, sau dong Kelly): hien `infoCoeff` + `icSamples`
+   theo dung gate ProbabilityEngine dung cho angle edge (`icSamples>=20 && infoCoeff>=0.05`). Bands
+   theo WalkForward.mqh header: >0.10 strong / 0.05-0.10 weak / <0.05 noise / <0 INVERSE. Mau: lime ON,
+   vang weak-ON, cam INVERSE, dim n/a hoac not-applied. Cho user thay **thuc nghiem** goc co edge tren
+   symbol/TF cua minh hay khong (2-pass calcY + draw da can chinh; cleanup prefix-scan an toan).
+
+2. **OS-Cross monitor marker** (ArrowManager.mqh `DrawOSCrossMonitor` + `PREFIX_OSMON` + `InpMonitorOSCross`):
+   cham nho aqua/magenta o cho green cat red trong vung OB/OS. Ban dau la buoc quan sat, **KHONG** vao
+   pipeline. Sau khi Case 9 thanh tin hieu that -> **default TAT** (`InpMonitorOSCross=false`), giu lai de
+   overlay so sanh RAW pattern vs Case 9 arrows. Cleanup PREFIX_OSMON o deinit + fullRecalc ca 2 root.
+
+3. **Case 9 = OB/OS Raw Crossover** (promote thanh tin hieu that, day du pipeline):
+   - Dinh nghia (FINAL - plain cross): `greenCrossUp && ConfirmedCrossUp(i)` (BUY) / `greenCrossDown &&
+     ConfirmedCrossDown(i)` (SELL) — tuc **Case 8 BO angle gate**. Case 8 (cross doc) uu tien cao hon nen
+     Case 9 hung cac cross YEU-goc Case 8 bo → tach rieng do xac suat Tier-1 CUA CHINH NO. KHONG zone,
+     KHONG angle, KHONG lookback (da bo input InpCase9OSLevel/InpCase9Lookback). Grouped reversal-family (SL tight).
+     Uu tien **thap nhat**, `InpEnableCase9=true`. **Da doi dinh nghia 3 lan theo user**: strict green<32 luc cross
+     → bounce-from-oversold (B, lookback) → **plain cross (final)** (user: "de rieng 1 case khi xanh cat len do,
+     tinh xac suat rieng"). **AngIC:-0.13 INVERSE tren XAUUSD H1 (n=38) → cross KHONG co edge o day; Case 9 phan
+     lon se WAIT/No-Edge — dung de DO plain-cross co edge rieng khong, arrow != lenh.**
+   - **Solution A (zone measurement, thay vi tach case theo vung)**: user muon 3 case theo vung (buy<32 /
+     sell>68 / mid) — TU CHOI vi fragment data + trung Case 1/5 (priority). Thay vao do: `RSI_AT_SIGNAL` da
+     log tren MOI tin hieu → tool **`tools/zone_edge.py`** join signals+outcomes qua SIGNAL_ID, xuat
+     Win%/AvgPL(pip)/MFE-MAE per (case × vung OS/MID/OB × huong) + rollup pure-zone. Do duoc zone-edge NGAY
+     tu data cu, khong can them case. Chay: `python tools/zone_edge.py --dir <Files/RSI_Advanced_Logs> --symbol XAUUSD --tf H1`.
+   - **Nhom REVERSAL** (khong phai trend): giong Case 1 (fires o RSI extreme). SL tight (nhom 1/5),
+     RSI band reversal, session-quality nhom 1/5/9. (Workflow map ban dau de xuat trend group — da
+     **override** sang reversal vi ban chat OB/OS.)
+   - Bat tren: M15/M30/H1/H4+ (dung noi Case 8 bat). Tat tren M1/M5 (giong Case 1/8 vang o do).
+
+**CRITICAL — dual-indexing scheme khi them case (GHI NHO de khong OOB lan sau):**
+- **Scheme A** (index = caseNumber truc tiep, 0..N): `g_cfgCaseEnabled[]`, `g_brierCaseScore[]`,
+  `g_brierCaseSamples[]` (Globals), `caseSqErr[]`/`caseMatched[]` (CalibrationEngine). Them case ->
+  **literal [9]->[10]** + loop `c<9->c<10` + bound `cbn<=8->cbn<=9` / `cn<=8->cn<=9`.
+- **Scheme B** (index = caseNumber-1, qua macro): `#define CASE_COUNT` (Structs.mqh:4). Dieu khien
+  `winsPerCase[SESSION_BLOCKS][CASE_COUNT]` (Structs) + SessionStatistics loops/clamps + ProbEngine:1419.
+  Them case -> **CASE_COUNT 8->9** (tu dong cascade). **KHONG** dung literal cho nhom nay.
+- Bo sot 1 cho = OOB crash hoac case im lang khong bat. Dung workflow 3-agent map het footprint truoc khi sua.
+
+**Files changed (11)**: Structs.mqh (CASE_COUNT), Globals.mqh (3 arrays [10]), Config.mqh (InpEnableCase9 +
+InpMonitorOSCross), CalibrationEngine.mqh (arrays+loops+bound), ProbabilityEngine.mqh (Brier bound cbn<=9),
+SignalCases.mqh (name/detail/CheckCase9), TFConfig.mqh (getter+8 loops c<10+bound>9+enable[9]), SLTP.mqh
+(reversal group: SL mult x5, RSI filter, isReversal/isRev/sigRev), Normalize.mqh + SessionFilter.mqh
+(session-quality reversal group), SignalLogger.mqh (OBOSCross), RSI_Advanced.mq4/mq5 (Case 9 detection block).
+
+**Verify**: grep 0 straggler ([9] decl / c<9 / <=8 bounds); Case 9 wired 11 file; mq4:408-411 == mq5:460-463.
+**KHONG build** — user tu compile. **Caveat**: CASE_COUNT doi -> struct SessionStats doi size -> **xoa
+RSI_SESS_*.bin** (tu rebuild) sau khi cai ban nay de tranh doc sai binary cu.
+**Trang thai**: Case 9 la EXPERIMENT (user tu theo doi win-rate/EV qua AngIC + log). Neu khong an -> tat
+`InpEnableCase9=false`. Neu tot -> giu; neu muon giam nhieu -> them lai gate angle/MTF.
 
 ### V11.35 — Dead Code Cleanup + Xác Nhận Priority Table Đã Hoàn Thành (2026-07-01)
 

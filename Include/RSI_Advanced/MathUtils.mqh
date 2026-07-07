@@ -6,6 +6,19 @@
 #define RSI_ADV_MATHUTILS_MQH
 
 //+------------------------------------------------------------------+
+//| TFPeriod — map TF_* minute constant to the platform-correct        |
+//| timeframe value for bulk series calls (CopyRates/CopyBuffer/...).  |
+//| MT5 needs an ENUM_TIMEFRAMES (via MinutesToTimeframe); MT4 periods  |
+//| ARE minute values, so the constant is already correct. Avoids the   |
+//| TF_* vs PERIOD_* trap when calling CopyXXX for a non-chart TF.      |
+//+------------------------------------------------------------------+
+#ifdef __MQL5__
+ENUM_TIMEFRAMES TFPeriod(int tfMin) { return(MinutesToTimeframe(tfMin)); }
+#else
+int             TFPeriod(int tfMin) { return(tfMin); }
+#endif
+
+//+------------------------------------------------------------------+
 //| Simple Moving Average (non-series array)                           |
 //+------------------------------------------------------------------+
 double CalculateSMA(const double &source[], int barIndex, int period)

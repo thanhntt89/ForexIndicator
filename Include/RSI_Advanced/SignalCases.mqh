@@ -24,6 +24,7 @@ string GetCaseName(int caseNum)
       case 6: return("Trend Continuation");
       case 7: return("Sideway Breakout");
       case 8: return("Basic Crossover");
+      case 9: return("Plain Cross");
    }
    return("Unknown");
 }
@@ -43,6 +44,7 @@ string GetCaseDetailBuy(int caseNum)
       case 6: return("Green & Red above Orange, pullback held|=> Bounce up, trend continuation, hold/add BUY");
       case 7: return("Multiple crosses inside BB (sideway confirmed)|=> Green breaks BB Upper, breakout UP");
       case 8: return("Green crosses above Red with strong angle 12-2h|=> Core RSI Advanced rule, potential uptrend");
+      case 9: return("Plain Green crosses above Red (no strong-angle gate)|=> Bare crossover Case 8 skips (weak angle), tracked with own probability");
    }
    return("");
 }
@@ -59,6 +61,7 @@ string GetCaseDetailSell(int caseNum)
       case 6: return("Green & Red below Orange, pullback held|=> Bounce down, trend continuation, hold/add SELL");
       case 7: return("Multiple crosses inside BB (sideway confirmed)|=> Green breaks BB Lower, breakout DOWN");
       case 8: return("Green crosses below Red with strong angle 4-6h|=> Core RSI Advanced rule, potential downtrend");
+      case 9: return("Plain Green crosses below Red (no strong-angle gate)|=> Bare crossover Case 8 skips (weak angle), tracked with own probability");
    }
    return("");
 }
@@ -273,6 +276,26 @@ bool CheckCase8_Buy(int i)
 }
 
 bool CheckCase8_Sell(int i)
+{
+   return(ConfirmedCrossDown(i));
+}
+
+//+------------------------------------------------------------------+
+//| CASE 9: Plain Green x Red crossover (experimental, lowest prio).  |
+//| The bare RSI-Advanced crossover: green crosses Red with 2-bar     |
+//| confirmation + rising green (ConfirmedCrossUp/Down), but WITHOUT   |
+//| Case 8's strong-angle gate. Because Case 8 (steep cross) has      |
+//| higher priority, Case 9 catches the WEAK/plain crosses Case 8     |
+//| rejects — isolating them so the probability engine tracks their   |
+//| OWN Tier-1 win-rate separately. No zone / no angle filter.        |
+//| Grouped reversal-family (tight SL / momentum-turn) for now.       |
+//+------------------------------------------------------------------+
+bool CheckCase9_Buy(int i)
+{
+   return(ConfirmedCrossUp(i));
+}
+
+bool CheckCase9_Sell(int i)
 {
    return(ConfirmedCrossDown(i));
 }

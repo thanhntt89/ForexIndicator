@@ -225,6 +225,8 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
    g_ratesTotal = rates_total;
+   uint _pt0 = GetTickCount();   // [PERF-PROBE] TF-switch timing (temporary)
+   uint _ptMtfDur = 0, _ptFRDur = 0, _ptBufDur = 0, _ptNormDur = 0, _ptDelDur = 0, _ptLogDur = 0;  // [PERF-PROBE]
    ArraySetAsSeries(time, false);
    ArraySetAsSeries(open, false);
    ArraySetAsSeries(high, false);
@@ -238,23 +240,31 @@ int OnCalculate(const int rates_total,
    bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
    if(fullRecalc)
    {
+      uint _fr0 = GetTickCount();   // [PERF-PROBE]
       ArrayResize(g_rawRSI, rates_total);
       ArrayInitialize(g_rawRSI, EMPTY_VALUE);
+      uint _del0 = GetTickCount();   // [PERF-PROBE]
       DeleteObjectsByPrefix(PREFIX_ARROW);
       DeleteObjectsByPrefix(PREFIX_OSMON);
       DeleteObjectsByPrefix(PREFIX_LINE);
       DeleteObjectsByPrefix(PREFIX_PANEL);
       DeleteObjectsByPrefix(PREFIX_PROB);
       DeleteObjectsByPrefix(PREFIX_ZONE);
+      _ptDelDur = GetTickCount() - _del0;   // [PERF-PROBE] 6x ObjectsDeleteAll
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       g_userSelectedSignal = false;   // [STALE-FIX2] clear any pin on full rebuild
       g_autoFallbackActive = false;   // [STALE-FIX2] clear auto-fallback flag on full rebuild
       ArrayResize(g_signals, 0);
+      uint _log0 = GetTickCount();   // [PERF-PROBE]
       LoggerInit(false);  // [PERF] do NOT wipe CSV logs on fullRecalc (was ~3s FileDelete + data loss
                           //        every TF switch). Forward-only logging below prevents dup rows.
+      _ptLogDur = GetTickCount() - _log0;   // [PERF-PROBE] LoggerInit file I/O
       // [PERF] BuildNormalizedH4Candles already called in OnInit; per-tick refresh handles updates.
+      uint _mtf0 = GetTickCount();          // [PERF-PROBE]
       MTF_InitRamBuffers();  // Rebuild MTF RAM buffers from historical iRSI data
+      _ptMtfDur = GetTickCount() - _mtf0;   // [PERF-PROBE]
+      _ptFRDur = GetTickCount() - _fr0;     // [PERF-PROBE] fullRecalc block (deletes+logger+resize+mtf)
    }
    else if(rates_total > g_prevRatesTotal)
    {
@@ -270,6 +280,7 @@ int OnCalculate(const int rates_total,
    int startBar;
    if(fullRecalc)
    {
+      uint _buf0 = GetTickCount();   // [PERF-PROBE]
       startBar = MathMax(InpRSIPeriod, rates_total - InpMaxBars);
       ArrayInitialize(BufferGreen, EMPTY_VALUE);
       ArrayInitialize(BufferRed, EMPTY_VALUE);
@@ -282,6 +293,7 @@ int OnCalculate(const int rates_total,
       ArrayInitialize(BufferSL, EMPTY_VALUE);
       ArrayInitialize(BufferTP1, EMPTY_VALUE);
       ArrayInitialize(BufferTP2, EMPTY_VALUE);
+      _ptBufDur = GetTickCount() - _buf0;   // [PERF-PROBE] indicator-buffer ArrayInitialize
    }
    else
    {
@@ -291,7 +303,9 @@ int OnCalculate(const int rates_total,
       startBar = MathMax(startBar, rates_total - InpMaxBars);
    }
    // [GMT-FIX-B3] Refresh normalized H4 candles (internal cache guard skips if no new H1 bar)
+   uint _norm0 = GetTickCount();   // [PERF-PROBE]
    if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
+   _ptNormDur = GetTickCount() - _norm0;   // [PERF-PROBE] BuildNormalizedH4Candles
 
    // [GMT-FIX-B3b] Force full recalc when normalization becomes ready.
    if((g_gmtNormActive || g_gmtMTFNormNeeded) && g_normRSICount > 0 && !g_normRecalcDone)
@@ -300,8 +314,10 @@ int OnCalculate(const int rates_total,
       if(!fullRecalc) return(0);
    }
 
+   uint _ptSetup = GetTickCount();   // [PERF-PROBE] end of fullRecalc setup (MTF init, norm)
    //--- Calculate RSI lines
    CalculateRSILines(startBar, rates_total);
+   uint _ptRSI = GetTickCount();     // [PERF-PROBE] end of RSI line calc
    //--- Signal detection range
    int sigStart = MathMax(startBar, InpRSIPeriod + InpBBPeriod + 2);
    sigStart = MathMax(sigStart, InpRSIPeriod + InpSignalMAPeriod + 2);
@@ -583,6 +599,7 @@ int OnCalculate(const int rates_total,
          }
       }
    }
+   uint _ptSig = GetTickCount();     // [PERF-PROBE] end of signal-detection loop
    if(fullRecalc)
    {
       FlushLogQueues(); // Bulk flush all historical log rows to CSV
@@ -619,6 +636,7 @@ int OnCalculate(const int rates_total,
          ArrayResize(g_outcomes, 500);
       }
    }
+   uint _ptBar = GetTickCount();     // [PERF-PROBE] end of per-new-bar heavy block
    //=================================================================
    // UPDATE DISPLAY (throttled — ported from MQ5)
    //=================================================================
@@ -858,6 +876,17 @@ int OnCalculate(const int rates_total,
    // and fullRecalc FlushLogQueues() calls, so scoring rows would otherwise wait
    // until the next bar. Scoring is at most 1 row per signal so disk cost is minimal.
    if(s_scoringQueueCount > 0) FlushLogQueues();
+
+   // [PERF-PROBE] Print phase breakdown ONLY on fullRecalc (TF switch / first load / recompile).
+   // Temporary diagnostic — remove after locating the bottleneck.
+   if(fullRecalc)
+   {
+      uint _ptEnd = GetTickCount();
+      PrintFormat("[PERF] setup=%u (fr=%u [del=%u log=%u] mtf=%u buf=%u norm=%u) rsi=%u sigLoop=%u flush+bar=%u display=%u TOTAL=%u ms (bars=%d signals=%d)",
+                  _ptSetup - _pt0, _ptFRDur, _ptDelDur, _ptLogDur, _ptMtfDur, _ptBufDur, _ptNormDur,
+                  _ptRSI - _ptSetup, _ptSig - _ptRSI,
+                  _ptBar - _ptSig, _ptEnd - _ptBar, _ptEnd - _pt0, rates_total, g_signalCount);
+   }
 
    return(rates_total);
 }

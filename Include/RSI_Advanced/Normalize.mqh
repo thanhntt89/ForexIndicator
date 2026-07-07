@@ -344,7 +344,7 @@ int GetNormalizedSLLookback()
 double GetNormalizedSpreadBuffer()
 {
    double spread=MarketInfo(Symbol(),MODE_SPREAD)*_Point;
-   double atr=iATR(NULL,0,InpATRPeriod,0);
+   double atr=iATR(NULL,0,InpATRPeriod,1);
    if(atr==0) return(spread);
    double pct=spread/atr;
    if(pct<0.05) return(spread);
@@ -354,7 +354,7 @@ double GetNormalizedSpreadBuffer()
 
 double GetMinSLDistance()
 {
-   double atrMin=iATR(NULL,0,InpATRPeriod,0);
+   double atrMin=iATR(NULL,0,InpATRPeriod,1);
    double brokerMin=MathMax(MarketInfo(Symbol(),MODE_STOPLEVEL),
                             MarketInfo(Symbol(),MODE_FREEZELEVEL))*_Point;
    return(MathMax(atrMin,brokerMin));
@@ -379,7 +379,7 @@ double GetSessionQualityNormalized(int caseNum, datetime signalTime)
 
    switch(caseNum)
    {
-      case 1: case 5:
+      case 1: case 5: case 9:
          if(isAsian) return(0.6); if(isLondon) return(0.5);
          if(isOverlap) return(0.45); return(0.55);
       case 2: case 3:

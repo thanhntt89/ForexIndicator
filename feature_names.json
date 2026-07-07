@@ -1,0 +1,18 @@
+{
+  "features": [
+    "CASE_NUM",
+    "DIR_BIN",
+    "RSI_AT_SIGNAL",
+    "ANGLE_Z",
+    "SESSION_ID",
+    "TF_MINUTES",
+    "HOUR",
+    "DOW",
+    "ATR_RATIO",
+    "SPREAD_PIPS",
+    "D1_TREND",
+    "RR_RATIO",
+    "SL_DIST_ATR"
+  ],
+  "count": 13
+}

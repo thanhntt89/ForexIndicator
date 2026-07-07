@@ -169,9 +169,8 @@ int OnInit()
    if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
 
    // Restore stats on restart AND on TF/symbol switch.
-   //   RECOMPILE/PARAMETERS: load session-stats binary (fast warm restart).
-   //   CHARTCHANGE (TF/symbol switch): binary was deleted on deinit, so fall through
-   //     to outcomes CSV -> restores ACTUAL win/loss instead of pure re-simulation.
+   //   RECOMPILE/PARAMETERS/CHARTCHANGE: load session-stats binary (fast warm restart).
+   //   Binary paths are TF-specific — no cross-TF contamination.
    //   Dedup in TrackSignalForSession() prevents double-count when fullRecalc re-tracks.
    int prevReason = UninitializeReason();
    if(prevReason == REASON_RECOMPILE || prevReason == REASON_PARAMETERS ||
@@ -187,23 +186,30 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    // Signals binary: always save (accumulates history across restarts).
-   // Session stats binary: save only on recompile/param change (quick restart).
    SaveSignalsBinary();
-   if(reason == REASON_RECOMPILE || reason == REASON_PARAMETERS)
+   // [PERF] Session stats binary: save on RECOMPILE/PARAMETERS/CHARTCHANGE for fast warm
+   // restart. Binary paths are TF-specific so no cross-TF contamination. fullRecalc + dedup
+   // in TrackSignalForSession refreshes any stale data. Only delete on full REMOVE/CLOSE.
+   if(reason == REASON_RECOMPILE || reason == REASON_PARAMETERS ||
+      reason == REASON_CHARTCHANGE)
    {
       SaveSessionStatsBinary();
    }
    else
    {
-      // REASON_REMOVE, REASON_CHARTCHANGE, REASON_CHARTCLOSE →
-      // delete session stats binary so next attach rebuilds outcomes fresh.
       FileDelete(SS_GetBinaryPath());
    }
    FlushLogQueues();
-   ReleaseAllHandles();
+   // [PERF] Only release indicator handles on full remove/close.
+   // CHARTCHANGE (TF switch) keeps handles alive — new TF creates its own keyed handles,
+   // old-TF handles are harmless. Releasing forces MT5 to re-create async → return(0)
+   // bouncing in OnCalculate costs hundreds of ms per bounce.
+   if(reason == REASON_REMOVE || reason == REASON_CLOSE)
+      ReleaseAllHandles();
 
    SavePanelPosition();
    DeleteObjectsByPrefix(PREFIX_ARROW);
+   DeleteObjectsByPrefix(PREFIX_OSMON);
    DeleteObjectsByPrefix(PREFIX_PANEL);
    DeleteObjectsByPrefix(PREFIX_LINE);
    DeleteObjectsByPrefix(PREFIX_PROB);
@@ -260,6 +266,7 @@ int OnCalculate(const int rates_total,
       ArrayResize(g_rawRSI, rates_total);
       ArrayInitialize(g_rawRSI, EMPTY_VALUE);
       DeleteObjectsByPrefix(PREFIX_ARROW);
+      DeleteObjectsByPrefix(PREFIX_OSMON);
       DeleteObjectsByPrefix(PREFIX_LINE);
       DeleteObjectsByPrefix(PREFIX_PANEL);
       DeleteObjectsByPrefix(PREFIX_PROB);
@@ -269,8 +276,9 @@ int OnCalculate(const int rates_total,
       g_userSelectedSignal = false;   // [STALE-FIX2] clear any pin on full rebuild
       g_autoFallbackActive = false;   // [STALE-FIX2] clear auto-fallback flag on full rebuild
       ArrayResize(g_signals, 0);
-      LoggerInit(true);   // reset CSV files on fullRecalc (prevents duplicate rows on restart)
-      if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
+      LoggerInit(false);  // [PERF] do NOT wipe CSV logs on fullRecalc (was ~3s FileDelete + data loss
+                          //        every TF switch). Forward-only logging below prevents dup rows.
+      // [PERF] BuildNormalizedH4Candles already called in OnInit; line 337 refreshes per-tick.
       MTF_InitRamBuffers();  // Rebuild MTF RAM buffers from historical iRSI data
    }
    else if(rates_total > g_prevRatesTotal)
@@ -353,25 +361,34 @@ int OnCalculate(const int rates_total,
 
    if(!fullRecalc)
    {
-      int keepCount = 0;
-      for(int s = 0; s < g_signalCount; s++)
-      {
-         if(g_signals[s].barIndex < sigStart)
-            keepCount++;
-         else
-            break;
-      }
-      g_signalCount = keepCount;
+      while(g_signalCount > 0 && g_signals[g_signalCount-1].barIndex >= rates_total - 1)
+         g_signalCount--;
       ArrayResize(g_signals, g_signalCount);
    }
 
    //=================================================================
    // SIGNAL DETECTION
    //=================================================================
+   int _storedIdx = 0;
+   while(_storedIdx < g_signalCount && g_signals[_storedIdx].barIndex < sigStart)
+      _storedIdx++;
+
    for(int i = sigStart; i < rates_total; i++)
    {
       BufferBuySignal[i]  = EMPTY_VALUE;
       BufferSellSignal[i] = EMPTY_VALUE;
+      if(_storedIdx < g_signalCount && g_signals[_storedIdx].barIndex == i)
+      {
+         while(_storedIdx < g_signalCount && g_signals[_storedIdx].barIndex == i)
+         {
+            if(g_signals[_storedIdx].isBuySignal)
+               BufferBuySignal[i] = (double)g_signals[_storedIdx].caseNumber;
+            else
+               BufferSellSignal[i] = (double)g_signals[_storedIdx].caseNumber;
+            _storedIdx++;
+         }
+         continue;
+      }
       bool isCurrentBar = (i == rates_total - 1);
 
       if(BufferGreen[i]   == EMPTY_VALUE || BufferGreen[i-1]  == EMPTY_VALUE) continue;
@@ -389,6 +406,10 @@ int OnCalculate(const int rates_total,
       double adaptiveThresh = GetNormalizedAngleThreshold(i, BufferGreen);
       bool strongAngleUp    = (greenDelta >= adaptiveThresh);
       bool strongAngleDown  = (greenDelta <= -adaptiveThresh);
+
+      // [EXPERIMENT] Monitor-only marker: Green x Red inside OB/OS zone (user rule).
+      // Independent of the case pipeline; drawn on closed bars only (anti-repaint).
+      if(!isCurrentBar) DrawOSCrossMonitor(i, time, low, high);
 
       // Cooldown: skip if too close to previous signal
       int _cooldown = GetActiveCooldownBars();
@@ -448,6 +469,13 @@ int OnCalculate(const int rates_total,
       {
          if(greenCrossUp && strongAngleUp && CheckCase8_Buy(i))            buySignal  = 8;
          else if(greenCrossDown && strongAngleDown && CheckCase8_Sell(i))  sellSignal = 8;
+      }
+      // Case 9: Green x Red INSIDE OB/OS zone (experimental, RAW - no angle gate, lowest priority).
+      // BUY when green crosses up red while green<32; SELL when crosses down while green>68.
+      if(GetActiveCaseEnabled(9) && buySignal == 0 && sellSignal == 0)
+      {
+         if(greenCrossUp && CheckCase9_Buy(i))            buySignal  = 9;
+         else if(greenCrossDown && CheckCase9_Sell(i))    sellSignal = 9;
       }
 
       // [SESSION-HARD] Post-detection: Case 6 block in Asian/LateNY
@@ -514,8 +542,12 @@ int OnCalculate(const int rates_total,
          int sigSessBlock = GetSessionBlock(time[i]);
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
-         TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1);
+         TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1, (i >= rates_total - 2));
          if(i >= rates_total - 2 && !_buyBlocked) OnNewSignalAccepted();
+         // [PERF] Log signal + pending ONLY for the just-closed bar (forward-only). Re-logging
+         // every historical signal on each fullRecalc is what forced the slow CSV wipe in
+         // LoggerInit(true); logging once (when the bar closes) removes both cost and dup rows.
+         if(i >= rates_total - 2)
          {
             int    _bs        = rates_total - 1 - i;
             double _atrRatio  = SL_GetATRRatio(_bs);
@@ -526,8 +558,8 @@ int OnCalculate(const int rates_total,
                            sigSessBlock, angleZ,
                            BufferGreen[i], _atrRatio, _spreadPips, _d1Trend,
                            GetActiveSLTPMethod(), (bool)InpAutoTFConfig, _timeInSess);
+            LogOutcomePending(time[i], buySignal, true);
          }
-         LogOutcomePending(time[i], buySignal, true);
       }
       if(sellSignal > 0)
       {
@@ -561,8 +593,10 @@ int OnCalculate(const int rates_total,
          int sigSessBlock = GetSessionBlock(time[i]);
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, BufferGreen[i]);
-         TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1);
+         TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1, (i >= rates_total - 2));
          if(i >= rates_total - 2 && !_sellBlocked) OnNewSignalAccepted();
+         // [PERF] Forward-only logging (see buy branch): log once when the bar closes.
+         if(i >= rates_total - 2)
          {
             int    _bs        = rates_total - 1 - i;
             double _atrRatio  = SL_GetATRRatio(_bs);
@@ -573,8 +607,8 @@ int OnCalculate(const int rates_total,
                            sigSessBlock, angleZ,
                            BufferGreen[i], _atrRatio, _spreadPips, _d1Trend,
                            GetActiveSLTPMethod(), (bool)InpAutoTFConfig, _timeInSess);
+            LogOutcomePending(time[i], sellSignal, false);
          }
-         LogOutcomePending(time[i], sellSignal, false);
       }
 
       //--- Alert on newly closed bar

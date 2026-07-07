@@ -30,6 +30,7 @@
 #define PREFIX_LINE   "RSIAdv_Line_"
 #define PREFIX_PROB   "RSIAdv_Prob_"
 #define PREFIX_ZONE   "RSIAdv_Zone_"
+#define PREFIX_OSMON  "RSIAdv_OSMon_"   // [EXPERIMENT] Green x Red inside OB/OS zone (monitor-only marker)
 
 enum ENUM_SLTP_METHOD
 {
@@ -92,6 +93,8 @@ input bool InpEnableCase5   = true;  // Case 5: Orange Near Level
 input bool InpEnableCase6   = true;  // Case 6: Trend Continuation
 input bool InpEnableCase7   = true;  // Case 7: Sideway Breakout
 input bool InpEnableCase8   = true;  // Case 8: Basic Crossover (Green x Red + strong angle)
+input bool   InpEnableCase9   = true;  // Case 9: Plain Green x Red crossover (NO angle gate, lowest priority) - isolates weak-angle crosses Case 8 skips, for its own probability
+input bool InpMonitorOSCross= false; // [EXPERIMENT] Aqua/magenta dot on Green x Red in OB/OS zone. Now redundant with Case 9 (real signal); enable to overlay RAW pattern vs actionable Case 9 arrows
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Arrow Display                                         |
@@ -235,6 +238,19 @@ input bool   InpAutoTFConfig     = true;  // Auto-adapt SL/TP/cases per TF (scal
 input string inp_grp_log        = "========== Signal Logging =========="; // ---
 input bool   InpEnableSignalLog = true;                   // Enable signal logging to CSV (persists actual outcomes across TF switch/restart)
 input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside MQL4/Files/)
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: XGBoost Parallel Scorer                              |
+//| Runs XGBoost model IN PARALLEL with Brier — for comparison only  |
+//| Does NOT affect arrows or existing signals.                       |
+//| Setup: 1) Train model: python tools/xgb_trainer.py --dir <logs>  |
+//|        2) Copy xgb_model.json to MQL4/Files/RSI_Advanced/        |
+//|        3) Reload indicator (Ctrl+R)                               |
+//+------------------------------------------------------------------+
+input string inp_grp_xgb       = "========== XGBoost (Parallel) =========="; // ---
+input bool   InpEnableXGB      = true;              // Enable XGBoost parallel scoring
+input string InpXGBModelFile   = "RSI_Advanced\\xgb_model.json"; // XGB model file (in MQL4/Files/)
+
 
 
 //+------------------------------------------------------------------+

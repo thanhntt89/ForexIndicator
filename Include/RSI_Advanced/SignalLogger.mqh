@@ -209,6 +209,7 @@ string SL_GetCaseName(int caseNum)
       case 6: return("TrendCont");
       case 7: return("SidewayBreak");
       case 8: return("BasicCross");
+      case 9: return("OBOSCross");
    }
    return("Case" + IntegerToString(caseNum));
 }
@@ -580,7 +581,8 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
                         double spreadRatio, bool wfRobust,
                         int h4Trend,
                         int h1Trend,
-                        int rawT1, int rawT2, int countT3, double realPct)
+                        int rawT1, int rawT2, int countT3, double realPct,
+                        double xgbProb = -1.0)   // [XGB] parallel score, -1 = not available
 {
    if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
@@ -604,7 +606,8 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
               + IntegerToString(rawT1)             + ","
               + IntegerToString(rawT2)             + ","
               + IntegerToString(countT3)           + ","
-              + DoubleToString(realPct, 1);
+              + DoubleToString(realPct, 1)         + ","
+              + DoubleToString(xgbProb, 1);   // [XGB]
 
    QueueScoringRow(row);
 }
@@ -641,7 +644,9 @@ void FlushLogQueues()
    {
       string header = "SIGNAL_ID,SCORE,REC_LEVEL,PROB_TP1,PROB_SL,PROB_N,EV,RR"
                       ",MTF_AGREE_PCT,MTF_TREND,ANGLE_Z,HOUR,DOW,SPREAD_RATIO,WF_ROBUST"
-                      ",MTF_H4_TREND,MTF_H1_TREND,RAW_T1,RAW_T2,COUNT_T3,REAL_PCT";
+                      ",MTF_H4_TREND,MTF_H1_TREND,RAW_T1,RAW_T2,COUNT_T3,REAL_PCT"
+                      ",XGB_PROB";   // [XGB] parallel score (-1 = model not loaded)
+
       bool isNew;
       int fh = SL_OpenAppend(SL_GetScoringPath(), header, isNew);
       if(fh != INVALID_HANDLE)

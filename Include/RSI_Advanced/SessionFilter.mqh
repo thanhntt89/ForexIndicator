@@ -29,7 +29,7 @@ double GetSessionQuality(int caseNum, datetime signalTime)
 
    switch(caseNum)
    {
-      case 1: case 5:
+      case 1: case 5: case 9:
          if(isAsian) return(0.7); if(isLondon) return(0.5);
          if(isOverlap) return(0.4); return(0.6);
       case 2: case 3:

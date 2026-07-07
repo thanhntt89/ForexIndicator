@@ -1,6 +1,7 @@
 # Build artifacts
 Build/*.ex4
 Build/temp_compile.log
+Build/compile.log
 
 # MetaEditor auto-generated
 *.ex4

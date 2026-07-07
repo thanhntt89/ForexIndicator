@@ -219,7 +219,8 @@ void SortOutcomesByTime()
 //| Called when signal is created                                      |
 //+------------------------------------------------------------------+
 void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
-                            double entryPrice, double sl, double tp1)
+                            double entryPrice, double sl, double tp1,
+                            bool willLog = true)
 {
    // Skip if already tracked (e.g., loaded from CSV on startup — prevents double-counting)
    for(int i = 0; i < g_outcomeCount; i++)
@@ -248,7 +249,11 @@ void TrackSignalForSession(datetime signalTime, int caseNum, bool isBuy,
    g_outcomes[idx].outcomeTime  = 0;
    g_outcomes[idx].mfe          = 0;
    g_outcomes[idx].mae          = 0;
-   g_outcomes[idx].loggedToFile = false;
+   // [DEDUP] Only forward signals (willLog) are CSV-logged. Historical signals are marked
+   // as already-logged so CheckAndLogNewlyResolved won't re-write duplicate outcome rows on
+   // every fullRecalc (the CSV is no longer wiped). g_outcomes still holds them for the live
+   // session/probability calc (which re-resolves every session regardless of this flag).
+   g_outcomes[idx].loggedToFile = !willLog;
 }
 
 //+------------------------------------------------------------------+
@@ -529,7 +534,29 @@ void LoadSessionStatsFromOutcomesCSV()
    // requires g_outcomes[] sorted by signalTime; without this sort it would miss matches.
    SortOutcomesByTime();
 
-   UpdateSessionStats();  // Rebuild g_sessionStats from all loaded outcomes
+   // [DEDUP] Remove duplicate resolved outcomes with the same (signalTime, case, dir).
+   // The outcomes CSV is no longer wiped on fullRecalc, so the same outcome can be
+   // re-logged across sessions (each run re-resolves historical signals). Without this,
+   // UpdateSessionStats + the probability hybrid would double-count. Sorted-by-time above,
+   // so duplicates of one signal are contiguous -> single O(n) compaction pass.
+   {
+      int _w = 0;
+      for(int _r = 0; _r < g_outcomeCount; _r++)
+      {
+         bool _dup = false;
+         for(int _k = _w - 1; _k >= 0 && g_outcomes[_k].signalTime == g_outcomes[_r].signalTime; _k--)
+            if(g_outcomes[_k].caseNumber == g_outcomes[_r].caseNumber &&
+               g_outcomes[_k].isBuy      == g_outcomes[_r].isBuy)
+            { _dup = true; break; }
+         if(_dup) continue;
+         if(_w != _r) g_outcomes[_w] = g_outcomes[_r];
+         _w++;
+      }
+      g_outcomeCount = _w;
+      ArrayResize(g_outcomes, g_outcomeCount);
+   }
+
+   UpdateSessionStats();  // Rebuild g_sessionStats from all loaded outcomes (deduped)
 }
 
 //+------------------------------------------------------------------+

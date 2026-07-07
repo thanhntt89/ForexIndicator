@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSI Advanced V11.37 — User Guide (English)</title>
+<style>
+  :root{
+    --bg:#12161e; --bg2:#171c26; --card:#1e2532; --card2:#232b3a;
+    --border:#3c4658; --border2:#2a3140;
+    --text:#e6e9ef; --dim:#8b93a5; --gold:#ffd54a; --gold2:#e0b000;
+    --buy:#00e676; --sell:#ff5252; --blue:#4fc3f7; --orange:#ffa726;
+    --purple:#ba9cff; --yellow:#ffee58;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:linear-gradient(180deg,#0e1219,#12161e 400px);
+    color:var(--text); font:15px/1.65 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{display:flex; max-width:1280px; margin:0 auto; gap:0}
+  /* Sidebar */
+  nav.toc{
+    position:sticky; top:0; align-self:flex-start; height:100vh; overflow-y:auto;
+    width:280px; flex:0 0 280px; padding:24px 16px 40px; border-right:1px solid var(--border2);
+    background:rgba(14,18,25,.6); backdrop-filter:blur(4px);
+  }
+  nav.toc .brand{font-weight:700; color:var(--gold); font-size:16px; letter-spacing:.3px; margin-bottom:2px}
+  nav.toc .ver{color:var(--dim); font-size:12px; margin-bottom:18px}
+  nav.toc a{display:block; color:var(--dim); text-decoration:none; padding:5px 10px; border-radius:6px; font-size:13.5px; transition:.15s}
+  nav.toc a:hover{color:var(--text); background:var(--card)}
+  nav.toc a.sub{padding-left:22px; font-size:12.5px}
+  nav.toc .lang{margin-top:20px; padding-top:16px; border-top:1px solid var(--border2)}
+  nav.toc .lang a{display:inline-block; color:var(--blue); padding:4px 8px}
+  /* Content */
+  main{flex:1; padding:36px 44px 120px; min-width:0}
+  header.hero{margin-bottom:36px}
+  header.hero h1{font-size:30px; margin:0 0 6px; color:#fff; letter-spacing:.2px}
+  header.hero .tag{color:var(--gold); font-weight:600}
+  header.hero p{color:var(--dim); margin:8px 0 0; max-width:760px}
+  .badges{margin-top:14px; display:flex; gap:8px; flex-wrap:wrap}
+  .badge{background:var(--card); border:1px solid var(--border); border-radius:20px; padding:4px 13px; font-size:12.5px; color:var(--text)}
+  .badge b{color:var(--gold)}
+  section{margin:0 0 44px; scroll-margin-top:20px}
+  h2{font-size:22px; color:#fff; border-bottom:2px solid var(--border); padding-bottom:8px; margin:0 0 18px; display:flex; align-items:center; gap:10px}
+  h2 .n{color:var(--gold); font-size:15px; background:var(--card); border:1px solid var(--border); width:30px; height:30px; display:inline-flex; align-items:center; justify-content:center; border-radius:8px; flex:0 0 auto}
+  h3{font-size:17px; color:var(--gold); margin:26px 0 10px}
+  h4{font-size:15px; color:var(--blue); margin:18px 0 6px}
+  p{margin:10px 0}
+  a{color:var(--blue)}
+  code{background:#0d1017; border:1px solid var(--border2); border-radius:5px; padding:1px 6px; font-family:"SF Mono",Consolas,Menlo,monospace; font-size:13px; color:#ffd9a0}
+  pre{background:#0d1017; border:1px solid var(--border2); border-radius:10px; padding:16px 18px; overflow-x:auto; font-family:"SF Mono",Consolas,Menlo,monospace; font-size:13px; line-height:1.55; color:#cfe3ff}
+  pre .c{color:var(--dim)}
+  ul,ol{margin:10px 0; padding-left:22px}
+  li{margin:5px 0}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px 20px; margin:14px 0}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; margin:16px 0}
+  .grid .card{margin:0}
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px}
+  th,td{text-align:left; padding:9px 12px; border-bottom:1px solid var(--border2); vertical-align:top}
+  th{background:var(--card2); color:var(--gold); font-weight:600; position:sticky}
+  tr:hover td{background:rgba(255,255,255,.02)}
+  .tbl-wrap{overflow-x:auto; border:1px solid var(--border); border-radius:10px}
+  .tbl-wrap table{margin:0}
+  .pill{display:inline-block; padding:2px 9px; border-radius:20px; font-size:11.5px; font-weight:600; white-space:nowrap}
+  .p-buy{background:rgba(0,230,118,.14); color:var(--buy); border:1px solid rgba(0,230,118,.35)}
+  .p-sell{background:rgba(255,82,82,.14); color:var(--sell); border:1px solid rgba(255,82,82,.35)}
+  .p-rev{background:rgba(186,156,255,.14); color:var(--purple); border:1px solid rgba(186,156,255,.35)}
+  .p-trend{background:rgba(79,195,247,.14); color:var(--blue); border:1px solid rgba(79,195,247,.35)}
+  .p-break{background:rgba(255,167,38,.14); color:var(--orange); border:1px solid rgba(255,167,38,.35)}
+  .p-exp{background:rgba(255,238,88,.12); color:var(--yellow); border:1px solid rgba(255,238,88,.3)}
+  .callout{border-radius:10px; padding:14px 16px 14px 18px; margin:16px 0; border-left:4px solid; font-size:14px}
+  .tip{background:rgba(0,230,118,.07); border-color:var(--buy)}
+  .warn{background:rgba(255,82,82,.07); border-color:var(--sell)}
+  .note{background:rgba(79,195,247,.07); border-color:var(--blue)}
+  .callout b{color:#fff}
+  .callout .ct{display:block; font-weight:700; margin-bottom:4px; letter-spacing:.3px}
+  .tip .ct{color:var(--buy)} .warn .ct{color:var(--sell)} .note .ct{color:var(--blue)}
+  .swatch{display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:middle; border:1px solid rgba(255,255,255,.2)}
+  .kbd{background:var(--card2); border:1px solid var(--border); border-bottom-width:2px; border-radius:5px; padding:1px 7px; font-size:12px}
+  .mono{font-family:"SF Mono",Consolas,Menlo,monospace; font-size:12.5px}
+  .muted{color:var(--dim)}
+  hr{border:0; border-top:1px solid var(--border2); margin:30px 0}
+  footer{color:var(--dim); font-size:12.5px; border-top:1px solid var(--border2); padding-top:20px; margin-top:40px}
+  @media(max-width:900px){
+    nav.toc{display:none} main{padding:24px 18px 80px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc">
+  <div class="brand">RSI Advanced</div>
+  <div class="ver">User Guide · V11.37</div>
+  <a href="#overview">1. Overview</a>
+  <a href="#install">2. Installation</a>
+  <a href="#window">3. Reading the RSI Window</a>
+  <a href="#cases">4. The 9 Signal Cases</a>
+  <a href="#chart">5. Chart Objects</a>
+  <a href="#panel">6. The Info Panel</a>
+  <a href="#panel" class="sub">→ Recommendation levels</a>
+  <a href="#panel" class="sub">→ Probability &amp; confidence</a>
+  <a href="#panel" class="sub">→ MTF &amp; diagnostics</a>
+  <a href="#tfconfig">7. Timeframe Auto-Config</a>
+  <a href="#inputs">8. Inputs Reference</a>
+  <a href="#logging">9. Logging &amp; Analysis</a>
+  <a href="#best">10. Best Practices</a>
+  <a href="#faq">11. FAQ / Troubleshooting</a>
+  <a href="#glossary">12. Glossary</a>
+  <div class="lang">
+    <span class="muted" style="font-size:12px">Language:</span><br>
+    <a href="UserGuide_EN.html"><b>English</b></a> ·
+    <a href="UserGuide_VI.html">Tiếng Việt</a>
+  </div>
+</nav>
+
+<main>
+<header class="hero">
+  <h1>RSI Advanced <span class="tag">V11.37</span> — User Guide</h1>
+  <p>A multi-timeframe RSI signal indicator for MetaTrader 4 &amp; 5. It detects 9 setup types from an RSI crossover system, estimates the probability of each target from real historical outcomes, and paints entry, stop-loss and take-profit levels on your chart with a full analytics panel.</p>
+  <div class="badges">
+    <span class="badge">Platform: <b>MT4 + MT5</b></span>
+    <span class="badge">Type: <b>Separate-window indicator</b></span>
+    <span class="badge">Best on: <b>XAUUSD intraday</b></span>
+    <span class="badge">Signal cases: <b>9</b></span>
+  </div>
+</header>
+
+<!-- ============================ 1. OVERVIEW ============================ -->
+<section id="overview">
+  <h2><span class="n">1</span> Overview</h2>
+  <p>RSI Advanced is built on a classic RSI-crossover engine (a fast RSI line crossing a signal line), extended with Bollinger Bands on RSI, an orange baseline, and a large analytics layer. It does <b>not place trades</b> — it is a decision-support indicator that tells you <em>what</em> the setup is, <em>how good</em> it has performed historically, and <em>where</em> to enter / stop / target.</p>
+  <div class="grid">
+    <div class="card"><h4 style="margin-top:0">Signal detection</h4>9 "cases" (bounce, divergence, trend, breakout, crossover…) with a per-timeframe priority order.</div>
+    <div class="card"><h4 style="margin-top:0">Probability engine</h4>3-tier historical simulation estimates the chance of hitting TP1/TP2/TP3 vs. SL, calibrated to real outcomes.</div>
+    <div class="card"><h4 style="margin-top:0">Risk levels</h4>Auto SL/TP (ATR / Fibonacci / Hybrid) plus multi-level entry zones with position sizing.</div>
+    <div class="card"><h4 style="margin-top:0">Multi-timeframe</h4>Reads RSI trend on M5→D1 and warns when the higher timeframe disagrees with your signal.</div>
+    <div class="card"><h4 style="margin-top:0">Self-learning</h4>Logs every signal + outcome to CSV and feeds real win-rates back into the probabilities.</div>
+    <div class="card"><h4 style="margin-top:0">Cross-broker</h4>GMT normalization keeps H4/D1 RSI consistent between brokers on different server times.</div>
+  </div>
+  <div class="callout note"><span class="ct">The core idea</span>The <span style="color:var(--buy)">Green</span> line is a very fast RSI (period 2); the <span style="color:var(--sell)">Red</span> line is a smoothed signal (period 7). A <b>Green-crosses-Red</b> event is the heart of every signal. The other lines (Bollinger Bands, orange baseline, the 32/50/68 levels) decide <em>which case</em> the crossover belongs to and how strong it is.</div>
+</section>
+
+<!-- ============================ 2. INSTALL ============================ -->
+<section id="install">
+  <h2><span class="n">2</span> Installation</h2>
+  <p>The project ships as a main indicator file plus a folder of <code>.mqh</code> include modules. The include folder must sit inside your terminal's <code>Include</code> directory.</p>
+
+  <h3>File placement</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Platform</th><th>Main file →</th><th>Include folder →</th></tr>
+    <tr><td><b>MT4</b></td><td class="mono">MQL4/Indicators/RSI_Advanced.mq4</td><td class="mono">MQL4/Include/RSI_Advanced/*.mqh</td></tr>
+    <tr><td><b>MT5</b></td><td class="mono">MQL5/Indicators/RSI_Advanced.mq5</td><td class="mono">MQL5/Include/RSI_Advanced/*.mqh</td></tr>
+  </table></div>
+  <p class="muted">Open the terminal's data folder via <span class="kbd">File → Open Data Folder</span>, then copy the files into the paths above.</p>
+
+  <h3>Compile &amp; attach</h3>
+  <ol>
+    <li>Open <b>MetaEditor</b> (F4 in the terminal).</li>
+    <li>Open <code>RSI_Advanced.mq4</code> (or <code>.mq5</code>) and press <span class="kbd">Compile</span> (F7). It should compile with <b>0 errors</b>.</li>
+    <li>Back in the terminal, drag <b>RSI Advanced</b> from the Navigator onto a chart (XAUUSD is the tuned default).</li>
+    <li>Tick <b>"Allow DLL imports" is not required.</b> Just confirm the inputs dialog and press OK.</li>
+  </ol>
+  <div class="callout tip"><span class="ct">Recommended first run</span>Attach to <b>XAUUSD, M15 or M30</b>, leave <code>InpAutoTFConfig = true</code> and <code>InpEnableSignalLog = true</code> (both default). Let it run for a few days so the CSV log accumulates real outcomes — the probabilities become far more meaningful once data builds up.</div>
+</section>
+
+<!-- ============================ 3. WINDOW ============================ -->
+<section id="window">
+  <h2><span class="n">3</span> Reading the RSI Window</h2>
+  <p>The indicator draws in a separate window below price, scaled 0–100.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>Line</th><th>Meaning</th><th>Default</th></tr>
+    <tr><td><span class="swatch" style="background:#00e676"></span><b>Green (RSI Fast)</b></td><td>Very fast RSI (period 2). The reactive line that generates crossovers.</td><td class="mono">Fast MA = 2</td></tr>
+    <tr><td><span class="swatch" style="background:#ff5252"></span><b>Red (Signal)</b></td><td>Smoothed signal line (period 7). Green crossing Red = trigger.</td><td class="mono">Signal MA = 7</td></tr>
+    <tr><td><span class="swatch" style="background:#00bfff"></span><b>Blue (BB Upper / Lower)</b></td><td>Bollinger Bands computed on RSI (period 34, dev 1.685). Define "stretched" RSI and breakouts.</td><td class="mono">BB = 34 / 1.685</td></tr>
+    <tr><td><span class="swatch" style="background:#ffa726"></span><b>Orange (Baseline)</b></td><td>The RSI baseline / trend reference. Green &amp; Red above orange = bullish bias, below = bearish.</td><td class="mono">Baseline = 34</td></tr>
+  </table></div>
+  <h4>Horizontal levels</h4>
+  <p><b>20 / 32 / 50 / 68 / 80</b> — the reversal/trend reference levels. <b>32</b> and <b>68</b> are the oversold/overbought thresholds used by the bounce cases; <b>50</b> is the trend pivot used by Case 4.</p>
+</section>
+
+<!-- ============================ 4. CASES ============================ -->
+<section id="cases">
+  <h2><span class="n">4</span> The 9 Signal Cases</h2>
+  <p>When a bar closes, the indicator checks patterns in a <b>priority order</b> and fires the first match. Each case has its own probability track record. Family colors below: <span class="pill p-rev">Reversal</span> <span class="pill p-trend">Trend</span> <span class="pill p-break">Breakout</span> <span class="pill p-exp">Experimental</span>.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>#</th><th>Name</th><th>Family</th><th>BUY trigger (SELL is mirrored)</th></tr>
+    <tr><td><b>1</b></td><td>OB/OS Bounce</td><td><span class="pill p-rev">Reversal</span></td><td>Green was &lt; 32 &amp; below BB lower, then crosses back above 32 → sellers exhausted.</td></tr>
+    <tr><td><b>2</b></td><td>Regular Divergence</td><td><span class="pill p-rev">Reversal</span></td><td>Price makes a Lower Low but RSI makes a Higher Low → selling weakening.</td></tr>
+    <tr><td><b>3</b></td><td>Hidden Divergence</td><td><span class="pill p-trend">Trend</span></td><td>Price Higher Low but RSI Lower Low → uptrend still intact (continuation).</td></tr>
+    <tr><td><b>4</b></td><td>Strong Trend</td><td><span class="pill p-trend">Trend</span></td><td>Green crosses above 50 <em>and</em> breaks BB upper → strong momentum starting.</td></tr>
+    <tr><td><b>5</b></td><td>Orange Near Level</td><td><span class="pill p-rev">Reversal</span></td><td>Orange baseline sits near 32 (oversold) while Green crosses up Red.</td></tr>
+    <tr><td><b>6</b></td><td>Trend Continuation</td><td><span class="pill p-trend">Trend</span></td><td>Green &amp; Red hold above orange, a pullback is bought back → add/hold.</td></tr>
+    <tr><td><b>7</b></td><td>Sideway Breakout</td><td><span class="pill p-break">Breakout</span></td><td>Several crosses inside the bands (range) then Green breaks BB upper.</td></tr>
+    <tr><td><b>8</b></td><td>Basic Crossover</td><td><span class="pill p-trend">Trend</span></td><td>Green crosses above Red with a <b>strong angle</b> (the core RSI-Advanced rule).</td></tr>
+    <tr><td><b>9</b></td><td>Plain Cross</td><td><span class="pill p-exp">Experimental</span></td><td>Green crosses above Red with <b>no angle gate</b> — captures the weak crosses Case 8 rejects, tracked separately.</td></tr>
+  </table></div>
+  <div class="callout note"><span class="ct">Priority &amp; per-timeframe availability</span>Not every case runs on every timeframe. Fast timeframes (M1/M5) only run the fast-resolving cases; higher timeframes enable more. See the <a href="#tfconfig">Timeframe Auto-Config</a> table for exactly which cases are active where. On M1/M5 the scan order is reordered to <span class="mono">6 → 2 → 4 → 3 → 1 → 5 → 7</span> to favor the setups that historically work best there.</div>
+  <div class="callout warn"><span class="ct">Case 9 is experimental</span>Case 9 exists to <em>measure</em> whether a bare crossover (with no angle filter) has an edge on your symbol/timeframe. Its arrow is <b>not a trade recommendation by itself</b> — check the panel's probability and the <b>AngIC</b> diagnostic first. Disable with <code>InpEnableCase9 = false</code> if it adds noise.</div>
+</section>
+
+<!-- ============================ 5. CHART OBJECTS ============================ -->
+<section id="chart">
+  <h2><span class="n">5</span> Chart Objects (on the price chart)</h2>
+  <div class="grid">
+    <div class="card"><h4 style="margin-top:0">Arrows</h4>Lime up-arrow = BUY signal, red down-arrow = SELL, plotted at the signal bar. Arrows are kept for historical reference even when a signal is not actionable.</div>
+    <div class="card"><h4 style="margin-top:0">Entry line</h4>White dotted line at the intended entry price for the active signal.</div>
+    <div class="card"><h4 style="margin-top:0">SL / TP lines</h4>5 horizontal lines: <span style="color:var(--sell)">SL</span>, <span style="color:var(--buy)">TP1</span>, <span style="color:var(--blue)">TP2</span>, <span style="color:var(--gold)">TP3</span> + entry. Computed from ATR/Fibonacci/Hybrid.</div>
+    <div class="card"><h4 style="margin-top:0">Entry zones</h4>Up to 3–5 staggered limit-entry prices (market + pullback levels), each with its own reach probability, R:R and expected value.</div>
+  </div>
+  <div class="callout warn"><span class="ct">Why the lines sometimes disappear</span>When the panel's recommendation is <b>WAIT</b>, <b>AVOID</b>, or <b>Counter-Trend</b>, the SL/TP lines, probability labels and entry zones are <b>hidden on purpose</b> to avoid clutter on non-actionable signals. The <b>arrow and the panel stay visible</b>. This is expected behavior, not a bug.</div>
+</section>
+
+<!-- ============================ 6. PANEL ============================ -->
+<section id="panel">
+  <h2><span class="n">6</span> The Info Panel</h2>
+  <p>The panel (top-left by default) is the control center. It has two modes.</p>
+
+  <h3>When no signal is active</h3>
+  <p>Shows market context: <b>server &amp; UTC time</b> + broker GMT offset, the <b>MTF trend</b> row (M5→D1, colored bull/bear/neutral) with aggregate agreement, the <b>volatility regime</b> (ATR ratio, e.g. QUIET / NORMAL / EVENT), and the market regime multiplier.</p>
+
+  <h3>When a signal is active — line by line</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Panel line</th><th>What it tells you</th></tr>
+    <tr><td class="mono">Case N: Name — BUY/SELL</td><td>The detected case &amp; direction. A <span style="color:var(--orange)">[BLOCKED]</span> tag means the risk manager is currently blocking new entries (but the signal is still shown).</td></tr>
+    <tr><td class="mono">Time / Age</td><td>Signal bar time and how many minutes/bars ago it fired.</td></tr>
+    <tr><td class="mono">Server / UTC (GMT+X)</td><td>Clocks for cross-broker comparison.</td></tr>
+    <tr><td class="mono">ATR / SL / TP</td><td>Current ATR and the SL/TP multipliers in use.</td></tr>
+    <tr><td class="mono">P/L · R:R 1:x</td><td>Live open P/L of the signal (in SL-distance units) and the reward-to-risk for TP1/TP2/TP3.</td></tr>
+    <tr><td class="mono">Entry Zones (Z1..Zn)</td><td>Each zone: price, R:R, <b>Reach%</b> (chance price reaches the zone), <b>Win%</b>, and <b>EV</b> in R. A <b>*</b> marks positive-EV zones; "Best: Zn" flags the top zone.</td></tr>
+    <tr><td class="mono">Win% · EV</td><td>Overall win probability (TP1) and expected value in R.</td></tr>
+    <tr><td class="mono">TP1 / TP2 / TP3 %</td><td>Probability of reaching each target, with a mini bar. "HIT" appears once a target is reached.</td></tr>
+    <tr><td class="mono">Edge · Kelly · P-val · MedR</td><td>Historical edge %, Kelly-suggested risk %, walk-forward permutation p-value, and rolling median overfit ratio.</td></tr>
+    <tr><td class="mono">AngIC</td><td><b>Angle Information Coefficient</b> — does the RSI cross <em>angle</em> actually predict outcomes on this symbol/TF? &gt;0.10 strong, 0.05–0.10 weak, &lt;0.05 noise, &lt;0 inverse. "building" until 20+ resolved outcomes.</td></tr>
+    <tr><td class="mono">T1 · T2 · T3 · Real% · Span</td><td><b>Data-quality line.</b> Effective sample sizes for Tier 1/2, Tier-3 count, % of estimate backed by real (not simulated) outcomes, and how many days of history were used.</td></tr>
+    <tr><td class="mono">Elapsed · Edge-left / Signal-life</td><td>Bars since signal and how much of the statistical edge remains (time decay).</td></tr>
+    <tr><td class="mono">Acc ~ · MTF context</td><td>Expected accuracy band and whether the higher-TF trend SUPPORTS / is NEUTRAL / adds RISK to this signal.</td></tr>
+    <tr><td class="mono">Brier · Cal · Shrk</td><td>Calibration quality (lower Brier = better). "Shrk" shows probabilities being pulled toward 50% when calibration is poor.</td></tr>
+    <tr><td class="mono">Risk · DD · T</td><td>Risk manager: today's used risk / cap, drawdown / circuit-breaker, and trades taken / max.</td></tr>
+  </table></div>
+
+  <h3 id="rec">Recommendation levels</h3>
+  <p>The big header verdict is derived from a 0–100 score (EV + data + MTF + intermarket + walk-forward − spread penalty) combined with EV:</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>Label</th><th>Condition</th><th>Meaning</th></tr>
+    <tr><td><span style="color:var(--buy)"><b>STRONG ENTRY</b></span></td><td>score ≥ 75 &amp; EV &gt; 0.15</td><td>High-conviction setup.</td></tr>
+    <tr><td><span style="color:var(--buy)"><b>ENTRY</b></span></td><td>score ≥ 55 &amp; EV &gt; 0.05</td><td>Valid setup.</td></tr>
+    <tr><td><span style="color:var(--yellow)"><b>CAUTION ENTRY</b></span></td><td>score ≥ 35 &amp; EV &gt; 0</td><td>Marginal — smaller size / confirmation.</td></tr>
+    <tr><td><span style="color:var(--orange)"><b>WAIT</b></span></td><td>EV &gt; −0.05</td><td>No clear edge; stand aside.</td></tr>
+    <tr><td><span style="color:var(--sell)"><b>AVOID</b> / AVOID (Counter Trend)</b></span></td><td>otherwise</td><td>Negative expectancy, or fighting the higher-TF trend.</td></tr>
+  </table></div>
+  <div class="callout note"><span class="ct">The "Low Data" safety gate</span>If there aren't enough real historical outcomes for the timeframe, any positive verdict is <b>capped down to WAIT</b>, and confidence shows <span style="color:var(--sell)">NO DATA (theoretical only)</span> or <span style="color:var(--orange)">LOW DATA (n&lt;X)</span>. This deliberately prevents over-confidence from the theoretical model before enough evidence exists. It relaxes automatically as the log fills up.</div>
+
+  <h3>Probability &amp; confidence</h3>
+  <p>Confidence is a 95% margin-of-error on the win-rate given the sample size:</p>
+  <ul>
+    <li><span style="color:var(--buy)"><b>HIGH</b></span> — margin ≤ ±8%</li>
+    <li><span style="color:var(--yellow)"><b>MODERATE</b></span> — ≤ ±15%</li>
+    <li><span style="color:var(--orange)"><b>LOW</b></span> — ≤ ±25%</li>
+    <li><span style="color:var(--sell)"><b>VERY LOW</b></span> — &gt; ±25%</li>
+  </ul>
+</section>
+
+<!-- ============================ 7. TF CONFIG ============================ -->
+<section id="tfconfig">
+  <h2><span class="n">7</span> Timeframe Auto-Config</h2>
+  <p>With <code>InpAutoTFConfig = true</code> (the <b>default</b>), the SL/TP ratios, method, active cases, cooldown, minimum score, MTF-agreement gate, risk and zone count are all <b>overridden per timeframe</b> using a tuned intraday-scalping profile for XAUUSD. This is the single most important thing to understand:</p>
+  <div class="callout warn"><span class="ct">Auto-Config overrides your manual inputs</span>While Auto-Config is on, changing inputs like <code>InpSLRatio</code>, <code>InpTPRatio</code>, <code>InpMinSignalScore</code> or the per-case toggles has <b>no effect</b> — the profile below wins. To tune those by hand, set <code>InpAutoTFConfig = false</code> first.</div>
+  <p>TP values are ATR multipliers; TP2/TP3 columns are multipliers <em>of TP1</em>.</p>
+  <div class="tbl-wrap"><table>
+    <tr><th>TF</th><th>SL×ATR</th><th>TP1×ATR</th><th>TP2 (×TP1)</th><th>TP3 (×TP1)</th><th>Method</th><th>Min score</th><th>MTF%</th><th>Risk%</th><th>Cases enabled</th></tr>
+    <tr><td><b>M1</b></td><td>0.8</td><td>1.0</td><td>2.0</td><td>3.5</td><td>ATR</td><td>55</td><td>55</td><td>0.3</td><td>6, 7</td></tr>
+    <tr><td><b>M5</b></td><td>1.0</td><td>0.7</td><td>1.7</td><td>3.0</td><td>ATR</td><td>55</td><td>50</td><td>0.3</td><td>1, 5, 6, 7</td></tr>
+    <tr><td><b>M15</b></td><td>1.0</td><td>0.8</td><td>1.5</td><td>2.5</td><td>ATR</td><td>50</td><td>45</td><td>0.5</td><td>1, 4, 5, 6, 7, 8, 9</td></tr>
+    <tr><td><b>M30</b></td><td>1.2</td><td>2.0</td><td>2.0</td><td>3.5</td><td>ATR</td><td>45</td><td>45</td><td>1.0</td><td>1, 2, 4, 5, 6, 7, 8, 9</td></tr>
+    <tr><td><b>H1</b></td><td>1.5</td><td>2.0</td><td>2.5</td><td>4.0</td><td>ATR</td><td>42</td><td>40</td><td>1.0</td><td>all except 0, 3</td></tr>
+    <tr><td><b>H4+</b></td><td>1.5</td><td>2.0</td><td>2.5</td><td>4.0</td><td>Hybrid</td><td>38</td><td>35</td><td>1.5</td><td>1, 4, 5, 6, 7, 8, 9</td></tr>
+  </table></div>
+  <p class="muted">Profile intent: <b>M1</b> ultra-fast scalp (Overlap session only), <b>M5</b> fast scalp, <b>M15/M30</b> standard scalp, <b>H1</b> intraday position, <b>H4+</b> context/direction with conservative targets.</p>
+</section>
+
+<!-- ============================ 8. INPUTS ============================ -->
+<section id="inputs">
+  <h2><span class="n">8</span> Inputs Reference</h2>
+  <p>Grouped as they appear in the inputs dialog. Defaults shown. Remember: many are overridden by <a href="#tfconfig">Auto-Config</a>.</p>
+
+  <h3>RSI Core</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Input</th><th>Default</th><th>Purpose</th></tr>
+    <tr><td class="mono">InpRSIPeriod</td><td>14</td><td>Base RSI period.</td></tr>
+    <tr><td class="mono">InpFastMAPeriod</td><td>2</td><td>Green (fast) line smoothing.</td></tr>
+    <tr><td class="mono">InpSignalMAPeriod</td><td>7</td><td>Red (signal) line smoothing.</td></tr>
+    <tr><td class="mono">InpBBPeriod / InpBBDeviation</td><td>34 / 1.685</td><td>Bollinger Bands on RSI + orange baseline.</td></tr>
+    <tr><td class="mono">InpEAMode</td><td>false</td><td>Hide all visuals when read by an EA via <code>iCustom</code>.</td></tr>
+  </table></div>
+
+  <h3>Signal Detection &amp; Quality</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Input</th><th>Default</th><th>Purpose</th></tr>
+    <tr><td class="mono">InpMaxBars</td><td>500</td><td>Bars of indicator history to compute.</td></tr>
+    <tr><td class="mono">InpAngleThreshold</td><td>4.0</td><td>Minimum RSI slope for a "strong angle" cross (Case 8). Adapts up in trends.</td></tr>
+    <tr><td class="mono">InpCooldownBars</td><td>5</td><td>Minimum bars between signals.</td></tr>
+    <tr><td class="mono">InpMinSignalScore</td><td>40</td><td>Minimum 0–100 score to display a signal.</td></tr>
+    <tr><td class="mono">InpUseVolumeFilter / VolatFilter / SessionFilter</td><td>true</td><td>Confirmation filters (volume, volatility, session time).</td></tr>
+    <tr><td class="mono">InpUseRegimeFilter</td><td>false</td><td>Market-regime filter (off by default).</td></tr>
+    <tr><td class="mono">InpHardCase6Asian / LateNY</td><td>true</td><td>Hard-block Case 6 during the Asian/dead-zone &amp; late-NY sessions (historically weak).</td></tr>
+  </table></div>
+
+  <h3>SL/TP &amp; Entry Zones</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Input</th><th>Default</th><th>Purpose</th></tr>
+    <tr><td class="mono">InpSLTPMethod</td><td>Hybrid</td><td>ATR / Fibonacci / Hybrid SL-TP model.</td></tr>
+    <tr><td class="mono">InpSLRatio / InpTPRatio</td><td>2.0 / 4.0</td><td>SL and TP1 as multiples of ATR (manual mode).</td></tr>
+    <tr><td class="mono">InpTP2Multiplier / InpTP3Multiplier</td><td>1.5 / 2.0</td><td>TP2/TP3 as multiples of TP1.</td></tr>
+    <tr><td class="mono">InpShowSLTPLines / InpShowEntryLine</td><td>true</td><td>Toggle the horizontal lines.</td></tr>
+    <tr><td class="mono">InpEntryZoneCount</td><td>3</td><td>Number of staggered entry zones (2–5).</td></tr>
+    <tr><td class="mono">InpTotalRiskPercent</td><td>1.0</td><td>Total account risk % split across zones.</td></tr>
+  </table></div>
+
+  <h3>Panel, MTF, Probability</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Input</th><th>Default</th><th>Purpose</th></tr>
+    <tr><td class="mono">InpShowPanel</td><td>true</td><td>Show the info panel.</td></tr>
+    <tr><td class="mono">InpShowMTF</td><td>true</td><td>Show the multi-timeframe trend row.</td></tr>
+    <tr><td class="mono">InpMinMTFAgreement</td><td>40</td><td>Minimum % of higher TFs that must agree to confirm (0 = off).</td></tr>
+    <tr><td class="mono">InpShowProbability</td><td>true</td><td>Show probability labels + panel section.</td></tr>
+    <tr><td class="mono">InpProbMaxBars</td><td>1000</td><td>Max bars scanned for probability.</td></tr>
+  </table></div>
+
+  <h3>Advanced Engines</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Input</th><th>Default</th><th>Purpose</th></tr>
+    <tr><td class="mono">InpUseIntermarket / InpIntermarketPeriod</td><td>true / 20</td><td>DXY/EURUSD macro-momentum filter.</td></tr>
+    <tr><td class="mono">InpUseWalkForward / InpOOSPercent</td><td>true / 20</td><td>In-sample / out-of-sample overfit validation.</td></tr>
+    <tr><td class="mono">InpGMTNormalize / InpForceGMTOffset</td><td>−1 / −99</td><td>H4/D1 GMT normalization (−1 = auto, −99 = auto-detect offset).</td></tr>
+    <tr><td class="mono">InpUseSpreadRegime / InpSpreadSpikeMulti</td><td>true / 2.0</td><td>Flag abnormal spread spikes.</td></tr>
+    <tr><td class="mono">InpAutoTFConfig</td><td>true</td><td><b>Master switch</b> for the per-TF profile (see §7).</td></tr>
+  </table></div>
+
+  <h3>Logging, Risk, Alerts, Debug</h3>
+  <div class="tbl-wrap"><table>
+    <tr><th>Input</th><th>Default</th><th>Purpose</th></tr>
+    <tr><td class="mono">InpEnableSignalLog</td><td>true</td><td>Log signals/outcomes to CSV. <b>Keep on</b> — persists real outcomes across TF switches &amp; restarts.</td></tr>
+    <tr><td class="mono">InpLogFolder</td><td>RSI_Advanced_Logs</td><td>Subfolder inside <code>MQL4/Files/</code> (or <code>MQL5/Files/</code>).</td></tr>
+    <tr><td class="mono">InpMaxOpenSignals</td><td>3</td><td>Max concurrent signals.</td></tr>
+    <tr><td class="mono">InpMaxDailyRiskPct / Drawdown / Trades</td><td>2.0 / 3.0 / 15</td><td>Risk manager caps &amp; circuit breaker.</td></tr>
+    <tr><td class="mono">InpAlertPopup / InpAlertSound</td><td>false</td><td>Popup / sound alert on new signal.</td></tr>
+    <tr><td class="mono">InpDebugMode / InpStrictDuplicate</td><td>false</td><td>Print debug to Experts tab / block duplicate-direction signals.</td></tr>
+  </table></div>
+</section>
+
+<!-- ============================ 9. LOGGING ============================ -->
+<section id="logging">
+  <h2><span class="n">9</span> Logging &amp; Quant Analysis</h2>
+  <p>With logging on, three CSV files are written to <code>&lt;terminal&gt;/MQL4(5)/Files/RSI_Advanced_Logs/</code>, one set per symbol/timeframe/year, all joinable on <code>SIGNAL_ID</code>:</p>
+  <pre><span class="c"># joined by SIGNAL_ID</span>
+signals_XAUUSD_M15_2026.csv   <span class="c"># the facts: entry, SL/TP, ATR, RSI-at-signal, session, hour…</span>
+scoring_XAUUSD_M15_2026.csv   <span class="c"># the decision: score, rec, prob, EV, R:R, MTF, spread…</span>
+outcomes_XAUUSD_M15_2026.csv  <span class="c"># the result: TP/SL hit, bars held, MFE/MAE, P&amp;L pips…</span></pre>
+  <p>Because outcomes persist to disk, the panel's win-rates survive timeframe switches and terminal restarts — the indicator effectively learns from your own market history.</p>
+
+  <h3>Zone-edge analysis tool</h3>
+  <p>The bundled Python tool <code>tools/zone_edge.py</code> joins signals + outcomes and reports win% / average P&amp;L / MFE-MAE broken down by <b>case × RSI-zone (OS/MID/OB) × direction</b> — so you can answer questions like "do my oversold BUY crosses actually have an edge?"</p>
+  <pre><span class="c"># Windows path example — point --dir at your logs folder</span>
+python tools/zone_edge.py --dir "C:/Users/You/AppData/Roaming/MetaQuotes/Terminal/&lt;id&gt;/MQL5/Files/RSI_Advanced_Logs"
+python tools/zone_edge.py --dir &lt;logs&gt; --symbol XAUUSD --tf H1
+python tools/zone_edge.py --dir &lt;logs&gt; --min 20   <span class="c"># only buckets with >=20 resolved trades</span></pre>
+  <div class="callout note"><span class="ct">Outcome encoding</span><span class="mono">-1 = SL hit · 0 = timeout/pending · 1/2/3 = TP1/TP2/TP3 hit</span>. Win-rate = TP / (TP + SL). This tool is a standalone offline helper — the indicator itself does not require Python.</div>
+</section>
+
+<!-- ============================ 10. BEST PRACTICES ============================ -->
+<section id="best">
+  <h2><span class="n">10</span> Best Practices</h2>
+  <div class="callout tip"><span class="ct">Workflow in one paragraph</span>Wait for an <b>arrow</b>. Read the panel header: only act on <b>ENTRY / STRONG ENTRY</b> (or CAUTION with a smaller size). Check that <b>MTF context</b> is SUPPORT/NEUTRAL, confidence is at least MODERATE, and the <b>Win% / EV</b> is positive. Use the <b>entry zones</b> for laddered fills and the <b>SL/TP lines</b> for exits. Skip anything showing WAIT / AVOID / LOW DATA.</div>
+  <h3>Timeframe &amp; session guidance (from the quant log)</h3>
+  <ul>
+    <li><b>M1</b> is mathematically more efficient than M5, but only during the <b>EU–US Overlap</b> session. Case 6 (Trend Continuation) works well; avoid the Asian &amp; late-NY sessions.</li>
+    <li><b>M5</b> favors Case 7 (Sideway Breakout) and the <b>London</b> session; Case 7 works poorly on M1 (false ranges).</li>
+    <li><b>M15 / M30</b> are the most balanced all-round scalping frames.</li>
+    <li><b>H1</b> runs the full case set; <b>H4+</b> is best used for direction/context rather than fast entries.</li>
+  </ul>
+  <h3>Let the data build</h3>
+  <ul>
+    <li>Keep <code>InpEnableSignalLog = true</code>. New cases (8, 9) and any bucket with few resolved trades will show probabilities pulled toward 50% and may say <b>WAIT (Low Data)</b> — this is intentional anti-overconfidence and relaxes as outcomes accumulate.</li>
+    <li>Re-run <code>zone_edge.py</code> periodically to see which case × zone × session combos truly pay on <em>your</em> broker.</li>
+    <li>Trust the <b>AngIC</b> reading: if it's negative/noise on your TF, the "strong angle" gate is not helping there.</li>
+  </ul>
+</section>
+
+<!-- ============================ 11. FAQ ============================ -->
+<section id="faq">
+  <h2><span class="n">11</span> FAQ / Troubleshooting</h2>
+
+  <h4>The Green line clearly crossed the Red line, but no arrow appeared.</h4>
+  <p>Most common reasons: (1) the cross happened <b>inside a trend</b> where the adaptive angle threshold is high, so it didn't qualify as a "strong angle" (Case 8); (2) a higher-priority case already fired that bar; (3) the case isn't enabled on this timeframe (see §7); (4) the arrow only prints on a <b>closed bar</b> — a cross on the live bar is confirmed one bar later; (5) the score was below the minimum, or the risk manager is in a cool-down/circuit-breaker state.</p>
+
+  <h4>Panel says WAIT / LOW DATA / NO DATA even though the setup looks great.</h4>
+  <p>The Low-Data safety gate caps positive verdicts to WAIT until enough <b>real</b> historical outcomes exist for that timeframe. Keep logging on and let it accumulate; it opens up automatically.</p>
+
+  <h4>I changed InpSLRatio (or a case toggle) and nothing happened.</h4>
+  <p><code>InpAutoTFConfig = true</code> is overriding it. Set it to <code>false</code> to use manual inputs — see §7.</p>
+
+  <h4>MT4 and MT5 show different signals on the same symbol/timeframe.</h4>
+  <p>On <b>H4/D1</b> this is expected when the two brokers use different GMT server offsets: their candles open at different times, so price highs/lows (and therefore divergence cases) differ. GMT normalization aligns the <em>RSI</em> across brokers, but cannot rewrite price data. On <b>M1/M5</b>, small differences come from different price feeds. To compare fairly, use the same broker / GMT offset, and use the panel's UTC clock to confirm you are looking at the same moment.</p>
+
+  <h4>The SL/TP lines and entry zones vanished.</h4>
+  <p>Expected when the recommendation is WAIT/AVOID/Counter-Trend — see §5. The arrow and panel remain.</p>
+
+  <h4>The panel shows [BLOCKED].</h4>
+  <p>The risk manager is blocking <em>new</em> entries (max concurrent signals, daily risk, drawdown circuit-breaker, or max trades reached). The signal is still displayed for reference.</p>
+</section>
+
+<!-- ============================ 12. GLOSSARY ============================ -->
+<section id="glossary">
+  <h2><span class="n">12</span> Glossary</h2>
+  <div class="tbl-wrap"><table>
+    <tr><th>Term</th><th>Meaning</th></tr>
+    <tr><td><b>Green / Red / Orange</b></td><td>Fast RSI / signal RSI / baseline. Crosses of Green over Red drive signals.</td></tr>
+    <tr><td><b>EV (R)</b></td><td>Expected value per trade, expressed in units of risk (R). Positive EV = profitable on average.</td></tr>
+    <tr><td><b>R:R</b></td><td>Reward-to-risk ratio, e.g. 1:2 means the target is twice the stop distance.</td></tr>
+    <tr><td><b>Tier 1 / 2 / 3</b></td><td>Three probability sources: T1/T2 = matched historical signals (weighted), T3 = broad ATR-based historical scan.</td></tr>
+    <tr><td><b>nEff</b></td><td>Effective sample size after similarity weighting — the "real" number of comparable trades.</td></tr>
+    <tr><td><b>MTF</b></td><td>Multi-timeframe. The higher-TF RSI trend context around your signal.</td></tr>
+    <tr><td><b>Kelly %</b></td><td>Risk fraction suggested by the Kelly criterion from the estimated edge.</td></tr>
+    <tr><td><b>Brier / Calibration</b></td><td>How well past probability forecasts matched reality (lower Brier = better calibrated).</td></tr>
+    <tr><td><b>AngIC</b></td><td>Angle Information Coefficient — correlation between the RSI cross angle and outcomes.</td></tr>
+    <tr><td><b>MFE / MAE</b></td><td>Maximum Favorable / Adverse Excursion — best and worst unrealized move of a trade.</td></tr>
+    <tr><td><b>Walk-Forward (IS/OOS)</b></td><td>Validation splitting history into in-sample and out-of-sample to detect overfitting.</td></tr>
+  </table></div>
+</section>
+
+<footer>
+  RSI Advanced V11.37 — User Guide (English). Master Trading Wave.
+  This indicator is a decision-support tool and does not place orders. Trading involves risk; validate on your own data before risking capital.
+  · <a href="UserGuide_VI.html">Phiên bản Tiếng Việt →</a>
+</footer>
+</main>
+</div>
+</body>
+</html>

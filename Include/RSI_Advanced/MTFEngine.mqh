@@ -68,7 +68,10 @@ void MTF_BuildRamBuffer(int slot, int tf)
    int minNeed = InpBBPeriod + InpRSIPeriod + 10;
    if(htfBars < minNeed) return;
 
-   int barsToLoad = MathMin(MTF_RAM_BARS, htfBars - minNeed);
+   // [PERF] Build only a few recent bars (see MTF_INIT_BUILD_BARS): GetMTFTrend reads only
+   // indices [0] and [2], so loading all MTF_RAM_BARS was ~7x wasted HTF iRSI reads and
+   // stalled every TF switch / attach for seconds. The buffer still grows over the session.
+   int barsToLoad = MathMin(MTF_INIT_BUILD_BARS, htfBars - minNeed);
    if(barsToLoad <= 0) return;
 
    // Fetch raw RSI array once — shift 0=most recent, higher=older

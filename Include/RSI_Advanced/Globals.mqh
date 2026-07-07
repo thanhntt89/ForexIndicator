@@ -40,6 +40,11 @@ int             g_mtfCount = 0;
 //| barIdx 0 = most recent HTF bar, higher = older                    |
 //+------------------------------------------------------------------+
 #define MTF_RAM_BARS 250
+// [PERF] Only bar indices [0] and [2] of the MTF buffers are ever read (GetMTFTrend).
+// Build just a few recent HTF bars on init instead of all MTF_RAM_BARS; the buffer still
+// grows to MTF_RAM_BARS over the session via MTF_UpdateRamBuffer. Slashes per-TF-switch
+// HTF iRSI reads (~1100 -> ~170) that caused a multi-second stall in MTF_InitRamBuffers.
+#define MTF_INIT_BUILD_BARS 8
 double   g_mtfRamGreen  [6][MTF_RAM_BARS];
 double   g_mtfRamRed    [6][MTF_RAM_BARS];
 double   g_mtfRamOrange [6][MTF_RAM_BARS];
@@ -54,10 +59,10 @@ bool     g_mtfRamReady  [6];
 ProbabilityData g_currentProb;
 double          g_cachedEdge = 0.51;
 BrierMetrics    g_brierMetrics;
-// Per-case Brier calibration (index by caseNumber 0-8). Lets the shrink isolate
+// Per-case Brier calibration (index by caseNumber 0-9). Lets the shrink isolate
 // a single case's calibration instead of pooling all cases globally.
-double          g_brierCaseScore[9];   // mean squared error per case (0 = no data)
-int             g_brierCaseSamples[9]; // resolved outcomes matched per case
+double          g_brierCaseScore[10];   // mean squared error per case (0 = no data)
+int             g_brierCaseSamples[10]; // resolved outcomes matched per case
 
 //+------------------------------------------------------------------+
 //| Entry Zone data                                                    |
@@ -257,6 +262,6 @@ int    g_cfgMinMTFAgree    = 40;
 double g_cfgRiskPct        = 1.0;
 int    g_cfgZoneCount      = 3;
 int    g_cfgPriceDistLB    = 50;
-bool   g_cfgCaseEnabled[9];  // index 0-8 → Case 0-8 (Case 8 = Basic Crossover)
+bool   g_cfgCaseEnabled[10];  // index 0-9 -> Case 0-9 (Case 9 = OB/OS crossover, raw)
 
 #endif

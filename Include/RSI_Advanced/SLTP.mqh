@@ -125,7 +125,7 @@ double GetCaseTFSLMultiplier(int caseNum, int tf)
    double mult = 1.0;
    if(tf <= TF_M5)
    {
-      if(caseNum==1||caseNum==5) mult=0.80;
+      if(caseNum==1||caseNum==5||caseNum==9) mult=0.80;
       else if(caseNum==2||caseNum==3) mult=0.95;
       else if(caseNum==4) mult=1.05;
       else if(caseNum==6) mult=1.10;
@@ -133,7 +133,7 @@ double GetCaseTFSLMultiplier(int caseNum, int tf)
    }
    else if(tf <= TF_M30)
    {
-      if(caseNum==1||caseNum==5) mult=0.85;
+      if(caseNum==1||caseNum==5||caseNum==9) mult=0.85;
       else if(caseNum==2||caseNum==3) mult=1.00;
       else if(caseNum==4) mult=1.10;
       else if(caseNum==6) mult=1.10;
@@ -141,7 +141,7 @@ double GetCaseTFSLMultiplier(int caseNum, int tf)
    }
    else if(tf <= TF_H1)
    {
-      if(caseNum==1||caseNum==5) mult=0.90;
+      if(caseNum==1||caseNum==5||caseNum==9) mult=0.90;
       else if(caseNum==2||caseNum==3) mult=1.00;
       else if(caseNum==4) mult=1.15;
       else if(caseNum==6) mult=1.10;
@@ -149,7 +149,7 @@ double GetCaseTFSLMultiplier(int caseNum, int tf)
    }
    else if(tf <= TF_H4)
    {
-      if(caseNum==1||caseNum==5) mult=0.95;
+      if(caseNum==1||caseNum==5||caseNum==9) mult=0.95;
       else if(caseNum==2||caseNum==3) mult=1.05;
       else if(caseNum==4) mult=1.20;
       else if(caseNum==6) mult=1.15;
@@ -157,7 +157,7 @@ double GetCaseTFSLMultiplier(int caseNum, int tf)
    }
    else // D1+
    {
-      if(caseNum==1||caseNum==5) mult=1.00;
+      if(caseNum==1||caseNum==5||caseNum==9) mult=1.00;
       else if(caseNum==2||caseNum==3) mult=1.10;
       else if(caseNum==4) mult=1.25;
       else if(caseNum==6) mult=1.20;
@@ -329,13 +329,13 @@ bool _TPRatioRSIFilter(double rsi, double rsiPrev, bool isBuy, int caseNum, int 
    if(level == 1)
    {
       if(isBuy) {
-         if((caseNum==1||caseNum==5) && rsi<33 && rsi>12 && rsi>rsiPrev) return(true);
+         if((caseNum==1||caseNum==5||caseNum==9) && rsi<33 && rsi>12 && rsi>rsiPrev) return(true);
          if((caseNum==2||caseNum==3) && rsi<42 && rsi>18 && rsi>rsiPrev) return(true);
          if((caseNum==4||caseNum==7) && rsi>47 && rsi<53 && rsi>rsiPrev) return(true);
          if(caseNum==6 && rsi>42 && rsi<62 && rsi>rsiPrev) return(true);
          if(caseNum<=0 && rsi<48 && rsi>18 && rsi>rsiPrev) return(true);
       } else {
-         if((caseNum==1||caseNum==5) && rsi>67 && rsi<88 && rsi<rsiPrev) return(true);
+         if((caseNum==1||caseNum==5||caseNum==9) && rsi>67 && rsi<88 && rsi<rsiPrev) return(true);
          if((caseNum==2||caseNum==3) && rsi>58 && rsi<82 && rsi<rsiPrev) return(true);
          if((caseNum==4||caseNum==7) && rsi>47 && rsi<53 && rsi<rsiPrev) return(true);
          if(caseNum==6 && rsi>38 && rsi<58 && rsi<rsiPrev) return(true);
@@ -346,7 +346,7 @@ bool _TPRatioRSIFilter(double rsi, double rsiPrev, bool isBuy, int caseNum, int 
    if(level == 2)
    {
       // Reversal group (1/2/3/5): extreme RSI. Trend group (4/6/7): mid RSI.
-      bool isReversal=(caseNum==1||caseNum==2||caseNum==3||caseNum==5);
+      bool isReversal=(caseNum==1||caseNum==2||caseNum==3||caseNum==5||caseNum==9);
       bool isTrend=(caseNum==4||caseNum==6||caseNum==7);
       if(isBuy) {
          if(isReversal && rsi<42 && rsi>12 && rsi>rsiPrev) return(true);
@@ -395,6 +395,37 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
    tp3Ratio = GetActiveTPRatio() * GetActiveTP3Mult();
 
    int tf     = Period();
+
+   // [PERF] Memo-cache the deep NEW->OLD history scan. Its result depends only on
+   // (isBuy, caseNum, tf, totalBars): the barIndex arg is unused, Phase 1 is skipped
+   // during fullRecalc, and Phase 2 is pure history. CalculateSLTP calls this once per
+   // signal, so on a fullRecalc rebuild (N signals) an uncached scan re-walks thousands
+   // of bars N times -> the dominant TF-switch cost on BOTH MT4 and MT5. totalBars
+   // (=rates_total) is the invalidation token: constant within one OnCalculate pass, and
+   // bumps on every new bar and on TF switch. Small table keyed by (caseNum,dir) because
+   // the detection loop interleaves cases/directions (a single slot would thrash).
+   // Mirrors the MeasureEdgeFromHistory cache (Normalize.mqh).
+   static int    s_tpTf   = -1;
+   static int    s_tpBars = -1;
+   static bool   s_tpValid[20];   // index = caseNum*2 + (isBuy?1:0); caseNum 0..9
+   static double s_tpV1[20];
+   static double s_tpV2[20];
+   static double s_tpV3[20];
+   if(s_tpTf != tf || s_tpBars != totalBars)
+   {
+      for(int _c = 0; _c < 20; _c++) s_tpValid[_c] = false;
+      s_tpTf   = tf;
+      s_tpBars = totalBars;
+   }
+   int s_tpSlot = (caseNum >= 0 && caseNum <= 9) ? (caseNum * 2 + (isBuy ? 1 : 0)) : -1;
+   if(s_tpSlot >= 0 && s_tpValid[s_tpSlot])
+   {
+      tp1Ratio = s_tpV1[s_tpSlot];
+      tp2Ratio = s_tpV2[s_tpSlot];
+      tp3Ratio = s_tpV3[s_tpSlot];
+      return;
+   }
+
    int maxFwd = GetMaxForwardBarsForTimeframe();
    int timeBasedMax = MathMax(1440 / MathMax(tf, 1), maxFwd);
 
@@ -430,10 +461,10 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
          if(level == 1 && caseNum > 0 && g_signals[s].caseNumber != caseNum) continue;
          if(level == 2)
          {
-            bool isRev=(caseNum==1||caseNum==2||caseNum==3||caseNum==5);
+            bool isRev=(caseNum==1||caseNum==2||caseNum==3||caseNum==5||caseNum==9);
             bool isTrend=(caseNum==4||caseNum==6||caseNum==7||caseNum==8);
             bool sigRev=(g_signals[s].caseNumber==1||g_signals[s].caseNumber==2||
-                         g_signals[s].caseNumber==3||g_signals[s].caseNumber==5);
+                         g_signals[s].caseNumber==3||g_signals[s].caseNumber==5||g_signals[s].caseNumber==9);
             bool sigTrend=(g_signals[s].caseNumber==4||g_signals[s].caseNumber==6||
                            g_signals[s].caseNumber==7||g_signals[s].caseNumber==8);
             if(isRev && !sigRev) continue;
@@ -511,9 +542,19 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
       tp1Ratio = MathMax(tp1Ratio, GetActiveSLRatio());
       if(tp2Ratio <= tp1Ratio) tp2Ratio = tp1Ratio * 1.5;
       if(tp3Ratio <= tp2Ratio) tp3Ratio = tp2Ratio * 1.3;
-      return; // done
+      break; // accepted this level — store into cache below
    }
-   // Level 4: not enough data at any level — return parametric (already set at top)
+   // Level 4: not enough data at any level — parametric values (set at top) stand.
+
+   // [PERF] Store into memo cache before returning. Covers both the level-accept break
+   // above and the parametric fall-through, so every path populates the cache.
+   if(s_tpSlot >= 0)
+   {
+      s_tpValid[s_tpSlot] = true;
+      s_tpV1[s_tpSlot]    = tp1Ratio;
+      s_tpV2[s_tpSlot]    = tp2Ratio;
+      s_tpV3[s_tpSlot]    = tp3Ratio;
+   }
 }
 
 

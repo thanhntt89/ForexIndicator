@@ -1,7 +1,7 @@
 #ifndef RSI_ADV_STRUCTS_MQH
 #define RSI_ADV_STRUCTS_MQH
 #define SESSION_BLOCKS 4
-#define CASE_COUNT     8
+#define CASE_COUNT     9
 
 struct SignalData
 {
@@ -113,7 +113,10 @@ struct ProbabilityData
    double wrT1;           // Tier 1 win rate (TP1 hit %)
    double wrT2;           // Tier 2 win rate
    double wrT3;           // Tier 3 win rate
+   // --- [XGB] Parallel XGBoost score (observation mode) ---
+   double xgbProb;        // XGBoost predicted P(TP1) [0..100], -1 = not loaded
 };
+
 
 struct EntryZone
 {

@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                            PanelDrawing.mqh       |
 //|                         RSI Advanced - Info Panel Drawing         |
 //+------------------------------------------------------------------+
@@ -15,6 +15,8 @@
 #include "IntermarketAnalysis.mqh"
 #include "SessionStatistics.mqh"
 #include "WalkForward.mqh"
+#include "XGBModel.mqh"   // [XGB] for XGB_IsReady() and g_currentProb.xgbProb display
+
 //+------------------------------------------------------------------+
 void CreateRectangleLabel(string name,int x,int y,int w,int h,color bg,color brd)
 {
@@ -371,6 +373,7 @@ void DrawInfoPanel(int signalIndex)
       calcY += lh; // time-decay line
       calcY += lh; // DQ metrics line
       calcY += lh; // Kelly + P-value line
+      calcY += lh; // Angle IC diagnostic line
    }
    if(hasMTF)
    {
@@ -747,6 +750,81 @@ void DrawInfoPanel(int signalIndex)
          klClr = clrYellow;
       CreateTextLabel(PREFIX_PANEL+"P_KL", px+pad, cy, klLine, klClr, fs-2, false);
       cy += lh;
+
+      // [V11.36] Angle Information Coefficient (IC) diagnostic. Shows whether the
+      // crossover angleStrength actually predicts outcomes on THIS symbol/TF, using
+      // the SAME gate ProbabilityEngine applies to the angle edge (icSamples>=20 &&
+      // infoCoeff>=0.05). Bands (WalkForward.mqh): IC>0.10 strong, 0.05-0.10 weak,
+      // <0.05 noise, <0 inverse. When "off"/"n/a" the angle is only a detection
+      // filter and adds NOTHING to the displayed confidence.
+      {
+         int    icN = g_walkForward.icSamples;
+         double icV = g_walkForward.infoCoeff;
+         string icLine = "";
+         color  icClr  = InpPanelDimColor;
+         if(icN < 10)
+         {
+            icLine = " AngIC: n/a (building, need 20+ resolved)";
+            icClr  = InpPanelDimColor;
+         }
+         else
+         {
+            string icTag;
+            if(icN < 20)         icTag = " (n<20, not applied)";
+            else if(icV < 0.0)   icTag = " INVERSE!";
+            else if(icV >= 0.05) icTag = " ON";
+            else                 icTag = " off (noise)";
+            icLine = " AngIC:" + DoubleToString(icV, 2)
+                   + " n=" + IntegerToString(icN) + icTag;
+            if(icN < 20)         icClr = InpPanelDimColor;
+            else if(icV < 0.0)   icClr = clrOrange;
+            else if(icV >= 0.10) icClr = clrLime;
+            else if(icV >= 0.05) icClr = clrYellow;
+            else                 icClr = InpPanelDimColor;
+         }
+         CreateTextLabel(PREFIX_PANEL+"P_IC", px+pad, cy, icLine, icClr, fs-2, false);
+         cy += lh;
+      }
+
+      // [V11.37] XGBoost Parallel Score — observation mode.
+      // Shows XGB prob alongside Brier prob so user can compare signal quality.
+      // Does NOT affect arrows or trade decisions. Model loaded from InpXGBModelFile.
+      if(InpEnableXGB)
+      {
+         string xgbLine;
+         color  xgbClr;
+         if(!XGB_IsReady())
+         {
+            xgbLine = " XGB: no model  (train: python tools/xgb_trainer.py)";
+            xgbClr  = InpPanelDimColor;
+         }
+         else if(g_currentProb.xgbProb < 0)
+         {
+            xgbLine = " XGB: n/a";
+            xgbClr  = InpPanelDimColor;
+         }
+         else
+         {
+            double xp = g_currentProb.xgbProb;
+            double bp = g_currentProb.probTP1;
+            double diff = xp - bp;
+            string diffStr = (diff >= 0 ? "+" : "") + DoubleToString(diff, 1);
+            xgbLine = " XGB:" + DoubleToString(xp, 1) + "%" + ProbBar(xp)
+                    + "  Brier:" + DoubleToString(bp, 1) + "%"
+                    + "  Δ" + diffStr + "%";
+            // Color: lime = XGB agrees or is more confident in same direction,
+            //        orange = XGB disagrees (below 50 vs above 50),
+            //        yellow = close (|diff| < 5pp), gray = very uncertain
+            if(MathAbs(diff) < 5.0)
+               xgbClr = clrYellow;
+            else if((xp >= 50) == (bp >= 50))
+               xgbClr = (xp > bp) ? clrLime : clrOrange;
+            else
+               xgbClr = clrOrange;
+         }
+         CreateTextLabel(PREFIX_PANEL+"P_XGB", px+pad, cy, xgbLine, xgbClr, fs-2, false);
+         cy += lh;
+      }
 
       // Data quality breakdown (V11.30)
       string dqLine = " T1:"+IntegerToString((int)MathRound(g_currentProb.nEffT1))
