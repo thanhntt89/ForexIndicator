@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                            PanelDrawing.mqh       |
 //|                         RSI Advanced - Info Panel Drawing         |
 //+------------------------------------------------------------------+
@@ -15,8 +15,6 @@
 #include "IntermarketAnalysis.mqh"
 #include "SessionStatistics.mqh"
 #include "WalkForward.mqh"
-#include "XGBModel.mqh"   // [XGB] for XGB_IsReady() and g_currentProb.xgbProb display
-
 //+------------------------------------------------------------------+
 void CreateRectangleLabel(string name,int x,int y,int w,int h,color bg,color brd)
 {
@@ -786,43 +784,39 @@ void DrawInfoPanel(int signalIndex)
          cy += lh;
       }
 
-      // [V11.37] XGBoost Parallel Score — observation mode.
-      // Shows XGB prob alongside Brier prob so user can compare signal quality.
-      // Does NOT affect arrows or trade decisions. Model loaded from InpXGBModelFile.
-      if(InpEnableXGB)
+      // XGBoost integration line (V12)
+      if(InpProbMode != PROB_CALIBRATION)
       {
-         string xgbLine;
-         color  xgbClr;
-         if(!XGB_IsReady())
+         string xLine = "";
+         color  xClr  = InpPanelDimColor;
+
+         if(g_currentProb.xgbProbTP1 <= 0 && XGB_MODEL_TRAINED == 0)
          {
-            xgbLine = " XGB: no model  (train: python tools/xgb_trainer.py)";
-            xgbClr  = InpPanelDimColor;
+            xLine = " XGB: -- [no model]";
+            xClr  = InpPanelDimColor;
          }
-         else if(g_currentProb.xgbProb < 0)
+         else if(g_currentProb.xgbActive)
          {
-            xgbLine = " XGB: n/a";
-            xgbClr  = InpPanelDimColor;
+            xLine = " XGB:" + DoubleToString(g_currentProb.xgbProbTP1, 1) + "%"
+                  + " [w=" + DoubleToString(g_currentProb.xgbWeight, 2) + "]"
+                  + " Brier:" + DoubleToString(g_xgbBrierScore, 3);
+            xClr  = clrLime;
+         }
+         else if(g_xgbBrierSamples < 20)
+         {
+            xLine = " XGB:" + DoubleToString(g_currentProb.xgbProbTP1, 1) + "%"
+                  + " [shadow " + IntegerToString(g_xgbBrierSamples) + "/20]";
+            xClr  = clrYellow;
          }
          else
          {
-            double xp = g_currentProb.xgbProb;
-            double bp = g_currentProb.probTP1;
-            double diff = xp - bp;
-            string diffStr = (diff >= 0 ? "+" : "") + DoubleToString(diff, 1);
-            xgbLine = " XGB:" + DoubleToString(xp, 1) + "%" + ProbBar(xp)
-                    + "  Brier:" + DoubleToString(bp, 1) + "%"
-                    + "  Δ" + diffStr + "%";
-            // Color: lime = XGB agrees or is more confident in same direction,
-            //        orange = XGB disagrees (below 50 vs above 50),
-            //        yellow = close (|diff| < 5pp), gray = very uncertain
-            if(MathAbs(diff) < 5.0)
-               xgbClr = clrYellow;
-            else if((xp >= 50) == (bp >= 50))
-               xgbClr = (xp > bp) ? clrLime : clrOrange;
-            else
-               xgbClr = clrOrange;
+            xLine = " XGB:" + DoubleToString(g_currentProb.xgbProbTP1, 1) + "%"
+                  + " [POOR] Brier:" + DoubleToString(g_xgbBrierScore, 3);
+            xClr  = clrOrange;
          }
-         CreateTextLabel(PREFIX_PANEL+"P_XGB", px+pad, cy, xgbLine, xgbClr, fs-2, false);
+
+         string modeLabel = " Mode:" + XGBModeLabel();
+         CreateTextLabel(PREFIX_PANEL+"P_XGB", px+pad, cy, modeLabel + xLine, xClr, fs-2, false);
          cy += lh;
       }
 

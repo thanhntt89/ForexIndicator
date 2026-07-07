@@ -39,6 +39,13 @@ enum ENUM_SLTP_METHOD
    SLTP_HYBRID     = 2   // ATR + Fibonacci (Hybrid)
 };
 
+enum ENUM_PROB_MODE
+{
+   PROB_CALIBRATION = 0,  // Calibration (Bayesian pipeline only)
+   PROB_XGBOOST    = 1,  // XGBoost only
+   PROB_ENSEMBLE   = 2   // Ensemble (Bayesian + XGBoost)
+};
+
 //+------------------------------------------------------------------+
 //| INPUT GROUP: RSI Core Settings                                     |
 //+------------------------------------------------------------------+
@@ -177,6 +184,7 @@ input int    InpMinMTFAgreement = 40;              // Min MTF agreement % to con
 //+------------------------------------------------------------------+
 input string inp_grp_prob         = "========== Probability =========="; // ---
 input bool   InpShowProbability   = true;          // Show probability
+input ENUM_PROB_MODE InpProbMode  = PROB_CALIBRATION;  // Probability Mode (Calibration/XGBoost/Ensemble)
 input int    InpProbMaxBars       = 1000;          // Max bars for probability scan
 input color  InpProbTextColor     = clrWhite;      // Probability text color
 input int    InpProbFontSize      = 8;             // Probability font size
@@ -238,19 +246,6 @@ input bool   InpAutoTFConfig     = true;  // Auto-adapt SL/TP/cases per TF (scal
 input string inp_grp_log        = "========== Signal Logging =========="; // ---
 input bool   InpEnableSignalLog = true;                   // Enable signal logging to CSV (persists actual outcomes across TF switch/restart)
 input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside MQL4/Files/)
-
-//+------------------------------------------------------------------+
-//| INPUT GROUP: XGBoost Parallel Scorer                              |
-//| Runs XGBoost model IN PARALLEL with Brier — for comparison only  |
-//| Does NOT affect arrows or existing signals.                       |
-//| Setup: 1) Train model: python tools/xgb_trainer.py --dir <logs>  |
-//|        2) Copy xgb_model.json to MQL4/Files/RSI_Advanced/        |
-//|        3) Reload indicator (Ctrl+R)                               |
-//+------------------------------------------------------------------+
-input string inp_grp_xgb       = "========== XGBoost (Parallel) =========="; // ---
-input bool   InpEnableXGB      = true;              // Enable XGBoost parallel scoring
-input string InpXGBModelFile   = "RSI_Advanced\\xgb_model.json"; // XGB model file (in MQL4/Files/)
-
 
 
 //+------------------------------------------------------------------+

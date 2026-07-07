@@ -98,6 +98,7 @@ double BufferSellSignal[];
 #include <RSI_Advanced/WalkForward.mqh>
 #include <RSI_Advanced/ProbabilityEngine.mqh>
 #include <RSI_Advanced/CalibrationEngine.mqh>
+#include <RSI_Advanced/XGBIntegration.mqh>
 #include <RSI_Advanced/RiskManager.mqh>
 #include <RSI_Advanced/ArrowManager.mqh>
 #include <RSI_Advanced/LineDrawing.mqh>
@@ -658,6 +659,7 @@ int OnCalculate(const int rates_total,
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
       UpdateBrierMetrics();
+      UpdateXGBBrierMetrics();
       UpdatePortfolioRisk();
 
       // Memory management: cap outcomes at 500
@@ -822,6 +824,9 @@ int OnCalculate(const int rates_total,
          if(InpShowProbability && g_activeSignalIndex >= 0 &&
             g_signals[g_activeSignalIndex].predictedProb <= 0 && g_currentProb.probTP1 > 0)
             g_signals[g_activeSignalIndex].predictedProb = g_currentProb.probTP1;
+         if(InpProbMode != PROB_CALIBRATION && g_activeSignalIndex >= 0 &&
+            g_signals[g_activeSignalIndex].xgbPredictedProb <= 0 && g_currentProb.xgbProbTP1 > 0)
+            g_signals[g_activeSignalIndex].xgbPredictedProb = g_currentProb.xgbProbTP1;
          if(g_intermarket.isAvailable)
             GetIntermarketScore(activeSig.isBuySignal);
 
@@ -860,7 +865,8 @@ int OnCalculate(const int rates_total,
                   g_spreadRegime.spreadRatio, g_walkForward.isRobust,
                   SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1),
                   g_currentProb.rawCountT1, g_currentProb.rawCountT2,
-                  g_currentProb.countT3, g_currentProb.realPct);
+                  g_currentProb.countT3, g_currentProb.realPct,
+                  g_currentProb.xgbProbTP1);
             }
          }
 

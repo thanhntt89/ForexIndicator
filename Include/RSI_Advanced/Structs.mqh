@@ -41,6 +41,7 @@ struct SignalData
    int      sessionBlock;      // 0=Asian 1=London 2=Overlap 3=LateNY at signal time
    double   rsiAtSignal;       // BufferGreen[i] — exact RSI value at signal bar
    double   predictedProb;    // probTP1 at signal creation time (for Brier Score calibration)
+   double   xgbPredictedProb; // XGBoost probTP1 at signal creation (for XGB Brier tracking)
 };
 
 struct BrierMetrics
@@ -113,10 +114,12 @@ struct ProbabilityData
    double wrT1;           // Tier 1 win rate (TP1 hit %)
    double wrT2;           // Tier 2 win rate
    double wrT3;           // Tier 3 win rate
-   // --- [XGB] Parallel XGBoost score (observation mode) ---
-   double xgbProb;        // XGBoost predicted P(TP1) [0..100], -1 = not loaded
+   // XGBoost integration (V12)
+   double xgbProbTP1;     // XGBoost model probability (0-100, 0 = not computed)
+   double xgbWeight;      // XGBoost weight in ensemble (0.0 = shadow/off)
+   double bayesianWeight; // Bayesian weight in ensemble (1.0 when XGB off)
+   bool   xgbActive;      // true = XGBoost contributing to combined prob
 };
-
 
 struct EntryZone
 {

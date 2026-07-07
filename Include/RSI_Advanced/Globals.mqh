@@ -64,6 +64,11 @@ BrierMetrics    g_brierMetrics;
 double          g_brierCaseScore[10];   // mean squared error per case (0 = no data)
 int             g_brierCaseSamples[10]; // resolved outcomes matched per case
 
+// XGBoost integration state (V12)
+double          g_xgbProbTP1       = 0.0;    // Latest XGBoost prediction (0-100)
+double          g_xgbBrierScore    = 0.25;   // XGBoost Brier score (starts at random baseline)
+int             g_xgbBrierSamples  = 0;      // Resolved outcomes with XGB prediction stored
+
 //+------------------------------------------------------------------+
 //| Entry Zone data                                                    |
 //+------------------------------------------------------------------+
@@ -149,6 +154,7 @@ void StoreSignal(datetime t, int barIdx, int caseNum, bool isBuy,
    g_signals[idx].sessionBlock   = (sessBlock >= 0) ? sessBlock : GetSessionBlock(t);
    g_signals[idx].rsiAtSignal    = rsiVal;
    g_signals[idx].predictedProb  = 0;
+   g_signals[idx].xgbPredictedProb = 0;
 }
 
 int FindSignalByArrowName(string arrowName)

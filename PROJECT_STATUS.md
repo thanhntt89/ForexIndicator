@@ -1,4 +1,4 @@
-# RSI Advanced V11.37 - Project Status & Context Summary
+# RSI Advanced V12.0 - Project Status & Context Summary
 
 Tài liệu này đóng vai trò là **Source of Truth (Nguồn thông tin gốc)** của dự án. AI ở các phiên tiếp theo **BẮT BUỘC** đọc file này để biết trạng thái hiện tại của code, các phát hiện định lượng mới nhất, và các công việc cần tiếp tục triển khai.
 
@@ -23,6 +23,165 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 ---
 
 ## 3. Changelog Các Phiên Gần Nhất
+
+### V12.0 — XGBoost Probability Integration (2026-07-07)
+
+**Boi canh**: User muon tich hop XGBoost de tinh xac suat tin hieu, chay song song voi pipeline
+Bayesian hien tai. XGBoost bo sung kha nang hoc **non-linear feature interactions** ma Bayesian
+khong capture duoc (vi du: Case 1 + London + high ATR + RSI gan 30 co ket qua khac han tung
+feature rieng le). Indicator chi **build 1 lan**, XGBoost duoc export thanh if/else code MQL
+thuan — khong can Python runtime.
+
+**3 mode hoat dong (input dropdown, mac dinh CALIBRATION = khong doi hanh vi):**
+
+| Mode | Enum value | Cach hoat dong |
+|------|-----------|----------------|
+| **PROB_CALIBRATION** (mac dinh) | 0 | Bayesian pipeline hien tai, XGBoost code nam yen |
+| **PROB_XGBOOST** | 1 | Chi dung XGBoost, bo qua Step 1-5 Bayesian |
+| **PROB_ENSEMBLE** | 2 | Bayesian + XGBoost → Brier-weighted average |
+
+**Auto-fallback**: Neu chon XGBOOST/ENSEMBLE nhung XGB chua san sang (samples < 20 hoac Brier > 0.25
+hoac chua train model), tu dong fallback ve CALIBRATION va hien warning tren panel.
+
+**Kiem truc ky thuat:**
+```
+[Offline]                          [Runtime MQL]
+CSV data (signals+scoring+outcomes)
+    |                              XGBModel.mqh (50 if/else trees)
+    v                                   |
+rsi_xgboost_train.py               CalculateProbability()
+(walk-forward CV,                  Step 1-5: Bayesian (existing)
+ XGBoost train,                    Step 5.1: XGB inject (NEW)
+ export to MQL)                      CALIBRATION → skip
+                                     XGBOOST → XGBPredict() only
+                                     ENSEMBLE → Brier-weighted avg
+                                   Step 5.5-6: calibration/normalize
+```
+
+**Combination (mode ENSEMBLE) — Brier-weighted Model Averaging:**
+```
+w_bayes = 1 / max(brier_bayes, 0.10)^2
+w_xgb   = 1 / max(brier_xgb, 0.10)^2
+probCombined = (probBayes * w_bayes + probXGB * w_xgb) / (w_bayes + w_xgb)
+```
+Model nao du bao chinh xac hon (Brier thap hon) tu dong co weight cao hon.
+
+**Anti-Overfit Safeguards:**
+1. Feature exclusion: PROB_TP1/EV/RR tu scoring KHONG dung lam XGB feature (chong copy Bayesian)
+2. Walk-forward only: expanding window + purge gap, KHONG random split
+3. Brier gate tu dong: XGB weight=0 khi samples<20 hoac Brier>0.25
+4. Conservative hyperparameters: max_depth=4, n_estimators=50, min_child_weight=10
+5. Validation checks truoc export: OOS Brier<0.25, AUC>0.55, no single feature>50% importance
+
+**17 XGBoost features (loai tru Bayesian output de chong double-count):**
+- Tu signals: RSI_AT_SIGNAL, ANGLE_Z, ATR_RATIO, SL_DIST_ATR, TP1_DIST_ATR, RR_RATIO,
+  SPREAD_PIPS, TIME_IN_SESSION_MIN, CASE_NUM, DIR, SESSION, HOUR, DOW, D1_TREND
+- Tu scoring: MTF_AGREE_PCT, SPREAD_RATIO, WF_ROBUST, MTF_H4_TREND, MTF_H1_TREND
+- **LOAI TRU**: PROB_TP1, PROB_SL, EV, RR, RAW_T1/T2, COUNT_T3, REAL_PCT
+
+**So luong tin hieu toi thieu de train:**
+
+| Muc | Signals resolved | Mo ta |
+|-----|-----------------|-------|
+| Toi thieu tuyet doi | 150 | Walk-forward 2-3 fold, ket qua chua on dinh |
+| Khuyen nghi | 300-500 | Walk-forward 5 fold, moi fold ~60 OOS signals |
+| Ly tuong | 1000+ | Co the tang max_depth=5, feature interaction ro rang |
+
+**Files moi tao (3):**
+- `Include/RSI_Advanced/XGBModel.mqh` — placeholder (returns 50% flat), se bi thay boi Python script
+- `Include/RSI_Advanced/XGBIntegration.mqh` — XGBGetPrediction, CombineXGBWithBayesian, XGBIsReady,
+  UpdateXGBBrierMetrics, XGBModeLabel
+- `tools/rsi_xgboost_train.py` — Python training pipeline (chi chay offline, KHONG can khi indicator chay)
+
+**Files sua (8):**
+- Config.mqh: ENUM_PROB_MODE enum + InpProbMode input (group Probability)
+- Structs.mqh: xgbPredictedProb (SignalData), xgbProbTP1/xgbWeight/bayesianWeight/xgbActive (ProbabilityData)
+- Globals.mqh: g_xgbProbTP1, g_xgbBrierScore, g_xgbBrierSamples + StoreSignal init
+- ProbabilityEngine.mqh: Step 5.1 block (~40 dong) — mode switch + XGBPredict + Brier-weighted combine
+- PanelDrawing.mqh: XGB mode/probability display (green/yellow/orange/gray)
+- SignalLogger.mqh: cot XGB_PROB_TP1 trong scoring CSV
+- RSI_Advanced.mq4: #include + xgbPredictedProb storage + UpdateXGBBrierMetrics + LogScoringSnapshot arg
+- RSI_Advanced.mq5: tuong tu mq4
+
+**Panel display theo mode:**
+```
+CALIBRATION:  XGB:OFF                         (dim gray)
+XGBOOST:      XGB:58.3% Brier:0.183           (lime, active)
+ENSEMBLE:     XGB:58.3% [w=0.38] Brier:0.183  (lime, weights shown)
+Fallback:     XGB:-- [12/20]                   (yellow, accumulating)
+Poor Brier:   XGB:45.1% Brier:0.281!          (orange, warning)
+No model:     XGB:no model                    (gray)
+```
+
+**LUU Y SAU COMPILE**: Them field vao SignalData → **xoa `RSI_SESS_*.bin`** de tranh doc sai binary cu.
+
+---
+
+### HUONG DAN SU DUNG XGBOOST TRAINING PIPELINE
+
+**Buoc 1: Tich luy data (BAT BUOC)**
+- Chay indicator voi `InpProbMode = PROB_CALIBRATION` (mac dinh)
+- Bat `InpEnableSignalLog = true` (da default-on tu V11.31)
+- Thu thap toi thieu 150 resolved signals (khuyen nghi 300+)
+- Data tu dong luu vao: `MQL4/Files/RSI_Advanced_Logs/` (hoac MQL5)
+  ```
+  signals_XAUUSD_H1_2026.csv
+  scoring_XAUUSD_H1_2026.csv
+  outcomes_XAUUSD_H1_2026.csv
+  ```
+
+**Buoc 2: Cai dat Python dependencies (1 lan)**
+```bash
+pip install xgboost pandas numpy scikit-learn matplotlib
+```
+
+**Buoc 3: Chay training**
+```bash
+cd RSI_Advanced/tools
+python rsi_xgboost_train.py --data-dir "C:/path/to/MQL4/Files/RSI_Advanced_Logs"
+```
+
+Output:
+- Walk-forward validation report (5 folds, Brier + AUC per fold)
+- Feature importance ranking
+- Calibration plot: `xgb_calibration.png`
+- Neu PASS validation → tu dong gen `Include/RSI_Advanced/XGBModel.mqh`
+- Neu FAIL → khong export (dung `--force` de override, khong khuyen nghi)
+
+**Buoc 4: Recompile + doi mode**
+1. Recompile indicator (MT4 + MT5) — XGBModel.mqh gio chua real model
+2. Xoa `RSI_SESS_*.bin` (struct da doi tu V12.0)
+3. Doi input: `InpProbMode = PROB_ENSEMBLE` (hoac PROB_XGBOOST)
+4. Panel se hien XGB probability + weights
+
+**Buoc 5: Monitor + retrain**
+- Theo doi Brier score cua XGB tren panel (xanh < 0.20, vang 0.20-0.25, cam > 0.25)
+- Khi co them data moi (100+ signals moi), retrain:
+  ```bash
+  python rsi_xgboost_train.py --data-dir "..." --output "Include/RSI_Advanced/XGBModel.mqh"
+  ```
+- Recompile de cap nhat model
+
+**Options cua training script:**
+
+| Flag | Mo ta | Mac dinh |
+|------|-------|----------|
+| `--data-dir` | Thu muc chua 3 file CSV | *bat buoc* |
+| `--output` | Duong dan output XGBModel.mqh | `Include/RSI_Advanced/XGBModel.mqh` |
+| `--force` | Export du validation fail | `false` |
+
+**Validation gates (phai pass de export):**
+- OOS Brier < 0.25 (model co skill)
+- OOS AUC > 0.55 (phan biet duoc win/loss)
+- Calibration curve approximately monotonic
+- No single feature > 50% importance (chong overfit 1 feature)
+
+**Khi nao KHONG nen dung XGBoost:**
+- Duoi 150 signals → chua du data, model se overfit
+- OOS Brier > 0.25 → model khong co skill, giu CALIBRATION
+- 1 feature dominate >50% → model hoc shortcut, khong generalizable
+
+---
 
 ### V11.37 — TF-Switch Performance Fix (load lâu → 16ms) (2026-07-06)
 

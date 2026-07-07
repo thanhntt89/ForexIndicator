@@ -227,7 +227,6 @@
 #include "IntermarketAnalysis.mqh"
 #include "SessionStatistics.mqh"
 #include "WalkForward.mqh"
-#include "XGBModel.mqh"   // [XGB] Parallel scorer — no blend, observation only
 
 //+------------------------------------------------------------------+
 //| D0-aligned entry time for GMT-normalized H4 charts                 |
@@ -1061,6 +1060,8 @@ void CalculateProbability(int currentSignalIndex)
    g_currentProb.nEffT1=0; g_currentProb.nEffT2=0; g_currentProb.timeoutCount=0;
    g_currentProb.oldestDays=0; g_currentProb.realPct=0;
    g_currentProb.wrT1=0; g_currentProb.wrT2=0; g_currentProb.wrT3=0;
+   g_currentProb.xgbProbTP1=0; g_currentProb.xgbWeight=0;
+   g_currentProb.bayesianWeight=1.0; g_currentProb.xgbActive=false;
 
    // [GMT-FIX-A2c] Reset data quality warning each recalc cycle
    g_gmtDataQualityWarn = false;
@@ -1341,6 +1342,47 @@ void CalculateProbability(int currentSignalIndex)
    }
 
    //=================================================================
+   // STEP 5.1: XGBoost integration (V12)
+   // Mode: CALIBRATION — skip entirely (Bayesian only, default)
+   //       XGBOOST    — override probTP1 with XGBPredict()
+   //       ENSEMBLE   — Brier-weighted avg of Bayesian + XGBoost
+   //=================================================================
+   if(InpProbMode != PROB_CALIBRATION)
+   {
+      double xgbProb = XGBGetPrediction(curSig);
+      g_currentProb.xgbProbTP1 = xgbProb;
+      g_xgbProbTP1 = xgbProb;
+
+      if(InpProbMode == PROB_XGBOOST)
+      {
+         if(XGBIsReady())
+         {
+            g_currentProb.probTP1 = xgbProb;
+            g_currentProb.probSL  = 100.0 - xgbProb;
+            g_currentProb.xgbActive = true;
+            g_currentProb.xgbWeight = 1.0;
+            g_currentProb.bayesianWeight = 0.0;
+         }
+         // else: fallback — keep Bayesian probTP1 as-is
+      }
+      else // PROB_ENSEMBLE
+      {
+         if(XGBIsReady())
+         {
+            double wBayes = 0, wXGB = 0;
+            double combined = CombineXGBWithBayesian(
+               g_currentProb.probTP1, xgbProb, wBayes, wXGB);
+            g_currentProb.probTP1 = combined;
+            g_currentProb.probSL  = 100.0 - combined;
+            g_currentProb.xgbActive = true;
+            g_currentProb.xgbWeight = wXGB;
+            g_currentProb.bayesianWeight = wBayes;
+         }
+         // else: fallback — keep Bayesian probTP1 as-is
+      }
+   }
+
+   //=================================================================
    // STEP 5.5: BROKER-RESISTANT confidence adjustments
    //=================================================================
 
@@ -1588,74 +1630,6 @@ void CalculateProbability(int currentSignalIndex)
    g_currentProb.probTP3 = NormalizeDouble(MathMin(g_currentProb.probTP3, g_currentProb.probTP2), 1);
 
    CalculateKellyFraction();
-
-   //=================================================================
-   // [XGB] STEP 7: XGBoost Parallel Score (observation mode)
-   // Runs INDEPENDENTLY — does NOT modify Brier probTP1 in any way.
-   // Result stored in g_currentProb.xgbProb for panel display.
-   //=================================================================
-   g_currentProb.xgbProb = -1.0;  // default: not available
-   if(InpEnableXGB)
-   {
-      // Load model on first call (lazy init)
-      if(!XGB_IsReady())
-         XGB_LoadModel(InpXGBModelFile);
-
-      if(XGB_IsReady())
-      {
-         // Extract features from current signal + context
-         SignalData curSig2 = g_signals[g_signalCount - 1];  // most recent signal
-         double atr2        = curSig2.atrValue;
-         double slDist2     = MathAbs(curSig2.entryPrice - curSig2.stopLoss);
-         double tp1Dist2    = MathAbs(curSig2.takeProfit1 - curSig2.entryPrice);
-         double rrRatio2    = (slDist2 > 0) ? tp1Dist2 / slDist2 : 1.0;
-         double slDistATR2  = (atr2 > 0) ? slDist2 / atr2 : 1.0;
-
-         // Session: 0=Asian 1=London 2=Overlap 3=LateNY
-         int session2 = curSig2.sessionBlock;
-
-         // D1 trend from MTF data
-         int d1Trend2 = 0;
-         for(int mi = 0; mi < g_mtfCount; mi++)
-            if(g_mtfData[mi].timeframe == TF_D1) { d1Trend2 = g_mtfData[mi].trend; break; }
-
-         // Hour + DOW from signal time
-         MqlDateTime sigDt2;
-         TimeToStruct(curSig2.signalTime, sigDt2);
-
-         // ATR ratio (current ATR / avg ATR)
-         double avgATR2 = iATR(NULL, 0, 50, 1);
-         double atrRatio2 = (avgATR2 > 0 && atr2 > 0) ? atr2 / avgATR2 : 1.0;
-
-         // Spread in pips
-         double pipSz2   = (StringFind(Symbol(),"XAU")>=0||StringFind(Symbol(),"GOLD")>=0) ? 0.1 : _Point*10;
-         double spread2  = NormalizeDouble(MarketInfo(Symbol(),MODE_SPREAD)*_Point / pipSz2, 2);
-
-         double rawProb = XGB_Score(
-            curSig2.caseNumber,
-            curSig2.isBuySignal,
-            curSig2.rsiAtSignal,
-            curSig2.angleStrength,
-            session2,
-            Period(),
-            sigDt2.hour,
-            sigDt2.day_of_week,
-            atrRatio2,
-            spread2,
-            d1Trend2,
-            rrRatio2,
-            slDistATR2);
-
-         if(rawProb >= 0.0)
-            g_currentProb.xgbProb = NormalizeDouble(rawProb * 100.0, 1);
-
-         if(InpDebugMode)
-            Print("[XGB] caseNum=", curSig2.caseNumber,
-                  " rsi=", DoubleToString(curSig2.rsiAtSignal,1),
-                  " xgbProb=", DoubleToString(g_currentProb.xgbProb,1),
-                  "% brierProb=", DoubleToString(g_currentProb.probTP1,1), "%");
-      }
-   }
 }
 
 #endif
