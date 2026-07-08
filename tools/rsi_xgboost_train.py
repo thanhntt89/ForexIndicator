@@ -5,22 +5,26 @@ rsi_xgboost_train.py — XGBoost training pipeline for RSI_Advanced V12
 Reads CSV signal/scoring/outcome data, trains a walk-forward validated
 XGBoost model, and exports the decision tree ensemble as MQL4/5 source code.
 
-Usage:
-    python rsi_xgboost_train.py --data-dir <path_to_csv_folder> [--output <XGBModel.mqh>]
+Usage (standalone):
+    python rsi_xgboost_train.py --data-dir <path_to_csv_folder>
+    python rsi_xgboost_train.py --data-dir <path> --symbol XAUUSD --tf H1
 
-The CSV folder should contain:
-    signals_SYMBOL_TF_YYYY.csv
-    scoring_SYMBOL_TF_YYYY.csv
-    outcomes_SYMBOL_TF_YYYY.csv
+Usage (called by xgb_service.py):
+    python rsi_xgboost_train.py --data-dir <path> --symbol XAUUSD --tf H1 \
+        --model-index 0 --json-output
 
 Requirements:
-    pip install xgboost pandas numpy scikit-learn matplotlib
+    pip install -r requirements.txt
 """
 
 import argparse
 import glob
+import json
 import os
+import re
+import struct
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -75,51 +79,68 @@ FEATURE_COLS_SCORING = [
 CATEGORICAL_COLS = ["CASE_NUM", "DIR_BIN", "SESSION_ENC"]
 CYCLICAL_COLS = ["HOUR_SIN", "HOUR_COS", "DOW_SIN", "DOW_COS"]
 
-EXCLUDED_SCORING_COLS = [
-    "PROB_TP1", "PROB_SL", "EV", "RR",
-    "RAW_T1", "RAW_T2", "COUNT_T3", "REAL_PCT",
-]
-
 MIN_SIGNALS_TOTAL = 150
 MIN_OOS_PER_FOLD = 20
 PURGE_BARS = 20
 N_FOLDS = 5
 
+TF_TO_PERIOD = {
+    "M1": 1, "M5": 5, "M15": 15, "M30": 30,
+    "H1": 60, "H4": 240, "D1": 1440, "W1": 10080, "MN1": 43200,
+}
+
 
 # ─── Data Loading ───────────────────────────────────────────────────
-def load_csvs(data_dir: str, prefix: str) -> pd.DataFrame:
-    pattern = os.path.join(data_dir, f"{prefix}_*.csv")
-    files = sorted(glob.glob(pattern))
-    if not files:
-        return pd.DataFrame()
+def load_csvs(data_dirs: list, prefix: str, symbol: str = None, tf: str = None) -> pd.DataFrame:
     frames = []
-    for f in files:
-        try:
-            df = pd.read_csv(f)
-            frames.append(df)
-        except Exception as e:
-            print(f"  Warning: skipping {f}: {e}")
+    for data_dir in data_dirs:
+        if not os.path.isdir(data_dir):
+            continue
+        pattern = os.path.join(data_dir, f"{prefix}_*.csv")
+        for f in sorted(glob.glob(pattern)):
+            fname = os.path.basename(f)
+            if symbol and f"_{symbol}_" not in fname and not fname.startswith(f"{prefix}_{symbol}_"):
+                continue
+            if tf:
+                tf_pattern = f"_{tf}_"
+                if tf_pattern not in fname:
+                    continue
+            try:
+                df = pd.read_csv(f)
+                frames.append(df)
+            except Exception as e:
+                print(f"  Warning: skipping {f}: {e}")
     if not frames:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
 
-def load_and_merge(data_dir: str) -> pd.DataFrame:
-    print(f"Loading CSVs from: {data_dir}")
-    signals = load_csvs(data_dir, "signals")
-    scoring = load_csvs(data_dir, "scoring")
-    outcomes = load_csvs(data_dir, "outcomes")
+def load_and_merge(data_dirs: list, symbol: str = None, tf: str = None) -> pd.DataFrame:
+    print(f"Loading CSVs from {len(data_dirs)} director(ies)")
+    if symbol:
+        print(f"  Filter: symbol={symbol}")
+    if tf:
+        print(f"  Filter: tf={tf}")
+
+    signals = load_csvs(data_dirs, "signals", symbol, tf)
+    scoring = load_csvs(data_dirs, "scoring", symbol, tf)
+    outcomes = load_csvs(data_dirs, "outcomes", symbol, tf)
 
     if signals.empty:
         print("ERROR: No signals CSV files found.")
-        sys.exit(1)
+        return pd.DataFrame()
     if outcomes.empty:
         print("ERROR: No outcomes CSV files found.")
-        sys.exit(1)
+        return pd.DataFrame()
 
     print(f"  Signals: {len(signals)} rows")
     print(f"  Scoring: {len(scoring)} rows")
     print(f"  Outcomes: {len(outcomes)} rows")
+
+    # Dedup by SIGNAL_ID (multi-terminal may produce duplicates)
+    signals = signals.drop_duplicates(subset=["SIGNAL_ID"], keep="last")
+    scoring = scoring.drop_duplicates(subset=["SIGNAL_ID"], keep="last")
+    outcomes = outcomes.drop_duplicates(subset=["SIGNAL_ID"], keep="last")
 
     outcomes = outcomes[outcomes["OUTCOME"] != "PENDING"].copy()
     print(f"  Resolved outcomes: {len(outcomes)}")
@@ -138,19 +159,14 @@ SESSION_MAP = {"Asian": 0, "London": 1, "Overlap": 2, "LateNY": 3}
 def engineer_features(df: pd.DataFrame) -> tuple:
     df = df.copy()
 
-    # Target: binary (TP1+ = 1, SL/REVERSAL = 0)
     df["target"] = (df["OUTCOME"].isin(["TP1", "TP2", "TP3"])).astype(int)
-
-    # Direction binary
     df["DIR_BIN"] = (df["DIR"] == "BUY").astype(int)
 
-    # Session encode
     if "SESSION" in df.columns:
         df["SESSION_ENC"] = df["SESSION"].map(SESSION_MAP).fillna(0).astype(int)
     else:
         df["SESSION_ENC"] = 0
 
-    # Cyclical hour/dow
     if "HOUR" in df.columns:
         df["HOUR_SIN"] = np.sin(2 * np.pi * df["HOUR"] / 24)
         df["HOUR_COS"] = np.cos(2 * np.pi * df["HOUR"] / 24)
@@ -165,15 +181,12 @@ def engineer_features(df: pd.DataFrame) -> tuple:
         df["DOW_SIN"] = 0.0
         df["DOW_COS"] = 1.0
 
-    # D1_TREND as numeric
     if "D1_TREND" in df.columns:
         df["D1_TREND"] = pd.to_numeric(df["D1_TREND"], errors="coerce").fillna(0).astype(int)
 
-    # WF_ROBUST as int
     if "WF_ROBUST" in df.columns:
         df["WF_ROBUST"] = pd.to_numeric(df["WF_ROBUST"], errors="coerce").fillna(0).astype(int)
 
-    # Build feature list
     feature_cols = []
     for c in FEATURE_COLS_SIGNALS:
         if c in df.columns:
@@ -189,7 +202,6 @@ def engineer_features(df: pd.DataFrame) -> tuple:
     feature_cols.extend(CATEGORICAL_COLS)
     feature_cols.extend(CYCLICAL_COLS)
 
-    # Keep only valid features
     feature_cols = [c for c in feature_cols if c in df.columns]
 
     return df, feature_cols
@@ -216,7 +228,7 @@ def train_and_validate(df: pd.DataFrame, feature_cols: list) -> dict:
     splits = walk_forward_splits(len(df), N_FOLDS, PURGE_BARS)
     if not splits:
         print("ERROR: Not enough data for walk-forward validation.")
-        sys.exit(1)
+        return None
 
     print(f"\nWalk-Forward Validation: {len(splits)} folds")
 
@@ -252,12 +264,10 @@ def train_and_validate(df: pd.DataFrame, feature_cols: list) -> dict:
     print(f"\n  Overall OOS Brier: {overall_brier:.4f}")
     print(f"  Overall OOS AUC:   {overall_auc:.4f}")
 
-    # Final model on all data
     print("\nTraining final model on all data...")
     final_model = xgb.XGBClassifier(**XGB_PARAMS)
     final_model.fit(X, y, verbose=False)
 
-    # Feature importance
     importances = final_model.feature_importances_
     fi_df = pd.DataFrame({"feature": feature_cols, "importance": importances})
     fi_df = fi_df.sort_values("importance", ascending=False)
@@ -319,21 +329,68 @@ def validate_model(results: dict) -> bool:
 
 
 # ─── MQL Code Generation ────────────────────────────────────────────
-def tree_to_mql(booster, tree_index: int, feature_names: list) -> str:
+PREDICT_PARAMS = [
+    "   double rsiAtSignal,",
+    "   double angleZ,",
+    "   double atrRatio,",
+    "   double slDistATR,",
+    "   double tp1DistATR,",
+    "   double rrRatio,",
+    "   double spreadPips,",
+    "   double timeInSessionMin,",
+    "   int    caseNum,",
+    "   int    dir,",
+    "   int    session,",
+    "   int    hour,",
+    "   int    dow,",
+    "   int    d1Trend,",
+    "   int    mtfAgreePct,",
+    "   double spreadRatio,",
+    "   int    wfRobust,",
+    "   int    h4Trend,",
+    "   int    h1Trend",
+]
+
+FEATURE_ARG_MAP = {
+    "RSI_AT_SIGNAL":      "rsiAtSignal",
+    "ANGLE_Z":            "angleZ",
+    "ATR_RATIO":          "atrRatio",
+    "SL_DIST_ATR":        "slDistATR",
+    "TP1_DIST_ATR":       "tp1DistATR",
+    "RR_RATIO":           "rrRatio",
+    "SPREAD_PIPS":        "spreadPips",
+    "TIME_IN_SESSION_MIN":"timeInSessionMin",
+    "MTF_AGREE_PCT":      "(double)mtfAgreePct",
+    "SPREAD_RATIO":       "spreadRatio",
+    "WF_ROBUST":          "(double)wfRobust",
+    "MTF_H4_TREND":       "(double)h4Trend",
+    "MTF_H1_TREND":       "(double)h1Trend",
+    "D1_TREND":           "(double)d1Trend",
+    "CASE_NUM":           "(double)caseNum",
+    "DIR_BIN":            "(double)dir",
+    "SESSION_ENC":        "(double)session",
+    "HOUR_SIN":           "MathSin(2.0*M_PI*hour/24.0)",
+    "HOUR_COS":           "MathCos(2.0*M_PI*hour/24.0)",
+    "DOW_SIN":            "MathSin(2.0*M_PI*dow/5.0)",
+    "DOW_COS":            "MathCos(2.0*M_PI*dow/5.0)",
+}
+
+
+def tree_to_mql(booster, tree_index: int, feature_names: list, func_prefix: str) -> str:
     tree_df = booster.trees_to_dataframe()
     tree_df = tree_df[tree_df["Tree"] == tree_index].copy()
 
     lines = []
-    lines.append(f"double XGBTree{tree_index}(")
     params = ", ".join([f"double f{i}" for i in range(len(feature_names))])
+    lines.append(f"double {func_prefix}_{tree_index}(")
     lines.append(f"   {params})")
     lines.append("{")
 
     node_map = {}
     for _, row in tree_df.iterrows():
-        node_map[row["ID"]] = row
+        node_map[row["Node"]] = row
 
-    def recurse(node_id: str, indent: int) -> list:
+    def recurse(node_id: int, indent: int) -> list:
         node = node_map[node_id]
         pad = "   " * indent
 
@@ -355,146 +412,319 @@ def tree_to_mql(booster, tree_index: int, feature_names: list) -> str:
         result.append(f"{pad}}}")
         return result
 
-    lines.extend(recurse(f"{tree_index}-0", 1))
+    lines.extend(recurse(0, 1))
     lines.append("}")
     return "\n".join(lines)
 
 
-def export_model_to_mql(results: dict, output_path: str, data_summary: str):
+def build_tree_args(feature_cols: list) -> str:
+    args = []
+    for i, fname in enumerate(feature_cols):
+        args.append(FEATURE_ARG_MAP.get(fname, "0.0"))
+    return ", ".join(args)
+
+
+def gen_model_block(results: dict, model_index: int, symbol: str, tf: str) -> tuple:
+    """Generate MQL code for one model. Returns (tree_code, predict_fn, n_trees, info)."""
     model = results["model"]
     feature_cols = results["feature_cols"]
     booster = model.get_booster()
     n_trees = booster.num_boosted_rounds()
+    prefix = f"XGBTree{model_index}"
 
+    tree_code_parts = []
+    exported = 0
+    for t in range(n_trees):
+        try:
+            code = tree_to_mql(booster, t, feature_cols, prefix)
+            tree_code_parts.append(code)
+            exported += 1
+        except Exception as e:
+            print(f"  Warning: model {model_index} tree {t} export failed: {e}")
+
+    tree_args = build_tree_args(feature_cols)
+
+    predict_fn = f"double XGBPredictModel{model_index}(\n"
+    predict_fn += "\n".join(PREDICT_PARAMS)
+    predict_fn += "\n)\n{\n   double logit = 0.0;\n"
+    for t in range(exported):
+        predict_fn += f"   logit += {prefix}_{t}({tree_args});\n"
+    predict_fn += "   double prob = 1.0 / (1.0 + MathExp(-logit));\n"
+    predict_fn += "   return(prob * 100.0);\n}\n"
+
+    info = {
+        "index": model_index,
+        "symbol": symbol,
+        "tf": tf,
+        "period": TF_TO_PERIOD.get(tf, 0),
+        "trees": exported,
+        "brier": results["oos_brier"],
+        "auc": results["oos_auc"],
+    }
+
+    return "\n\n".join(tree_code_parts), predict_fn, exported, info
+
+
+def export_single_model(results: dict, output_path: str, symbol: str, tf: str):
+    """Export a single-model XGBModel.mqh (standalone mode)."""
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     timestamp = int(time.time())
+    period = TF_TO_PERIOD.get(tf, 0)
 
-    header = f"""//+------------------------------------------------------------------+
+    tree_code, predict_fn, n_trees, _ = gen_model_block(results, 0, symbol, tf)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(f"""//+------------------------------------------------------------------+
 //| XGBModel.mqh - Auto-generated XGBoost model                      |
 //| Generated: {now_str}                                |
-//| Training data: {data_summary[:50]:50s}|
+//| Model: {symbol} {tf} ({n_trees} trees, depth {XGB_PARAMS['max_depth']})                       |
 //| OOS Brier: {results['oos_brier']:.4f} | OOS AUC: {results['oos_auc']:.4f}             |
-//| Trees: {n_trees} | Depth: {XGB_PARAMS['max_depth']}                                           |
 //| DO NOT EDIT - regenerate using tools/rsi_xgboost_train.py        |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_XGBMODEL_MQH
 #define RSI_ADV_XGBMODEL_MQH
 
-//+------------------------------------------------------------------+
-//| Model metadata                                                     |
-//+------------------------------------------------------------------+
+#define XGB_MODEL_COUNT     1
 #define XGB_MODEL_TREES     {n_trees}
 #define XGB_MODEL_DEPTH     {XGB_PARAMS['max_depth']}
 #define XGB_MODEL_TRAINED   {timestamp}
 #define XGB_MODEL_OOS_BRIER {results['oos_brier']:.4f}
 #define XGB_MODEL_OOS_AUC   {results['oos_auc']:.4f}
 
-"""
+int XGBFindModel(string symbol, int period)
+{{
+   if(symbol == "{symbol}" && period == {period}) return(0);
+   // Symbol suffix tolerance (XAUUSDc, XAUUSD.a, etc.)
+   if(StringFind(symbol, "{symbol}") == 0 && period == {period}) return(0);
+   return(-1);
+}}
 
-    # Feature name → parameter mapping comment
-    feature_map_comment = "// Feature mapping:\n"
-    for i, fname in enumerate(feature_cols):
-        feature_map_comment += f"//   f{i} = {fname}\n"
-    feature_map_comment += "\n"
-
-    # Generate individual tree functions
-    tree_functions = []
-    for t in range(n_trees):
-        try:
-            tree_code = tree_to_mql(booster, t, feature_cols)
-            tree_functions.append(tree_code)
-        except Exception as e:
-            print(f"  Warning: tree {t} export failed: {e}")
-
-    # Generate ensemble prediction function
-    param_list = []
-    param_list.append("   double rsiAtSignal,")
-    param_list.append("   double angleZ,")
-    param_list.append("   double atrRatio,")
-    param_list.append("   double slDistATR,")
-    param_list.append("   double tp1DistATR,")
-    param_list.append("   double rrRatio,")
-    param_list.append("   double spreadPips,")
-    param_list.append("   double timeInSessionMin,")
-    param_list.append("   int    caseNum,")
-    param_list.append("   int    dir,")
-    param_list.append("   int    session,")
-    param_list.append("   int    hour,")
-    param_list.append("   int    dow,")
-    param_list.append("   int    d1Trend,")
-    param_list.append("   int    mtfAgreePct,")
-    param_list.append("   double spreadRatio,")
-    param_list.append("   int    wfRobust,")
-    param_list.append("   int    h4Trend,")
-    param_list.append("   int    h1Trend")
-
-    # Build feature-to-f_index mapping
-    feature_to_arg = {}
-    for i, fname in enumerate(feature_cols):
-        if fname == "RSI_AT_SIGNAL":   feature_to_arg[i] = "rsiAtSignal"
-        elif fname == "ANGLE_Z":       feature_to_arg[i] = "angleZ"
-        elif fname == "ATR_RATIO":     feature_to_arg[i] = "atrRatio"
-        elif fname == "SL_DIST_ATR":   feature_to_arg[i] = "slDistATR"
-        elif fname == "TP1_DIST_ATR":  feature_to_arg[i] = "tp1DistATR"
-        elif fname == "RR_RATIO":     feature_to_arg[i] = "rrRatio"
-        elif fname == "SPREAD_PIPS":   feature_to_arg[i] = "spreadPips"
-        elif fname == "TIME_IN_SESSION_MIN": feature_to_arg[i] = "timeInSessionMin"
-        elif fname == "MTF_AGREE_PCT": feature_to_arg[i] = "(double)mtfAgreePct"
-        elif fname == "SPREAD_RATIO":  feature_to_arg[i] = "spreadRatio"
-        elif fname == "WF_ROBUST":     feature_to_arg[i] = "(double)wfRobust"
-        elif fname == "MTF_H4_TREND":  feature_to_arg[i] = "(double)h4Trend"
-        elif fname == "MTF_H1_TREND":  feature_to_arg[i] = "(double)h1Trend"
-        elif fname == "D1_TREND":      feature_to_arg[i] = "(double)d1Trend"
-        elif fname == "CASE_NUM":      feature_to_arg[i] = "(double)caseNum"
-        elif fname == "DIR_BIN":       feature_to_arg[i] = "(double)dir"
-        elif fname == "SESSION_ENC":   feature_to_arg[i] = "(double)session"
-        elif fname == "HOUR_SIN":      feature_to_arg[i] = "MathSin(2.0*M_PI*hour/24.0)"
-        elif fname == "HOUR_COS":      feature_to_arg[i] = "MathCos(2.0*M_PI*hour/24.0)"
-        elif fname == "DOW_SIN":       feature_to_arg[i] = "MathSin(2.0*M_PI*dow/5.0)"
-        elif fname == "DOW_COS":       feature_to_arg[i] = "MathCos(2.0*M_PI*dow/5.0)"
-        else:                          feature_to_arg[i] = "0.0"
-
-    # Build the args string for tree calls
-    tree_args = ", ".join([feature_to_arg.get(i, "0.0") for i in range(len(feature_cols))])
-
-    predict_fn = f"""
-//+------------------------------------------------------------------+
-//| XGBPredict - Ensemble prediction (sigmoid of tree sum)            |
-//+------------------------------------------------------------------+
+""")
+        f.write(tree_code)
+        f.write("\n\n")
+        f.write(predict_fn)
+        f.write(f"""
 double XGBPredict(
-{chr(10).join(param_list)}
+{chr(10).join(PREDICT_PARAMS)}
 )
 {{
-   double logit = 0.0;
-"""
-    for t in range(len(tree_functions)):
-        predict_fn += f"   logit += XGBTree{t}({tree_args});\n"
-
-    predict_fn += """
-   double prob = 1.0 / (1.0 + MathExp(-logit));
-   return(prob * 100.0);
-}
+   int idx = XGBFindModel(Symbol(), Period());
+   if(idx < 0) return(50.0);
+   return(XGBPredictModel0({build_tree_args(results['feature_cols'])}));
+}}
 
 #endif
-"""
+""")
+
+    print(f"\nExported {n_trees} trees to: {output_path}")
+
+
+def export_multi_model(model_list: list, output_path: str):
+    """Export multi-model XGBModel.mqh from a list of (results, symbol, tf) tuples."""
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = int(time.time())
+    best_brier = min(r["oos_brier"] for r, _, _ in model_list)
+
+    all_tree_code = []
+    all_predict_fns = []
+    all_info = []
+
+    for i, (results, symbol, tf) in enumerate(model_list):
+        tree_code, predict_fn, n_trees, info = gen_model_block(results, i, symbol, tf)
+        all_tree_code.append(f"// ── Model {i}: {symbol} {tf} (Brier={results['oos_brier']:.4f}, "
+                             f"AUC={results['oos_auc']:.4f}, {n_trees} trees) ──\n\n" + tree_code)
+        all_predict_fns.append(predict_fn)
+        all_info.append(info)
 
     with open(output_path, "w", encoding="utf-8") as f:
-        f.write(header)
-        f.write(feature_map_comment)
-        for tree_fn in tree_functions:
-            f.write(tree_fn)
-            f.write("\n\n")
-        f.write(predict_fn)
+        f.write(f"""//+------------------------------------------------------------------+
+//| XGBModel.mqh - Auto-generated XGBoost multi-model                 |
+//| Generated: {now_str}                                |
+//| Models: {len(model_list)} | Best Brier: {best_brier:.4f}                          |
+//| DO NOT EDIT - regenerate using tools/xgb_service.py               |
+//+------------------------------------------------------------------+
+#ifndef RSI_ADV_XGBMODEL_MQH
+#define RSI_ADV_XGBMODEL_MQH
 
-    print(f"\nExported {len(tree_functions)} trees to: {output_path}")
-    total_lines = header.count("\n") + sum(fn.count("\n") for fn in tree_functions) + predict_fn.count("\n")
-    print(f"  Total lines: ~{total_lines}")
+#define XGB_MODEL_COUNT     {len(model_list)}
+#define XGB_MODEL_DEPTH     {XGB_PARAMS['max_depth']}
+#define XGB_MODEL_TRAINED   {timestamp}
+#define XGB_MODEL_OOS_BRIER {best_brier:.4f}
+
+""")
+        # XGBFindModel dispatcher
+        f.write("int XGBFindModel(string symbol, int period)\n{\n")
+        for info in all_info:
+            sym = info["symbol"]
+            per = info["period"]
+            idx = info["index"]
+            f.write(f'   if(StringFind(symbol, "{sym}") == 0 && period == {per}) return({idx});\n')
+        f.write("   return(-1);\n}\n\n")
+
+        # Tree functions
+        for tc in all_tree_code:
+            f.write(tc)
+            f.write("\n\n")
+
+        # Per-model predict functions
+        for pf in all_predict_fns:
+            f.write(pf)
+            f.write("\n")
+
+        # Main dispatcher
+        tree_args = build_tree_args(all_info[0]["feature_cols"] if "feature_cols" in all_info[0]
+                                     else model_list[0][0]["feature_cols"])
+        f.write(f"double XGBPredict(\n{chr(10).join(PREDICT_PARAMS)}\n)\n{{\n")
+        f.write("   int idx = XGBFindModel(Symbol(), Period());\n")
+        f.write("   if(idx < 0) return(50.0);\n")
+        for i in range(len(model_list)):
+            feature_cols_i = model_list[i][0]["feature_cols"]
+            args_i = build_tree_args(feature_cols_i)
+            kw = "if" if i == 0 else "else if"
+            f.write(f"   {kw}(idx == {i}) return(XGBPredictModel{i}({args_i}));\n")
+        f.write("   return(50.0);\n}\n\n#endif\n")
+
+    print(f"\nExported {len(model_list)} models to: {output_path}")
+
+
+# ─── Binary Export (V12.2 runtime loading) ──────────────────────────
+XGB_BIN_MAGIC = 0x58474231
+XGB_BIN_VERSION = 1
+
+FEATURE_INDEX_MAP = {
+    "RSI_AT_SIGNAL": 0,    "ANGLE_Z": 1,          "ATR_RATIO": 2,
+    "SL_DIST_ATR": 3,      "TP1_DIST_ATR": 4,     "RR_RATIO": 5,
+    "SPREAD_PIPS": 6,      "TIME_IN_SESSION_MIN": 7,
+    "MTF_AGREE_PCT": 8,    "SPREAD_RATIO": 9,     "WF_ROBUST": 10,
+    "MTF_H4_TREND": 11,    "MTF_H1_TREND": 12,    "D1_TREND": 13,
+    "CASE_NUM": 14,        "DIR_BIN": 15,         "SESSION_ENC": 16,
+    "HOUR_SIN": 17,        "HOUR_COS": 18,
+    "DOW_SIN": 19,         "DOW_COS": 20,
+}
+N_FEATURES_BIN = 22
+
+
+def build_tree_nodes(booster, tree_index: int, feature_cols: list) -> list:
+    """Convert one XGBoost tree to flat node list (depth-first pre-order).
+
+    Returns list of dicts: {feature_index, threshold, left_child, right_child, leaf_value}.
+    Node indices are 0-based within this tree.
+    """
+    tree_df = booster.trees_to_dataframe()
+    tree_df = tree_df[tree_df["Tree"] == tree_index].copy()
+
+    node_map = {}
+    for _, row in tree_df.iterrows():
+        node_map[row["Node"]] = row
+
+    flat_nodes = []
+    old_to_new = {}
+
+    def dfs(old_id):
+        new_id = len(flat_nodes)
+        old_to_new[old_id] = new_id
+        node = node_map[old_id]
+
+        if node["Feature"] == "Leaf":
+            flat_nodes.append({
+                "feature_index": -1,
+                "threshold": 0.0,
+                "left_child": -1,
+                "right_child": -1,
+                "leaf_value": float(node["Gain"]),
+            })
+            return
+
+        feat_name = node["Feature"]
+        fi = FEATURE_INDEX_MAP.get(feat_name, -1)
+        if fi < 0 and feat_name in feature_cols:
+            fi = feature_cols.index(feat_name)
+
+        flat_nodes.append({
+            "feature_index": fi,
+            "threshold": float(node["Split"]),
+            "left_child": -1,
+            "right_child": -1,
+            "leaf_value": 0.0,
+        })
+
+        dfs(node["Yes"])
+        flat_nodes[new_id]["left_child"] = old_to_new[node["Yes"]]
+
+        dfs(node["No"])
+        flat_nodes[new_id]["right_child"] = old_to_new[node["No"]]
+
+    dfs(0)
+    return flat_nodes
+
+
+def export_model_binary(model_list: list, output_path: str):
+    """Export multiple models to a single binary file (V12.2 runtime format).
+
+    model_list: [(results, symbol, tf), ...]
+    Writes to a temp file then atomically renames (prevents MQL from reading partial writes).
+    """
+    timestamp = int(time.time())
+    best_brier = min(r["oos_brier"] for r, _, _ in model_list)
+
+    output_dir = os.path.dirname(output_path)
+    if output_dir and not os.path.isdir(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=output_dir, suffix=".tmp")
+    try:
+        with os.fdopen(tmp_fd, "wb") as f:
+            # File header (28 bytes)
+            f.write(struct.pack("<iiiii",
+                XGB_BIN_MAGIC, XGB_BIN_VERSION, len(model_list),
+                timestamp, N_FEATURES_BIN))
+            f.write(struct.pack("<d", 0.0))  # reserved
+
+            total_trees = 0
+            total_nodes = 0
+
+            for results, symbol, tf in model_list:
+                model = results["model"]
+                feature_cols = results["feature_cols"]
+                booster = model.get_booster()
+                n_trees = booster.num_boosted_rounds()
+                period = TF_TO_PERIOD.get(tf, 0)
+
+                # Symbol: 16 bytes null-padded ASCII
+                sym_bytes = symbol.encode("ascii")[:16].ljust(16, b"\x00")
+                f.write(sym_bytes)
+
+                f.write(struct.pack("<iii", period, n_trees, len(feature_cols)))
+                f.write(struct.pack("<dd", results["oos_brier"], results["oos_auc"]))
+
+                for t in range(n_trees):
+                    nodes = build_tree_nodes(booster, t, feature_cols)
+                    f.write(struct.pack("<i", len(nodes)))
+                    for nd in nodes:
+                        f.write(struct.pack("<idii d",
+                            nd["feature_index"],
+                            nd["threshold"],
+                            nd["left_child"],
+                            nd["right_child"],
+                            nd["leaf_value"]))
+                    total_nodes += len(nodes)
+
+                total_trees += n_trees
+
+        os.replace(tmp_path, output_path)
+        print(f"\n[BIN] Exported {len(model_list)} models, {total_trees} trees, "
+              f"{total_nodes} nodes to: {output_path}")
+        print(f"[BIN] File size: {os.path.getsize(output_path)} bytes, timestamp: {timestamp}")
+
+    except Exception:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
 
 
 # ─── Calibration Plot ────────────────────────────────────────────────
-def save_calibration_plot(results: dict, output_dir: str):
+def save_calibration_plot(results: dict, output_dir: str, label: str = ""):
     if not HAS_MATPLOTLIB:
-        print("  Skipping calibration plot (matplotlib not installed)")
         return
 
     try:
@@ -503,7 +733,6 @@ def save_calibration_plot(results: dict, output_dir: str):
             n_bins=8, strategy="quantile"
         )
     except Exception:
-        print("  Skipping calibration plot (insufficient data)")
         return
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
@@ -512,7 +741,7 @@ def save_calibration_plot(results: dict, output_dir: str):
     ax1.plot(prob_pred, prob_true, "bo-", label="XGBoost OOS")
     ax1.set_xlabel("Mean Predicted Probability")
     ax1.set_ylabel("Fraction of Positives")
-    ax1.set_title(f"Calibration Curve (Brier={results['oos_brier']:.4f})")
+    ax1.set_title(f"Calibration {label} (Brier={results['oos_brier']:.4f})")
     ax1.legend()
     ax1.grid(True, alpha=0.3)
 
@@ -523,71 +752,180 @@ def save_calibration_plot(results: dict, output_dir: str):
     ax2.grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plot_path = os.path.join(output_dir, "xgb_calibration.png")
+    suffix = f"_{label}" if label else ""
+    plot_path = os.path.join(output_dir, f"xgb_calibration{suffix}.png")
     plt.savefig(plot_path, dpi=100)
     plt.close()
     print(f"  Saved calibration plot: {plot_path}")
 
 
+# ─── Inventory (for service) ────────────────────────────────────────
+def inventory_signals(data_dirs: list) -> dict:
+    """Scan CSV directories, return {(symbol, tf): resolved_count}."""
+    counts = {}
+    for data_dir in data_dirs:
+        if not os.path.isdir(data_dir):
+            continue
+        for f in glob.glob(os.path.join(data_dir, "outcomes_*.csv")):
+            fname = os.path.basename(f)
+            m = re.match(r"outcomes_(.+)_([A-Z0-9]+)_\d{4}\.csv", fname)
+            if not m:
+                continue
+            symbol, tf = m.group(1), m.group(2)
+            try:
+                df = pd.read_csv(f)
+                resolved = len(df[df["OUTCOME"] != "PENDING"])
+            except Exception:
+                resolved = 0
+            key = (symbol, tf)
+            counts[key] = counts.get(key, 0) + resolved
+    return counts
+
+
 # ─── Main ────────────────────────────────────────────────────────────
-def main():
-    parser = argparse.ArgumentParser(description="XGBoost training for RSI_Advanced V12")
-    parser.add_argument("--data-dir", required=True,
-                        help="Directory containing signal/scoring/outcome CSVs")
-    parser.add_argument("--output", default=None,
-                        help="Output XGBModel.mqh path (default: Include/RSI_Advanced/XGBModel.mqh)")
-    parser.add_argument("--force", action="store_true",
-                        help="Export even if validation fails")
-    args = parser.parse_args()
+def train_single(data_dirs: list, symbol: str, tf: str, output_path: str,
+                 force: bool = False, json_output: bool = False) -> dict:
+    """Train one model for a specific symbol+TF. Returns result dict for JSON output."""
+    label = f"{symbol}_{tf}"
+    print(f"\n{'='*60}")
+    print(f"Training model: {label}")
+    print(f"{'='*60}")
 
-    if args.output is None:
-        script_dir = Path(__file__).parent.parent
-        args.output = str(script_dir / "Include" / "RSI_Advanced" / "XGBModel.mqh")
+    df = load_and_merge(data_dirs, symbol, tf)
 
-    # Load and merge
-    df = load_and_merge(args.data_dir)
+    if df.empty or len(df) < MIN_SIGNALS_TOTAL:
+        n = len(df) if not df.empty else 0
+        msg = f"Only {n} resolved signals for {label}. Need {MIN_SIGNALS_TOTAL}."
+        print(f"SKIP: {msg}")
+        return {"symbol": symbol, "tf": tf, "status": "skip", "signals": n, "message": msg}
 
-    if len(df) < MIN_SIGNALS_TOTAL:
-        print(f"\nERROR: Only {len(df)} resolved signals. Need at least {MIN_SIGNALS_TOTAL}.")
-        print("Continue collecting data with the indicator running.")
-        sys.exit(1)
-
-    # Sort by signal time for walk-forward
     if "SIGNAL_TIME" in df.columns:
         df = df.sort_values("SIGNAL_TIME").reset_index(drop=True)
 
-    # Feature engineering
     df, feature_cols = engineer_features(df)
     print(f"\nFeatures ({len(feature_cols)}): {feature_cols}")
     print(f"Target distribution: {df['target'].value_counts().to_dict()}")
 
-    # Train and validate
     results = train_and_validate(df, feature_cols)
+    if results is None:
+        return {"symbol": symbol, "tf": tf, "status": "fail", "signals": len(df),
+                "message": "Not enough data for walk-forward validation"}
 
-    # Validation gates
     passed = validate_model(results)
 
-    # Calibration plot
-    save_calibration_plot(results, os.path.dirname(args.output) or ".")
+    plot_dir = os.path.dirname(output_path) or "."
+    save_calibration_plot(results, plot_dir, label)
 
-    # Export
-    if passed or args.force:
+    if passed or force:
         if not passed:
-            print("\nWARNING: Exporting despite validation failure (--force)")
+            print(f"\nWARNING: Exporting {label} despite validation failure (--force)")
 
-        symbols = df["SYMBOL"].unique() if "SYMBOL" in df.columns else ["unknown"]
-        tfs = df["TF"].unique() if "TF" in df.columns else ["unknown"]
-        data_summary = f"{len(df)} signals, {','.join(symbols)}, {','.join(tfs)}"
+        export_single_model(results, output_path, symbol, tf)
 
-        export_model_to_mql(results, args.output, data_summary)
-        print(f"\nDone. Recompile the indicator to use the new model.")
-        print(f"Remember to delete RSI_SESS_*.bin files after recompiling.")
+        return {"symbol": symbol, "tf": tf, "status": "pass", "signals": len(df),
+                "brier": round(results["oos_brier"], 4),
+                "auc": round(results["oos_auc"], 4),
+                "trees": results["model"].get_booster().num_boosted_rounds(),
+                "output": output_path, "results": results}
     else:
-        print("\nModel NOT exported — validation failed.")
-        print("Options:")
-        print("  1. Collect more data (target: 300+ resolved signals)")
-        print("  2. Use --force to export anyway (not recommended)")
+        return {"symbol": symbol, "tf": tf, "status": "fail", "signals": len(df),
+                "brier": round(results["oos_brier"], 4),
+                "auc": round(results["oos_auc"], 4),
+                "message": "Validation failed"}
+
+
+def main():
+    parser = argparse.ArgumentParser(description="XGBoost training for RSI_Advanced V12")
+    parser.add_argument("--data-dir", required=True, nargs="+",
+                        help="One or more directories containing signal/scoring/outcome CSVs")
+    parser.add_argument("--output", default=None,
+                        help="Output XGBModel.mqh path")
+    parser.add_argument("--symbol", default=None,
+                        help="Filter by symbol (e.g., XAUUSD)")
+    parser.add_argument("--tf", default=None,
+                        help="Filter by timeframe (e.g., H1)")
+    parser.add_argument("--force", action="store_true",
+                        help="Export even if validation fails")
+    parser.add_argument("--json-output", action="store_true",
+                        help="Output JSON summary to stdout (for service integration)")
+    parser.add_argument("--inventory", action="store_true",
+                        help="Only scan and report signal counts, do not train")
+    parser.add_argument("--output-format", default="mql", choices=["mql", "bin"],
+                        help="Output format: mql (source code, default) or bin (binary for runtime loading)")
+    args = parser.parse_args()
+
+    if args.output is None:
+        script_dir = Path(__file__).parent.parent
+        if args.output_format == "bin":
+            common_files = Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal" / "Common" / "Files"
+            args.output = str(common_files / "RSI_Advanced" / "XGBModels.bin")
+        else:
+            args.output = str(script_dir / "Include" / "RSI_Advanced" / "XGBModel.mqh")
+
+    data_dirs = args.data_dir
+
+    if args.inventory:
+        counts = inventory_signals(data_dirs)
+        if args.json_output:
+            out = [{"symbol": s, "tf": t, "resolved": c} for (s, t), c in sorted(counts.items())]
+            print(json.dumps(out, indent=2))
+        else:
+            print(f"\n{'Symbol':<15} {'TF':<6} {'Resolved':>10}")
+            print("-" * 35)
+            for (s, t), c in sorted(counts.items()):
+                status = "READY" if c >= MIN_SIGNALS_TOTAL else f"need {MIN_SIGNALS_TOTAL - c} more"
+                print(f"{s:<15} {t:<6} {c:>10}  {status}")
+        return
+
+    if args.symbol and args.tf:
+        result = train_single(data_dirs, args.symbol, args.tf, args.output, args.force, args.json_output)
+        if result["status"] == "pass" and args.output_format == "bin" and "results" in result:
+            export_model_binary([(result["results"], args.symbol, args.tf)], args.output)
+        if args.json_output:
+            out = {k: v for k, v in result.items() if k != "results"}
+            print(json.dumps(out, indent=2))
+        if result["status"] == "fail" and not args.force:
+            sys.exit(1)
+    elif args.symbol or args.tf:
+        print("ERROR: --symbol and --tf must be used together.")
         sys.exit(1)
+    else:
+        # Legacy mode: train all data together as one model
+        df = load_and_merge(data_dirs)
+        if df.empty or len(df) < MIN_SIGNALS_TOTAL:
+            n = len(df) if not df.empty else 0
+            print(f"\nERROR: Only {n} resolved signals. Need {MIN_SIGNALS_TOTAL}.")
+            sys.exit(1)
+
+        if "SIGNAL_TIME" in df.columns:
+            df = df.sort_values("SIGNAL_TIME").reset_index(drop=True)
+
+        df, feature_cols = engineer_features(df)
+        print(f"\nFeatures ({len(feature_cols)}): {feature_cols}")
+        print(f"Target distribution: {df['target'].value_counts().to_dict()}")
+
+        results = train_and_validate(df, feature_cols)
+        if results is None:
+            sys.exit(1)
+
+        passed = validate_model(results)
+        save_calibration_plot(results, os.path.dirname(args.output) or ".")
+
+        if passed or args.force:
+            symbols = df["SYMBOL"].unique() if "SYMBOL" in df.columns else ["unknown"]
+            tfs = df["TF"].unique() if "TF" in df.columns else ["unknown"]
+            sym = str(symbols[0]) if len(symbols) == 1 else "MULTI"
+            tf_str = str(tfs[0]) if len(tfs) == 1 else "MULTI"
+            if args.output_format == "bin":
+                export_model_binary([(results, sym, tf_str)], args.output)
+                print(f"\nDone. Model auto-loaded by indicator (no recompile needed).")
+            else:
+                export_single_model(results, args.output, sym, tf_str)
+                print(f"\nDone. Recompile the indicator to use the new model.")
+                print(f"Remember to delete RSI_SESS_*.bin files after recompiling.")
+        else:
+            print("\nModel NOT exported — validation failed.")
+            sys.exit(1)
 
 
 if __name__ == "__main__":

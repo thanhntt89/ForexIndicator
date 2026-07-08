@@ -1,4 +1,4 @@
-# RSI Advanced V12.0 - Project Status & Context Summary
+# RSI Advanced V12.2 - Project Status & Context Summary
 
 Tài liệu này đóng vai trò là **Source of Truth (Nguồn thông tin gốc)** của dự án. AI ở các phiên tiếp theo **BẮT BUỘC** đọc file này để biết trạng thái hiện tại của code, các phát hiện định lượng mới nhất, và các công việc cần tiếp tục triển khai.
 
@@ -180,6 +180,162 @@ Output:
 - Duoi 150 signals → chua du data, model se overfit
 - OOS Brier > 0.25 → model khong co skill, giu CALIBRATION
 - 1 feature dominate >50% → model hoc shortcut, khong generalizable
+
+---
+
+### V12.1 — XGBoost Auto-Training Service (System Tray) (2026-07-08)
+
+**Boi canh**: V12.0 tich hop XGBoost nhung user phai chay `python rsi_xgboost_train.py` thu cong.
+V12.1 tu dong hoa toan bo qua trinh: service chay nen (system tray icon), tu dong scan data tu
+nhieu MT4/MT5 terminal (nhieu broker), tu dong train khi du signal, gui notification ket qua.
+User chi can cau hinh terminal ID + chon timeframe.
+
+**Tinh nang chinh:**
+1. **System tray service** (`tools/xgb_service.py`) — icon tray voi right-click menu:
+   - Train Now: force scan + train ngay
+   - Status: hien bang symbol+TF / signals / Brier / status
+   - Open Log: mo `xgb_service.log`
+   - Open Config: mo `xgb_config.json` de chinh sua
+   - Exit: tat service
+2. **Multi-terminal data aggregation** — nhieu MT4/MT5 terminal cung symbol+TF → gop data:
+   - MT4: `%APPDATA%\MetaQuotes\Terminal\<ID>\MQL4\Files\RSI_Advanced_Logs\`
+   - MT5: `%APPDATA%\MetaQuotes\Terminal\<ID>\MQL5\Files\RSI_Advanced_Logs\`
+   - Dedup by SIGNAL_ID (cung broker = trung; khac broker = tu dong tach)
+3. **Per-symbol+TF model** — moi symbol+TF co model rieng (vd: XAUUSD_H1, EURUSD_M15)
+4. **Auto-train + notify**: tu dong train khi du signal, gui Windows toast notification
+5. **Multi-model in 1 file** — tat ca models compile vao 1 `XGBModel.mqh` voi dispatcher
+
+**Kien truc multi-model trong XGBModel.mqh:**
+```
+XGBTree0_0(f0..f18)  // Model 0: XAUUSD_H1 tree 0
+XGBTree0_1(f0..f18)  // Model 0: XAUUSD_H1 tree 1
+...
+XGBTree1_0(f0..f18)  // Model 1: XAUUSD_H4 tree 0
+...
+XGBPredictModel0(features...)  // sum all Tree0_*
+XGBPredictModel1(features...)  // sum all Tree1_*
+
+int XGBFindModel(string symbol, int period) {
+   if(symbol == "XAUUSD" && period == 60)  return 0;  // H1
+   if(symbol == "XAUUSD" && period == 240) return 1;  // H4
+   return -1;  // no model
+}
+
+double XGBPredict(features...) {
+   int idx = XGBFindModel(Symbol(), Period());
+   if(idx < 0) return 50.0;  // no model → flat, fallback CALIBRATION
+   if(idx == 0) return XGBPredictModel0(features...);
+   ...
+}
+```
+`XGBPredict()` signature KHONG DOI — XGBIntegration.mqh goi y nhu cu.
+
+**Auto-train logic:**
+- Scan moi 30 phut (configurable)
+- First train: khi resolved signals >= `min_signals` (150)
+- Retrain: khi co them >= `min_new_signals_retrain` (50) signal moi ke tu lan train cuoi
+- State luu trong `tools/.xgb_state.json` (training history, signal counts, timestamps)
+- Validation gates giu nguyen: OOS Brier < 0.25, AUC > 0.55, no single feature > 50%
+- PASS → export + notification, FAIL → notification warning + KHONG export
+
+**XGBIntegration.mqh update:**
+- `XGBIsReady()` them check `XGBFindModel(Symbol(), Period()) >= 0`
+- Khong co model cho symbol+TF hien tai → return false → auto-fallback CALIBRATION
+- Khong can doi bat ky file MQL nao khac
+
+**Config file: `tools/xgb_config.json`:**
+```json
+{
+  "mt4_terminal_ids": ["3773AE10...", "2191F4A3..."],
+  "mt5_terminal_ids": ["D3966AA9..."],
+  "timeframes": ["M5", "M15", "M30", "H1", "H4", "D1"],
+  "scan_interval_minutes": 30,
+  "min_signals": 150,
+  "min_new_signals_retrain": 50,
+  "auto_train": true,
+  "log_folder_name": "RSI_Advanced_Logs",
+  "output_dir": "auto"
+}
+```
+
+**Files moi (2):**
+- `tools/xgb_service.py` — system tray service (~350 dong)
+- `tools/xgb_config.json` — config template (terminal IDs, TFs, thresholds)
+
+**Files sua (3):**
+- `tools/rsi_xgboost_train.py` — rewrite voi multi-model support:
+  - `--symbol XAUUSD --tf H1`: filter CSV by symbol+TF
+  - `--json-output`: JSON summary qua stdout (service parse ket qua)
+  - `--inventory`: scan-only mode bao cao signal counts
+  - `gen_model_block()`: XGBTree{modelIdx}_{treeIdx} naming
+  - `export_multi_model()`: assemble N models + XGBFindModel dispatcher
+- `tools/requirements.txt` — them `pystray>=0.19`, `Pillow>=9.0`, `plyer>=2.1`
+- `Include/RSI_Advanced/XGBIntegration.mqh` — XGBIsReady() them XGBFindModel check
+
+**Dependencies Python:**
+```
+pip install -r tools/requirements.txt
+```
+(xgboost, pandas, numpy, scikit-learn, matplotlib, pystray, Pillow, plyer)
+
+---
+
+### HUONG DAN SU DUNG XGB AUTO-TRAINING SERVICE
+
+**Buoc 1: Cai dat dependencies (1 lan)**
+```bash
+cd RSI_Advanced/tools
+pip install -r requirements.txt
+```
+
+**Buoc 2: Cau hinh terminal IDs**
+Mo `tools/xgb_config.json`, paste terminal ID tu `make.ps1` hoac tu:
+- MT4: `%APPDATA%\MetaQuotes\Terminal\` → folder name = terminal ID
+- MT5: tuong tu
+
+Chon timeframes can train (mac dinh: M5, M15, M30, H1, H4, D1).
+
+**Buoc 3: Chay service**
+```bash
+python tools/xgb_service.py              # tray icon mode (binh thuong)
+python tools/xgb_service.py --no-tray    # headless mode (server/VPS)
+python tools/xgb_service.py --train-now  # 1 lan scan+train roi thoat
+```
+
+**Buoc 4: Service tu dong chay**
+- Icon XGB xuat hien o system tray
+- Moi 30 phut, service scan tat ca terminal
+- Khi XAUUSD H1 co 150+ resolved outcomes → tu dong train
+- Notification: "XGB: XAUUSD H1 trained — Brier=0.18, AUC=0.72"
+- `XGBModel.mqh` tu dong cap nhat → recompile indicator de su dung
+
+**Buoc 5: Retrain tu dong**
+- Khi co them 50+ signal moi → retrain tu dong
+- State luu trong `tools/.xgb_state.json`
+- Right-click tray → Status de xem trang thai cac model
+
+**Startup tu dong (optional):**
+Tao shortcut `python xgb_service.py` vao:
+`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\`
+
+**Options cua training script (standalone, khong can service):**
+
+| Flag | Mo ta | Mac dinh |
+|------|-------|----------|
+| `--data-dir` | Thu muc CSV (nhieu dir cach nhau) | *bat buoc* |
+| `--symbol` | Filter symbol (phai dung voi --tf) | tat ca |
+| `--tf` | Filter timeframe (phai dung voi --symbol) | tat ca |
+| `--output` | Duong dan output XGBModel.mqh | `Include/RSI_Advanced/XGBModel.mqh` |
+| `--inventory` | Chi scan bao cao signal counts | `false` |
+| `--json-output` | Output JSON summary (cho service) | `false` |
+| `--force` | Export du validation fail | `false` |
+
+Vi du chay standalone:
+```bash
+python rsi_xgboost_train.py --data-dir "C:/path/MQL4/Files/RSI_Advanced_Logs" \
+    --symbol XAUUSD --tf H1
+python rsi_xgboost_train.py --data-dir dir1 dir2 dir3 --inventory
+```
 
 ---
 

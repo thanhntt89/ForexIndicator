@@ -169,6 +169,8 @@ int OnInit()
       if(!LoadSessionStatsBinary())
          LoadSessionStatsFromOutcomesCSV();
    }
+   LoadXGBModels();
+
    return(INIT_SUCCEEDED);
 }
 //+------------------------------------------------------------------+
@@ -226,6 +228,7 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
    g_ratesTotal = rates_total;
+   CheckXGBReload();
    ArraySetAsSeries(time, false);
    ArraySetAsSeries(open, false);
    ArraySetAsSeries(high, false);

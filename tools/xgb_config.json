@@ -1,0 +1,19 @@
+{
+  "mt4_terminal_ids": [
+    "3773AE10556A00F3D812544D7EDDAB90",
+    "2191F4A3D14D7B4B1EBB84F924777883",
+    "6F841180CC7A5B4E481813CAFF4002B0",
+    "199CEC8D3EDFD7196CB34026FC926413"
+  ],
+  "mt5_terminal_ids": [
+    "D3966AA92A61BDC959A1092A330FDFD3"
+  ],
+  "timeframes": ["M5", "M15", "M30", "H1", "H4", "D1"],
+  "scan_interval_minutes": 30,
+  "min_signals": 150,
+  "min_new_signals_retrain": 50,
+  "auto_train": true,
+  "log_folder_name": "RSI_Advanced_Logs",
+  "output_format": "bin",
+  "output_dir": "auto"
+}

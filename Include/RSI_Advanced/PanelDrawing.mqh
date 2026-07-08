@@ -790,7 +790,7 @@ void DrawInfoPanel(int signalIndex)
          string xLine = "";
          color  xClr  = InpPanelDimColor;
 
-         if(g_currentProb.xgbProbTP1 <= 0 && XGB_MODEL_TRAINED == 0)
+         if(g_currentProb.xgbProbTP1 <= 0 && !g_xgbLoaded)
          {
             xLine = " XGB: -- [no model]";
             xClr  = InpPanelDimColor;

@@ -180,6 +180,8 @@ int OnInit()
       if(!LoadSessionStatsBinary())
          LoadSessionStatsFromOutcomesCSV();
    }
+   LoadXGBModels();
+
    return(INIT_SUCCEEDED);
 }
 
@@ -245,6 +247,7 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
    g_ratesTotal = rates_total;
+   CheckXGBReload();
    #ifdef __MQL5__
    InvalidatePriceCache();  // Force refresh at start of each OnCalculate
    #endif
