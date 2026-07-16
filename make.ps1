@@ -171,9 +171,40 @@ foreach ($ID in $MT5TerminalIDs) {
     }
 }
 
+
+# ============================================
+# 6. DEPLOY TO SALES
+# ============================================
+Write-Host ""
+Write-Host "DEPLOYING TO SALES..." -ForegroundColor Cyan
+
+$SalesDir = Join-Path $ProjectRoot "sales\01_source_code"
+if (!(Test-Path $SalesDir)) { New-Item -ItemType Directory -Path $SalesDir | Out-Null }
+
+# Copy .ex4 (versioned name)
+$SalesEx4 = Join-Path $SalesDir "${IndicatorName}_v${Version}_$Timestamp.ex4"
+Copy-Item -Path $BuildOutput -Destination $SalesEx4 -Force
+Write-Host "  [SALES] $BuildName -> sales\01_source_code\" -ForegroundColor Green
+
+# Copy .ex5 (versioned name)
+$SalesEx5 = Join-Path $SalesDir "${IndicatorName}_v${Version}_$Timestamp.ex5"
+Copy-Item -Path $BuildOutput5 -Destination $SalesEx5 -Force
+Write-Host "  [SALES] $BuildName5 -> sales\01_source_code\" -ForegroundColor Green
+
+# Copy source .mq4
+$SalesMq4 = Join-Path $SalesDir "$IndicatorName.mq4"
+Copy-Item -Path $SourceFile -Destination $SalesMq4 -Force
+Write-Host "  [SALES] $IndicatorName.mq4 -> sales\01_source_code\" -ForegroundColor Green
+
+# Copy source .mq5
+$SalesMq5 = Join-Path $SalesDir "$IndicatorName.mq5"
+Copy-Item -Path $SourceFile5 -Destination $SalesMq5 -Force
+Write-Host "  [SALES] $IndicatorName.mq5 -> sales\01_source_code\" -ForegroundColor Green
+
 Write-Host ""
 Write-Host "=========================================="
 Write-Host "BUILD & DEPLOY SUCCESS" -ForegroundColor Green
-Write-Host "MT4 Artifact: $BuildOutput"
-Write-Host "MT5 Artifact: $BuildOutput5"
+Write-Host "MT4 Artifact : $BuildOutput"
+Write-Host "MT5 Artifact : $BuildOutput5"
+Write-Host "Sales Folder : $SalesDir"
 Write-Host "=========================================="
