@@ -10,7 +10,7 @@
   ],
   "timeframes": ["M5", "M15", "M30", "H1", "H4", "D1"],
   "scan_interval_minutes": 30,
-  "min_signals": 150,
+  "min_signals": 100,
   "min_new_signals_retrain": 50,
   "auto_train": true,
   "log_folder_name": "RSI_Advanced_Logs",

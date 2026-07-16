@@ -40,6 +40,21 @@ void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
 }
 
 //+------------------------------------------------------------------+
+void CleanupOldArrows(datetime cutoffTime)
+{
+   if(InpEAMode) return;
+   int total = ObjectsTotal(0, 0, OBJ_ARROW);
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(0, i, 0, OBJ_ARROW);
+      if(StringFind(name, PREFIX_ARROW) != 0) continue;
+      datetime objTime = (datetime)ObjectGetInteger(0, name, OBJPROP_TIME);
+      if(objTime < cutoffTime)
+         ObjectDelete(0, name);
+   }
+}
+
+//+------------------------------------------------------------------+
 //| [EXPERIMENT] OB/OS-zone crossover monitor marker.                 |
 //| Draws a small dot where Green crosses Red while INSIDE the        |
 //| oversold (<32, buy) or overbought (>68, sell) zone. This is the   |

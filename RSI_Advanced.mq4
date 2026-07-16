@@ -266,6 +266,8 @@ int OnCalculate(const int rates_total,
       ArrayResize(g_rawRSI, rates_total);
       for(int k = oldSize; k < rates_total; k++)
          g_rawRSI[k] = EMPTY_VALUE;
+      int cutoffIdx = MathMax(0, rates_total - 1 - InpMaxBars);
+      CleanupOldArrows(Time[cutoffIdx]);
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
@@ -423,8 +425,8 @@ int OnCalculate(const int rates_total,
          if(greenCrossUp && strongAngleUp && CheckCase8_Buy(i))            buySignal  = 8;
          else if(greenCrossDown && strongAngleDown && CheckCase8_Sell(i))  sellSignal = 8;
       }
-      // Case 9: Green x Red INSIDE OB/OS zone (experimental, RAW - no angle gate, lowest priority).
-      // BUY when green crosses up red while green<32; SELL when crosses down while green>68.
+      // Case 9: Plain Cross (no zone filter, no angle gate, lowest priority).
+      // Catches weak green x red crossovers that Case 8 rejects (no strong angle).
       if(GetActiveCaseEnabled(9) && buySignal == 0 && sellSignal == 0)
       {
          if(greenCrossUp && CheckCase9_Buy(i))            buySignal  = 9;
