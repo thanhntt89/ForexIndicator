@@ -43,15 +43,30 @@ void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
 void CleanupOldArrows(datetime cutoffTime)
 {
    if(InpEAMode) return;
-   int total = ObjectsTotal(0, 0, OBJ_ARROW);
+#ifdef __MQL5__
+   int total = ObjectsTotal(0);
    for(int i = total - 1; i >= 0; i--)
    {
-      string name = ObjectName(0, i, 0, OBJ_ARROW);
+      string name = ObjectName(0, i);
+#else
+   int total = ObjectsTotal();
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(i);
+#endif
       if(StringFind(name, PREFIX_ARROW) != 0) continue;
       datetime objTime = (datetime)ObjectGetInteger(0, name, OBJPROP_TIME);
       if(objTime < cutoffTime)
-         ObjectDelete(0, name);
+         ObjectDelete(name);
    }
+}
+
+//+------------------------------------------------------------------+
+void DeleteOppositeArrows(bool newSignalIsBuy)
+{
+   if(InpEAMode) return;
+   string killPrefix = PREFIX_ARROW + (newSignalIsBuy ? "SELL_" : "BUY_");
+   DeleteObjectsByPrefix(killPrefix);
 }
 
 //+------------------------------------------------------------------+

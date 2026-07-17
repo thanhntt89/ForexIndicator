@@ -470,6 +470,7 @@ int OnCalculate(const int rates_total,
          // the panel from freezing on an old pre-breaker signal.
          bool _buyBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferBuySignal[i] = (double)buySignal;
+         if(!fullRecalc && i >= rates_total - 2) DeleteOppositeArrows(true);
          CreateSignalArrow(time[i], low[i], true, buySignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
@@ -524,6 +525,7 @@ int OnCalculate(const int rates_total,
          // only blocks counting it as a taken trade, not recording/display.
          bool _sellBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferSellSignal[i] = (double)sellSignal;
+         if(!fullRecalc && i >= rates_total - 2) DeleteOppositeArrows(false);
          CreateSignalArrow(time[i], high[i], false, sellSignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);

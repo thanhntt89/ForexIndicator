@@ -98,6 +98,7 @@ double BufferSellSignal[];
 #include <RSI_Advanced/WalkForward.mqh>
 #include <RSI_Advanced/ProbabilityEngine.mqh>
 #include <RSI_Advanced/CalibrationEngine.mqh>
+#include <RSI_Advanced/XGBIntegration.mqh>
 #include <RSI_Advanced/RiskManager.mqh>
 #include <RSI_Advanced/ArrowManager.mqh>
 #include <RSI_Advanced/LineDrawing.mqh>
@@ -179,6 +180,8 @@ int OnInit()
       if(!LoadSessionStatsBinary())
          LoadSessionStatsFromOutcomesCSV();
    }
+   LoadXGBModels();
+
    return(INIT_SUCCEEDED);
 }
 
@@ -244,11 +247,10 @@ int OnCalculate(const int rates_total,
                 const int &spread[])
 {
    g_ratesTotal = rates_total;
+   CheckXGBReload();
    #ifdef __MQL5__
    InvalidatePriceCache();  // Force refresh at start of each OnCalculate
    #endif
-   uint _pt0 = GetTickCount();   // [PERF-PROBE] TF-switch timing (temporary)
-   uint _ptMtfDur = 0;           // [PERF-PROBE] time spent in MTF_InitRamBuffers
 
    ArraySetAsSeries(time, false);
    ArraySetAsSeries(open, false);
@@ -281,9 +283,7 @@ int OnCalculate(const int rates_total,
       LoggerInit(false);  // [PERF] do NOT wipe CSV logs on fullRecalc (was ~3s FileDelete + data loss
                           //        every TF switch). Forward-only logging below prevents dup rows.
       // [PERF] BuildNormalizedH4Candles already called in OnInit; line 337 refreshes per-tick.
-      uint _mtf0 = GetTickCount();          // [PERF-PROBE]
       MTF_InitRamBuffers();  // Rebuild MTF RAM buffers from historical iRSI data
-      _ptMtfDur = GetTickCount() - _mtf0;   // [PERF-PROBE]
    }
    else if(rates_total > g_prevRatesTotal)
    {
@@ -291,6 +291,8 @@ int OnCalculate(const int rates_total,
       ArrayResize(g_rawRSI, rates_total);
       for(int k = oldSize; k < rates_total; k++)
          g_rawRSI[k] = EMPTY_VALUE;
+      int cutoffIdx = MathMax(0, rates_total - 1 - InpMaxBars);
+      CleanupOldArrows(time[cutoffIdx]);
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
@@ -356,10 +358,8 @@ int OnCalculate(const int rates_total,
       if(!fullRecalc) return(0);
    }
 
-   uint _ptSetup = GetTickCount();   // [PERF-PROBE] end of fullRecalc setup (MTF init, readiness, norm)
    //--- Calculate RSI lines
    CalculateRSILines(startBar, rates_total);
-   uint _ptRSI = GetTickCount();     // [PERF-PROBE] end of RSI line calc
 
    //--- Signal detection range
    int sigStart = MathMax(startBar, InpRSIPeriod + InpBBPeriod + 2);
@@ -476,8 +476,8 @@ int OnCalculate(const int rates_total,
          if(greenCrossUp && strongAngleUp && CheckCase8_Buy(i))            buySignal  = 8;
          else if(greenCrossDown && strongAngleDown && CheckCase8_Sell(i))  sellSignal = 8;
       }
-      // Case 9: Green x Red INSIDE OB/OS zone (experimental, RAW - no angle gate, lowest priority).
-      // BUY when green crosses up red while green<32; SELL when crosses down while green>68.
+      // Case 9: Plain Cross (no zone filter, no angle gate, lowest priority).
+      // Catches weak green x red crossovers that Case 8 rejects (no strong angle).
       if(GetActiveCaseEnabled(9) && buySignal == 0 && sellSignal == 0)
       {
          if(greenCrossUp && CheckCase9_Buy(i))            buySignal  = 9;
@@ -522,6 +522,7 @@ int OnCalculate(const int rates_total,
          // the panel from freezing on an old pre-breaker signal.
          bool _buyBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferBuySignal[i] = (double)buySignal;
+         if(!fullRecalc && i >= rates_total - 2) DeleteOppositeArrows(true);
          CreateSignalArrow(time[i], low[i], true, buySignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
@@ -573,6 +574,7 @@ int OnCalculate(const int rates_total,
          // only blocks counting it as a taken trade, not recording/display.
          bool _sellBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferSellSignal[i] = (double)sellSignal;
+         if(!fullRecalc && i >= rates_total - 2) DeleteOppositeArrows(false);
          CreateSignalArrow(time[i], high[i], false, sellSignal);
          double baseEntry = (i < rates_total - 1) ? open[i + 1] : close[i];
          double atrNow = iATR(NULL, 0, InpATRPeriod, rates_total - 1 - i);
@@ -636,7 +638,6 @@ int OnCalculate(const int rates_total,
       }
    }
 
-   uint _ptSig = GetTickCount();     // [PERF-PROBE] end of signal-detection loop
    // After fullRecalc scan: load old signals from binary and merge.
    // These signals predate the current InpMaxBars window and give Tier 1/2
    // access to historical data without rescanning the entire price history.
@@ -665,6 +666,7 @@ int OnCalculate(const int rates_total,
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
       UpdateBrierMetrics();
+      UpdateXGBBrierMetrics();
       UpdatePortfolioRisk();
 
       // Memory management: cap outcomes at 500
@@ -678,7 +680,6 @@ int OnCalculate(const int rates_total,
       }
    }
 
-   uint _ptBar = GetTickCount();     // [PERF-PROBE] end of per-new-bar heavy block
    //=================================================================
    // UPDATE DISPLAY
    //=================================================================
@@ -830,6 +831,9 @@ int OnCalculate(const int rates_total,
          if(InpShowProbability && g_activeSignalIndex >= 0 &&
             g_signals[g_activeSignalIndex].predictedProb <= 0 && g_currentProb.probTP1 > 0)
             g_signals[g_activeSignalIndex].predictedProb = g_currentProb.probTP1;
+         if(InpProbMode != PROB_CALIBRATION && g_activeSignalIndex >= 0 &&
+            g_signals[g_activeSignalIndex].xgbPredictedProb <= 0 && g_currentProb.xgbProbTP1 > 0)
+            g_signals[g_activeSignalIndex].xgbPredictedProb = g_currentProb.xgbProbTP1;
          if(g_intermarket.isAvailable)
             GetIntermarketScore(activeSig.isBuySignal);
 
@@ -868,7 +872,8 @@ int OnCalculate(const int rates_total,
                   g_spreadRegime.spreadRatio, g_walkForward.isRobust,
                   SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1),
                   g_currentProb.rawCountT1, g_currentProb.rawCountT2,
-                  g_currentProb.countT3, g_currentProb.realPct);
+                  g_currentProb.countT3, g_currentProb.realPct,
+                  g_currentProb.xgbProbTP1);
             }
          }
 
@@ -931,16 +936,6 @@ int OnCalculate(const int rates_total,
    }
 
    if(s_scoringQueueCount > 0) FlushLogQueues();
-
-   // [PERF-PROBE] Print phase breakdown ONLY on fullRecalc (TF switch / first load / recompile).
-   // Temporary diagnostic — remove after locating the bottleneck.
-   if(fullRecalc)
-   {
-      uint _ptEnd = GetTickCount();
-      PrintFormat("[PERF] setup=%u (mtf=%u) rsi=%u sigLoop=%u merge+bar=%u display=%u TOTAL=%u ms (signals=%d)",
-                  _ptSetup - _pt0, _ptMtfDur, _ptRSI - _ptSetup, _ptSig - _ptRSI,
-                  _ptBar - _ptSig, _ptEnd - _ptBar, _ptEnd - _pt0, g_signalCount);
-   }
 
    return(rates_total);
 }
