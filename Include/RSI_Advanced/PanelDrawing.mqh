@@ -1088,4 +1088,191 @@ void DrawInfoPanel(int signalIndex)
       "Drag title to move | Click arrow", InpPanelDimColor, fs-2, false);
    ChartRedraw();
 }
+
+//+------------------------------------------------------------------+
+//| Explainability / Attribution Debug Panel                          |
+//| Shows per-layer contribution to final probTP1.                    |
+//| Activated by InpShowProbExplain. Zero logic change to pipeline.   |
+//+------------------------------------------------------------------+
+void DrawExplainPanel()
+{
+   if(!InpShowProbExplain) return;
+
+   int pw = 380;
+   int fs = InpPanelFontSize;
+   int lh = fs + 6;
+   int pad = 8;
+   int px = g_panelPosX + InpPanelWidth + 10;
+   int cy = g_panelPosY;
+
+   ExplainData e = g_explainData;
+
+   int rowCount = 20;
+   int ph = lh * rowCount + pad * 2;
+   CreateRectangleLabel(PREFIX_EXPLAIN+"BG", px, cy, pw, ph,
+                        InpPanelBgColor, InpPanelBorderColor);
+
+   cy += pad;
+   CreateTextLabel(PREFIX_EXPLAIN+"T", px+pad, cy,
+      "PROB ATTRIBUTION (debug)", InpPanelTitleColor, fs, true);
+   cy += lh + 2;
+
+   color cDim = InpPanelDimColor;
+   color cTxt = InpPanelTextColor;
+
+   CreateTextLabel(PREFIX_EXPLAIN+"H", px+pad, cy,
+      "Step                      Value     Prob%    D%", cDim, fs-1, false);
+   cy += lh;
+
+   double prev = 0;
+   string line;
+   color  deltaClr;
+
+   // --- Nhom A: Edge-space attribution ---
+   CreateTextLabel(PREFIX_EXPLAIN+"A0", px+pad, cy,
+      StringFormat("Base Edge        %.3f       %5.1f%%",
+                   e.baseEdge, e.probAfterBase), cTxt, fs-1, false);
+   cy += lh;
+   prev = e.probAfterBase;
+
+   // MTF
+   {
+      double d = e.probAfterMTF - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"A1", px+pad, cy,
+         StringFormat("+ MTF            %+.3f      %5.1f%%  %+5.1f",
+                      e.edgeMTF, e.probAfterMTF, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterMTF;
+   }
+   // Intermarket
+   {
+      double d = e.probAfterInter - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"A2", px+pad, cy,
+         StringFormat("+ Intermarket    %+.3f      %5.1f%%  %+5.1f",
+                      e.edgeInter, e.probAfterInter, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterInter;
+   }
+   // Angle
+   {
+      double d = e.probAfterAngle - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"A3", px+pad, cy,
+         StringFormat("+ Angle Z        %+.3f      %5.1f%%  %+5.1f",
+                      e.edgeAngle, e.probAfterAngle, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterAngle;
+   }
+   // MarketState
+   {
+      double d = e.probAfterMktSt - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"A4", px+pad, cy,
+         StringFormat("x MktState       x%.2f      %5.1f%%  %+5.1f",
+                      e.edgeMktSt, e.probAfterMktSt, d), deltaClr, fs-1, false);
+      cy += lh;
+   }
+
+   // --- Nhom B: Gambler's Ruin corrections ---
+   CreateTextLabel(PREFIX_EXPLAIN+"S1", px+pad, cy,
+      "--- Gambler Ruin corrections ---", cDim, fs-1, false);
+   cy += lh;
+
+   CreateTextLabel(PREFIX_EXPLAIN+"B1", px+pad, cy,
+      StringFormat("  FatTail   -%4.1f%%   VolClust -%4.1f%%   Spread -%4.1f%%",
+                   e.fatTailPenalty * 100.0, e.volClusterPen * 100.0, e.spreadDrag * 100.0),
+      clrTomato, fs-1, false);
+   cy += lh;
+
+   CreateTextLabel(PREFIX_EXPLAIN+"B2", px+pad, cy,
+      StringFormat("Theoretical       ->  %5.1f%%", e.theoTP1), cTxt, fs-1, false);
+   cy += lh;
+
+   // --- Bayesian combine ---
+   CreateTextLabel(PREFIX_EXPLAIN+"S2", px+pad, cy,
+      "--- Bayesian Combine ---", cDim, fs-1, false);
+   cy += lh;
+
+   CreateTextLabel(PREFIX_EXPLAIN+"C1", px+pad, cy,
+      StringFormat("Historical  %5.1f%%   Combined -> %5.1f%%",
+                   e.histTP1, e.probAfterBayes), cTxt, fs-1, false);
+   cy += lh;
+   prev = e.probAfterBayes;
+
+   // XGBoost
+   {
+      double d = e.probAfterXGB - prev;
+      deltaClr = (MathAbs(d) > 0.05) ? ((d > 0) ? clrLime : clrTomato) : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"C2", px+pad, cy,
+         StringFormat("XGBoost                  %5.1f%%  %+5.1f",
+                      e.probAfterXGB, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterXGB;
+   }
+
+   // --- Nhom C: Confidence adjustments ---
+   CreateTextLabel(PREFIX_EXPLAIN+"S3", px+pad, cy,
+      "--- Confidence Adjustments ---", cDim, fs-1, false);
+   cy += lh;
+
+   // 1-Bar Confirm
+   {
+      double d = e.probAfterConfirm - prev;
+      string chk = e.confirmHit ? "Y" : "N";
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"D1", px+pad, cy,
+         StringFormat("1-Bar Confirm  %s         %5.1f%%  %+5.1f",
+                      chk, e.probAfterConfirm, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterConfirm;
+   }
+   // ATR Spike
+   {
+      double d = e.probAfterSpike - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"D2", px+pad, cy,
+         StringFormat("ATR Spike    %4.1fx        %5.1f%%  %+5.1f",
+                      e.spikeRatio, e.probAfterSpike, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterSpike;
+   }
+   // Session WR
+   {
+      double d = e.probAfterSession - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"D3", px+pad, cy,
+         StringFormat("Session WR   x%.2f        %5.1f%%  %+5.1f",
+                      e.sessionRatio, e.probAfterSession, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterSession;
+   }
+   // Brier Shrink
+   {
+      double d = e.probAfterBrier - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"D4", px+pad, cy,
+         StringFormat("Brier Shrink  %3.0f%%        %5.1f%%  %+5.1f",
+                      e.brierShrink * 100.0, e.probAfterBrier, d), deltaClr, fs-1, false);
+      cy += lh;
+      prev = e.probAfterBrier;
+   }
+   // Time Decay
+   {
+      double d = e.probFinal - prev;
+      deltaClr = (d > 0.05) ? clrLime : (d < -0.05) ? clrTomato : cDim;
+      CreateTextLabel(PREFIX_EXPLAIN+"D5", px+pad, cy,
+         StringFormat("Time Decay   S=%.2f       %5.1f%%  %+5.1f",
+                      e.survivalRatio, e.probFinal, d), deltaClr, fs-1, false);
+      cy += lh;
+   }
+
+   // --- FINAL ---
+   CreateTextLabel(PREFIX_EXPLAIN+"FN", px+pad, cy,
+      StringFormat("=== FINAL                %5.1f%% ===", e.probFinal),
+      clrGold, fs, true);
+
+   ChartRedraw();
+}
 #endif

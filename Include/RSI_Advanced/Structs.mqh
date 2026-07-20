@@ -121,6 +121,38 @@ struct ProbabilityData
    bool   xgbActive;      // true = XGBoost contributing to combined prob
 };
 
+struct ExplainData
+{
+   double baseEdge;
+   double probAfterBase;
+   double probAfterMTF;
+   double probAfterInter;
+   double probAfterAngle;
+   double probAfterMktSt;
+   double fatTailPenalty;
+   double volClusterPen;
+   double spreadDrag;
+   double probAfterCorrections;
+   double histTP1;
+   double theoTP1;
+   double probAfterBayes;
+   double probAfterXGB;
+   double probAfterConfirm;
+   double probAfterSpike;
+   double probAfterSession;
+   double probAfterBrier;
+   double probFinal;
+   bool   confirmHit;
+   double spikeRatio;
+   double sessionRatio;
+   double brierShrink;
+   double survivalRatio;
+   double edgeMTF;
+   double edgeInter;
+   double edgeAngle;
+   double edgeMktSt;
+};
+
 struct EntryZone
 {
    double price;           // Entry price for this zone

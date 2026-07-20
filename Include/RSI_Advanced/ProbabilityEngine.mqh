@@ -1254,6 +1254,7 @@ void CalculateProbability(int currentSignalIndex)
    // STEP 3: MTF + Intermarket adjusted edge
    //=================================================================
    double edgeAdjustment = 0;
+   double _exMtfAdj = 0, _exInterAdj = 0, _exAngleAdj = 0;
 
    if(InpShowMTF && g_mtfCount > 0)
    {
@@ -1264,12 +1265,14 @@ void CalculateProbability(int currentSignalIndex)
          if(!curSig.isBuySignal && g_mtfData[t].trend == -1) agreeCount++;
       }
       double alignRatio = ((double)agreeCount / (double)g_mtfCount) * 2.0 - 1.0;
-      edgeAdjustment += alignRatio * 0.03;
+      _exMtfAdj = alignRatio * 0.03;
+      edgeAdjustment += _exMtfAdj;
    }
 
    if(g_intermarket.isAvailable)
    {
       double interAdj = GetIntermarketEdgeAdjustment(curSig.isBuySignal);
+      _exInterAdj = interAdj;
       edgeAdjustment += interAdj;
    }
 
@@ -1283,7 +1286,8 @@ void CalculateProbability(int currentSignalIndex)
    {
       double caseDamp = (curSig.caseNumber == 2 || curSig.caseNumber == 3) ? 0.4 : 1.0;
       double angleAdj = MathMax(-0.03, MathMin(0.04, (curSig.angleStrength - 1.0) * 0.03));
-      edgeAdjustment += angleAdj * caseDamp;
+      _exAngleAdj = angleAdj * caseDamp;
+      edgeAdjustment += _exAngleAdj;
    }
 
    // --- Vol-regime edge adjustment
@@ -1306,6 +1310,7 @@ void CalculateProbability(int currentSignalIndex)
       else if(tfCeil <= TF_H1)  edgeCeiling = 0.63;
    }
    double adjustedEdge = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + edgeAdjustment));
+   double _exEdgeBeforeMktSt = adjustedEdge;
 
    UpdateMarketState();
    adjustedEdge = MathMax(0.48, MathMin(edgeCeiling, adjustedEdge * g_marketState.probMultiplier));
@@ -1321,6 +1326,38 @@ void CalculateProbability(int currentSignalIndex)
    double theoTP1 = CalculateRealMarketProbTP(adjustedEdge, slDist, tp1Dist, curSig.atrValue) * 100.0;
    double theoTP2 = CalculateRealMarketProbTP(adjustedEdge, slDist, tp2Dist, curSig.atrValue) * 100.0;
    double theoTP3 = CalculateRealMarketProbTP(adjustedEdge, slDist, tp3Dist, curSig.atrValue) * 100.0;
+
+   //--- Attribution: cumulative Gambler's Ruin recalc per edge step (Nhóm A)
+   if(InpShowProbExplain)
+   {
+      g_explainData.baseEdge = measuredEdge;
+      g_explainData.edgeMTF   = _exMtfAdj;
+      g_explainData.edgeInter = _exInterAdj;
+      g_explainData.edgeAngle = _exAngleAdj;
+      g_explainData.edgeMktSt = g_marketState.probMultiplier;
+
+      double _eBase = MathMax(0.48, MathMin(edgeCeiling, measuredEdge));
+      g_explainData.probAfterBase = CalculateRealMarketProbTP(_eBase, slDist, tp1Dist, curSig.atrValue) * 100.0;
+
+      double _eMTF = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj));
+      g_explainData.probAfterMTF = CalculateRealMarketProbTP(_eMTF, slDist, tp1Dist, curSig.atrValue) * 100.0;
+
+      double _eInter = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj + _exInterAdj));
+      g_explainData.probAfterInter = CalculateRealMarketProbTP(_eInter, slDist, tp1Dist, curSig.atrValue) * 100.0;
+
+      double _eAngle = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj + _exInterAdj + _exAngleAdj));
+      g_explainData.probAfterAngle = CalculateRealMarketProbTP(_eAngle, slDist, tp1Dist, curSig.atrValue) * 100.0;
+
+      double _eMktSt = MathMax(0.48, MathMin(edgeCeiling, _exEdgeBeforeMktSt * g_marketState.probMultiplier));
+      g_explainData.probAfterMktSt = CalculateRealMarketProbTP(_eMktSt, slDist, tp1Dist, curSig.atrValue) * 100.0;
+
+      g_explainData.fatTailPenalty = GetFatTailPenalty();
+      g_explainData.volClusterPen = GetVolClusterPenalty();
+      g_explainData.spreadDrag    = GetSpreadDrag(curSig.atrValue);
+      g_explainData.probAfterCorrections = theoTP1;
+      g_explainData.theoTP1 = theoTP1;
+      g_explainData.histTP1 = histTP1;
+   }
 
    //=================================================================
    // STEP 5: Bayesian combine historical + theoretical
@@ -1340,6 +1377,9 @@ void CalculateProbability(int currentSignalIndex)
       g_currentProb.probTP3 = MathMin(theoTP3, theoTP2);
       g_currentProb.probSL  = 100.0 - theoTP1;
    }
+
+   if(InpShowProbExplain)
+      g_explainData.probAfterBayes = g_currentProb.probTP1;
 
    //=================================================================
    // STEP 5.1: XGBoost integration (V12)
@@ -1382,11 +1422,15 @@ void CalculateProbability(int currentSignalIndex)
       }
    }
 
+   if(InpShowProbExplain)
+      g_explainData.probAfterXGB = g_currentProb.probTP1;
+
    //=================================================================
    // STEP 5.5: BROKER-RESISTANT confidence adjustments
    //=================================================================
 
    //--- 1-Bar Price Confirmation (Brooks 2012)
+   bool _exConfirmed = true;
    if(curSig.barIndex < Bars - 2)
    {
       int sigBarShift  = Bars - 1 - curSig.barIndex;
@@ -1402,6 +1446,7 @@ void CalculateProbability(int currentSignalIndex)
          bool confirmed = false;
          if(curSig.isBuySignal) confirmed = (nextHigh > sigHigh);
          else                   confirmed = (nextLow < sigLow);
+         _exConfirmed = confirmed;
 
          if(!confirmed)
          {
@@ -1418,6 +1463,12 @@ void CalculateProbability(int currentSignalIndex)
             g_currentProb.probSL = 100.0 - g_currentProb.probTP1;
          }
       }
+   }
+
+   if(InpShowProbExplain)
+   {
+      g_explainData.probAfterConfirm = g_currentProb.probTP1;
+      g_explainData.confirmHit = _exConfirmed;
    }
 
    //--- ATR Spike Detection (skip when Vol-regime already penalized as EVENT)
@@ -1454,9 +1505,16 @@ void CalculateProbability(int currentSignalIndex)
       }
    }
 
+   if(InpShowProbExplain)
+   {
+      g_explainData.probAfterSpike = g_currentProb.probTP1;
+      g_explainData.spikeRatio = (s_spikeAvgATR > 0) ? s_spikeCurATR / s_spikeAvgATR : 0;
+   }
+
    //=================================================================
    // STEP 5.6: SESSION QUALITY adjustment
    //=================================================================
+   double _exSessionRatio = 1.0;
    {
       int block = GetSessionBlock(curSig.signalTime);
       int ci = MathMax(0, MathMin(curSig.caseNumber - 1, CASE_COUNT - 1));
@@ -1545,9 +1603,16 @@ void CalculateProbability(int currentSignalIndex)
                g_currentProb.probTP2 *= ratio;
                g_currentProb.probTP3 *= ratio;
                g_currentProb.probSL = 100.0 - g_currentProb.probTP1;
+               _exSessionRatio = ratio;
             }
          }
       }
+   }
+
+   if(InpShowProbExplain)
+   {
+      g_explainData.probAfterSession = g_currentProb.probTP1;
+      g_explainData.sessionRatio = _exSessionRatio;
    }
 
    //=================================================================
@@ -1592,6 +1657,11 @@ void CalculateProbability(int currentSignalIndex)
          g_currentProb.probTP3 = 50.0 + (g_currentProb.probTP3 - 50.0) * shrink;
          g_currentProb.probSL  = 100.0 - g_currentProb.probTP1;
       }
+      if(InpShowProbExplain)
+      {
+         g_explainData.probAfterBrier = g_currentProb.probTP1;
+         g_explainData.brierShrink = shrink;
+      }
    }
 
    //=================================================================
@@ -1628,6 +1698,12 @@ void CalculateProbability(int currentSignalIndex)
    }
    g_currentProb.probTP2 = NormalizeDouble(MathMin(g_currentProb.probTP2, g_currentProb.probTP1), 1);
    g_currentProb.probTP3 = NormalizeDouble(MathMin(g_currentProb.probTP3, g_currentProb.probTP2), 1);
+
+   if(InpShowProbExplain)
+   {
+      g_explainData.probFinal = g_currentProb.probTP1;
+      g_explainData.survivalRatio = g_currentProb.survivalRatio;
+   }
 
    CalculateKellyFraction();
 }

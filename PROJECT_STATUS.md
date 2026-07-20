@@ -329,13 +329,82 @@ Tao shortcut `python xgb_service.py` vao:
 | `--inventory` | Chi scan bao cao signal counts | `false` |
 | `--json-output` | Output JSON summary (cho service) | `false` |
 | `--force` | Export du validation fail | `false` |
+| `--output-format` | `mql` (source code) hoac `bin` (binary runtime) | `mql` |
 
 Vi du chay standalone:
 ```bash
 python rsi_xgboost_train.py --data-dir "C:/path/MQL4/Files/RSI_Advanced_Logs" \
     --symbol XAUUSD --tf H1
 python rsi_xgboost_train.py --data-dir dir1 dir2 dir3 --inventory
+# Binary export (V12.2 runtime loading):
+python rsi_xgboost_train.py --data-dir dir1 --symbol XAUUSD --tf H1 --output-format bin
 ```
+
+---
+
+### V12.2 — Runtime Binary Loading (Auto-Reload, No Recompile) (2026-07-08)
+
+**Boi canh**: V12.1 sau khi service train xong model moi, user phai mo MetaEditor > F7 (Compile)
+de indicator doc code moi. V12.2 chuyen tu compile-time code generation sang runtime data loading:
+Python export model ra file binary, indicator doc file bang `FileOpen(FILE_COMMON)` tai runtime.
+Khi service train xong model moi → ghi de file → indicator tu detect file moi → reload.
+**USER CHI CAN COMPILE 1 LAN (F7) DE CAI DAT V12.2. SAU DO MOI UPDATE MODEL LA TU DONG.**
+
+**Kien truc runtime loading:**
+```
+Python (xgb_service.py)                   MQL (indicator)
+    |                                         |
+    +-- Train model                           +-- OnInit(): LoadXGBModels()
+    +-- export_model_binary()                 |     FileOpen("RSI_Advanced/XGBModels.bin",
+    |     -> write .tmp + atomic rename       |               FILE_COMMON|FILE_READ|FILE_BIN)
+    |     -> Common/Files/RSI_Advanced/       |     Parse header + models + trees + nodes
+    |        XGBModels.bin                    |     -> g_xgbNodes[], g_xgbModels[]
+    |                                         |
+    +-- Notification:                         +-- OnCalculate() (every tick):
+        "Model updated, auto-loaded"          |     CheckXGBReload()  <-- moi 5 phut
+                                              |       if file changed -> LoadXGBModels()
+                                              |
+                                              +-- XGBPredict():
+                                                    Build feature[22] array
+                                                    XGBFindModel(Symbol(), Period())
+                                                    EvalTree() per tree (iterative traversal)
+                                                    Sum logits -> sigmoid -> prob 0-100
+```
+
+**Binary file format** (`Common/Files/RSI_Advanced/XGBModels.bin`):
+- FILE HEADER: magic(0x58474231), version(1), model_count, timestamp, n_features
+- PER MODEL: symbol[16], period, n_trees, n_features, oos_brier, oos_auc
+- PER TREE: n_nodes
+- PER NODE (28 bytes): feature_index, threshold, left_child, right_child, leaf_value
+- Size: ~868KB max (20 models x 50 trees x 31 nodes)
+- FILE_COMMON: `%APPDATA%\MetaQuotes\Terminal\Common\Files\` — chia se giua tat ca terminals
+
+**Error handling:**
+- File not found → g_xgbLoaded=false, XGBPredict returns 50% (neutral)
+- Corrupt file (bad magic/version) → close, keep previous model if any
+- File locked by Python writer → retry in 5 min
+- Atomic write: Python writes .tmp then os.replace() (prevents MQL reading partial file)
+
+**Files moi:**
+- Khong co file moi
+
+**Files sua (8):**
+- `Include/RSI_Advanced/XGBModel.mqh` — FULL REWRITE: tu placeholder/code gen sang runtime binary
+  loader voi LoadXGBModels(), CheckXGBReload(), EvalTree(), XGBPredict() (signature giu nguyen)
+- `Include/RSI_Advanced/XGBIntegration.mqh` — XGBIsReady: `XGB_MODEL_TRAINED==0` → `!g_xgbLoaded`
+- `Include/RSI_Advanced/PanelDrawing.mqh` — panel display: `XGB_MODEL_TRAINED==0` → `!g_xgbLoaded`
+- `RSI_Advanced.mq4` — OnInit: +LoadXGBModels(), OnCalculate: +CheckXGBReload()
+- `RSI_Advanced.mq5` — OnInit: +LoadXGBModels(), OnCalculate: +CheckXGBReload()
+- `tools/rsi_xgboost_train.py` — them `export_model_binary()`, `build_tree_nodes()`,
+  `FEATURE_INDEX_MAP`, `--output-format bin|mql`
+- `tools/xgb_service.py` — them `assemble_binary_model()`, output to Common/Files/ khi format=bin,
+  notification text "Models auto-loaded, no recompile needed"
+- `tools/xgb_config.json` — them `"output_format": "bin"`
+
+**Backward compatibility:**
+- `--output-format mql` van export MQL source code (legacy mode)
+- XGBPredict() signature KHONG DOI (19 params)
+- XGBIntegration.mqh backward-compat macros: `#define XGB_MODEL_TRAINED g_xgbFileTimestamp`
 
 ---
 

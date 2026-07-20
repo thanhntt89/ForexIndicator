@@ -31,6 +31,7 @@
 #define PREFIX_PROB   "RSIAdv_Prob_"
 #define PREFIX_ZONE   "RSIAdv_Zone_"
 #define PREFIX_OSMON  "RSIAdv_OSMon_"   // [EXPERIMENT] Green x Red inside OB/OS zone (monitor-only marker)
+#define PREFIX_EXPLAIN "RSIAdv_Expl_"
 
 enum ENUM_SLTP_METHOD
 {
@@ -188,6 +189,7 @@ input ENUM_PROB_MODE InpProbMode  = PROB_CALIBRATION;  // Probability Mode (Cali
 input int    InpProbMaxBars       = 1000;          // Max bars for probability scan
 input color  InpProbTextColor     = clrWhite;      // Probability text color
 input int    InpProbFontSize      = 8;             // Probability font size
+input bool   InpShowProbExplain  = false;         // Show probability attribution panel (debug)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Alerts                                                |

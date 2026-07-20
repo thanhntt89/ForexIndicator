@@ -197,6 +197,7 @@ void OnDeinit(const int reason)
    DeleteObjectsByPrefix(PREFIX_ARROW);
    DeleteObjectsByPrefix(PREFIX_OSMON);
    DeleteObjectsByPrefix(PREFIX_PANEL);
+   DeleteObjectsByPrefix(PREFIX_EXPLAIN);
    DeleteObjectsByPrefix(PREFIX_LINE);
    DeleteObjectsByPrefix(PREFIX_PROB);
    DeleteObjectsByPrefix(PREFIX_ZONE);
@@ -248,6 +249,7 @@ int OnCalculate(const int rates_total,
       DeleteObjectsByPrefix(PREFIX_OSMON);
       DeleteObjectsByPrefix(PREFIX_LINE);
       DeleteObjectsByPrefix(PREFIX_PANEL);
+      DeleteObjectsByPrefix(PREFIX_EXPLAIN);
       DeleteObjectsByPrefix(PREFIX_PROB);
       DeleteObjectsByPrefix(PREFIX_ZONE);
       g_signalCount       = 0;
@@ -812,6 +814,8 @@ int OnCalculate(const int rates_total,
          }
 
          DrawInfoPanel(g_activeSignalIndex);
+         if(InpShowProbExplain && g_activeSignalIndex >= 0)
+            DrawExplainPanel();
 
          bool modeChanged = (suppressDisplay != s_lastSuppressMode);
          s_lastSuppressMode = suppressDisplay;
@@ -865,6 +869,8 @@ int OnCalculate(const int rates_total,
    {
       if(InpShowMTF) RefreshMTFData();
       DrawInfoPanel(-1);
+      if(InpShowProbExplain)
+         DeleteObjectsByPrefix(PREFIX_EXPLAIN);
    }
 
    // Flush scoring queue immediately — LogScoringSnapshot() runs after both new-bar

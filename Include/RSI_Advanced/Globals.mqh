@@ -57,6 +57,7 @@ bool     g_mtfRamReady  [6];
 //| Probability data                                                   |
 //+------------------------------------------------------------------+
 ProbabilityData g_currentProb;
+ExplainData     g_explainData;
 double          g_cachedEdge = 0.51;
 BrierMetrics    g_brierMetrics;
 // Per-case Brier calibration (index by caseNumber 0-9). Lets the shrink isolate
