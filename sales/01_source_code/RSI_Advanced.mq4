@@ -255,7 +255,6 @@ int OnCalculate(const int rates_total,
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       g_userSelectedSignal = false;   // [STALE-FIX2] clear any pin on full rebuild
-      g_autoFallbackActive = false;   // [STALE-FIX2] clear auto-fallback flag on full rebuild
       ArrayResize(g_signals, 0);
       LoggerInit(false);  // [PERF] do NOT wipe CSV logs on fullRecalc (was ~3s FileDelete + data loss
                           //        every TF switch). Forward-only logging below prevents dup rows.
@@ -376,7 +375,8 @@ int OnCalculate(const int rates_total,
          int stableAnchor = rates_total - 500;
          if(InpMaxBars > 500 && lastBar < stableAnchor && i >= stableAnchor)
          { /* crossing anchor — don't carry cooldown from deep history */ }
-         else if(i - lastBar < _cooldown) continue;
+         else if(i - lastBar < _cooldown)
+            continue;
       }
 
       // [SESSION-HARD] Pre-detection: session block for Case 6 filtering
@@ -597,6 +597,7 @@ int OnCalculate(const int rates_total,
    {
       FlushLogQueues(); // Bulk flush all historical log rows to CSV
    }
+
    //=================================================================
    // V11: Update multi-source data
    //=================================================================
@@ -638,115 +639,67 @@ int OnCalculate(const int rates_total,
       static uint    s_lastDrawTick = 0;
       static double  s_lastDrawPrice = 0;
       static int     s_lastDrawSignalIdx = -1;
-      static bool    s_lastInvalidated = false;
       static bool    s_sltpDrawn = false;
       static bool    s_zonesDrawn = false;
       static bool    s_lastSuppressMode = false;
-      static bool    s_invalidatedSticky = false;
 
       // Auto-switch to latest signal when new signal appears
       static int s_prevSignalCount = 0;
       static datetime s_prevNewestTime = 0;
       datetime newestTime = (g_signalCount > 0) ? g_signals[g_signalCount-1].signalTime : 0;
-      // [STALE-FIX2] Release any override when a genuinely NEWER signal exists.
-      // Count alone is masked by the per-tick prune+re-detect (g_signalCount stays
-      // constant across ticks); the newest signalTime advancing is NOT masked.
       if((g_signalCount > s_prevSignalCount && s_prevSignalCount > 0) ||
          (newestTime > s_prevNewestTime && s_prevNewestTime > 0))
       {
          g_userSelectedSignal = false;
-         g_autoFallbackActive = false;
-      }
-      // [STALE-FIX2] Release an AUTO fallback selection as soon as the newest signal is
-      // valid again -- do NOT wait for g_signalCount to strictly increase. A genuine
-      // manual arrow-click (g_autoFallbackActive==false) is never auto-released here.
-      if(g_autoFallbackActive && g_userSelectedSignal && g_signalCount > 0)
-      {
-         int    _ni = g_signalCount - 1;
-         double _cp = iClose(NULL, 0, 0);
-         bool   _newestInvalid = ( g_signals[_ni].isBuySignal && _cp <= g_signals[_ni].stopLoss) ||
-                                 (!g_signals[_ni].isBuySignal && _cp >= g_signals[_ni].stopLoss);
-         if(!_newestInvalid)
-         {
-            g_userSelectedSignal = false;
-            g_autoFallbackActive = false;
-         }
       }
       s_prevSignalCount = g_signalCount;
       s_prevNewestTime  = newestTime;
 
+      double curPrice = iClose(NULL, 0, 0);
+
+      // Find the most recent signal that is NOT SL-invalidated.
       if(!g_userSelectedSignal)
-         g_activeSignalIndex = g_signalCount - 1;
+      {
+         g_activeSignalIndex = -1;
+         for(int si = g_signalCount - 1; si >= 0; si--)
+         {
+            bool slHit = (g_signals[si].isBuySignal && curPrice <= g_signals[si].stopLoss) ||
+                         (!g_signals[si].isBuySignal && curPrice >= g_signals[si].stopLoss);
+            if(!slHit) { g_activeSignalIndex = si; break; }
+         }
+      }
       else if(g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount)
       {
          g_activeSignalIndex = g_signalCount - 1;
          g_userSelectedSignal = false;
       }
-      if(g_activeSignalIndex != s_lastDrawSignalIdx)
-      {
-         s_invalidatedSticky = false;
-         s_zonesDrawn = false;
-         s_sltpDrawn  = false;
-      }
-      SignalData activeSig = g_signals[g_activeSignalIndex];
-      double curPrice = iClose(NULL, 0, 0);
 
-      bool rawInvalidated = false;
-      if(activeSig.isBuySignal && curPrice <= activeSig.stopLoss)
-         rawInvalidated = true;
-      if(!activeSig.isBuySignal && curPrice >= activeSig.stopLoss)
-         rawInvalidated = true;
-
-      bool signalInvalidated = rawInvalidated;
-      if(s_invalidatedSticky && !rawInvalidated)
-      {
-         double margin = activeSig.atrValue * 0.1;
-         if(activeSig.isBuySignal && curPrice < activeSig.stopLoss + margin)
-            signalInvalidated = true;
-         if(!activeSig.isBuySignal && curPrice > activeSig.stopLoss - margin)
-            signalInvalidated = true;
-      }
-
-      if(signalInvalidated && !s_invalidatedSticky)
+      // All signals SL-hit → show Monitoring
+      if(g_activeSignalIndex < 0)
       {
          DeleteObjectsByPrefix(PREFIX_LINE);
          DeleteObjectsByPrefix(PREFIX_PROB);
          DeleteObjectsByPrefix(PREFIX_ZONE);
-         g_validZoneCount = 0;
-         g_recommendedZoneCount = 0;
-         s_sltpDrawn  = false;
+         if(InpShowMTF) RefreshMTFData();
+         DrawInfoPanel(-1);
+         if(InpShowProbExplain) DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+         s_lastDrawSignalIdx = -1;
+         s_sltpDrawn = false;
          s_zonesDrawn = false;
-
-         for(int s = g_signalCount - 1; s >= 0; s--)
-         {
-            if(s == g_activeSignalIndex) continue;
-            // [STALE-FIX] Recency guard: only fall back to a RECENT still-valid
-            // signal. Without this, an invalidated newest signal would resurrect an
-            // ancient/expired signal (e.g. 99 bars old) and lock the display on it.
-            // If no valid signal within the window, keep showing the newest (invalid).
-            if(iBarShift(NULL, 0, g_signals[s].signalTime, false) > 10) continue;
-            bool sigInvalid = false;
-            if(g_signals[s].isBuySignal && curPrice <= g_signals[s].stopLoss)
-               sigInvalid = true;
-            if(!g_signals[s].isBuySignal && curPrice >= g_signals[s].stopLoss)
-               sigInvalid = true;
-            if(!sigInvalid)
-            {
-               g_activeSignalIndex = s;
-               g_userSelectedSignal = true;
-               g_autoFallbackActive = true;   // [STALE-FIX2] auto selection -> releasable when newest valid again
-               signalInvalidated = false;
-               break;
-            }
-         }
+         ChartRedraw();
       }
-      s_invalidatedSticky = signalInvalidated;
-      activeSig = g_signals[g_activeSignalIndex]; // refresh: auto-switch may have changed index
+      else
+      {
+      if(g_activeSignalIndex != s_lastDrawSignalIdx)
+      {
+         s_zonesDrawn = false;
+         s_sltpDrawn  = false;
+      }
+      SignalData activeSig = g_signals[g_activeSignalIndex];
 
       uint currentTick = GetTickCount();
       bool forceRedraw = false;
       if(g_activeSignalIndex != s_lastDrawSignalIdx) forceRedraw = true;
-      if(signalInvalidated != s_lastInvalidated) forceRedraw = true;
       if(isNewBar) forceRedraw = true;
       double priceDelta = MathAbs(curPrice - s_lastDrawPrice);
       if(activeSig.atrValue > 0 && priceDelta > activeSig.atrValue * 0.1) forceRedraw = true;
@@ -760,7 +713,6 @@ int OnCalculate(const int rates_total,
          s_lastDrawTick = currentTick;
          s_lastDrawPrice = curPrice;
          s_lastDrawSignalIdx = g_activeSignalIndex;
-         s_lastInvalidated = signalInvalidated;
 
          if(InpShowMTF && (isNewBar || forceRedraw)) RefreshMTFData();
          if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
@@ -774,43 +726,38 @@ int OnCalculate(const int rates_total,
             GetIntermarketScore(activeSig.isBuySignal);
 
          bool suppressDisplay = false;
-         if(!signalInvalidated)
-         {
-            int mtfAgree = 0;
-            if(InpShowMTF && g_mtfCount > 0) mtfAgree = CalculateMTFAgreement();
-            double slDist  = MathAbs(activeSig.entryPrice - activeSig.stopLoss);
-            double tp1Dist = MathAbs(activeSig.takeProfit1 - activeSig.entryPrice);
-            // [CASE8-FIX2] Confidence + WAIT gate from real-signal nEff (T1+T2),
-            // excluding Tier-3 deep-scan bars that inflate the pooled sample count.
-            int recN = (int)MathRound(g_currentProb.nEffT1 + g_currentProb.nEffT2);
-            TradeRecommendation rec = GetTradeRecommendation(
-               activeSig.caseNumber, activeSig.isBuySignal,
-               g_currentProb.probTP1, g_currentProb.probSL,
-               recN, mtfAgree,
-               slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
-            if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
-               suppressDisplay = true;
+         int mtfAgree = 0;
+         if(InpShowMTF && g_mtfCount > 0) mtfAgree = CalculateMTFAgreement();
+         double slDist  = MathAbs(activeSig.entryPrice - activeSig.stopLoss);
+         double tp1Dist = MathAbs(activeSig.takeProfit1 - activeSig.entryPrice);
+         int recN = (int)MathRound(g_currentProb.nEffT1 + g_currentProb.nEffT2);
+         TradeRecommendation rec = GetTradeRecommendation(
+            activeSig.caseNumber, activeSig.isBuySignal,
+            g_currentProb.probTP1, g_currentProb.probSL,
+            recN, mtfAgree,
+            slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
+         if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
+            suppressDisplay = true;
 
-            if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
-            {
-               s_lastLoggedScoreTime = activeSig.signalTime;
-               MqlDateTime sigDt;
-               TimeToStruct(activeSig.signalTime, sigDt);
-               int mtfAgreePctLog = (int)(rec.mtfAlignRatio * 100);
-               string mtfTrendStr = (mtfAgreePctLog > 50) ? "BULL" : (mtfAgreePctLog < -50 ? "BEAR" : "NEUTRAL");
-               double rrLog = (slDist > 0) ? tp1Dist / slDist : 0;
-               LogScoringSnapshot(
-                  activeSig.signalTime, activeSig.caseNumber, activeSig.isBuySignal,
-                  rec.confidence, rec.label,
-                  g_currentProb.probTP1, g_currentProb.probSL, g_currentProb.totalSamples,
-                  rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
-                  activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
-                  g_spreadRegime.spreadRatio, g_walkForward.isRobust,
-                  SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1),
-                  g_currentProb.rawCountT1, g_currentProb.rawCountT2,
-                  g_currentProb.countT3, g_currentProb.realPct,
-                  g_currentProb.xgbProbTP1);
-            }
+         if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
+         {
+            s_lastLoggedScoreTime = activeSig.signalTime;
+            MqlDateTime sigDt;
+            TimeToStruct(activeSig.signalTime, sigDt);
+            int mtfAgreePctLog = (int)(rec.mtfAlignRatio * 100);
+            string mtfTrendStr = (mtfAgreePctLog > 50) ? "BULL" : (mtfAgreePctLog < -50 ? "BEAR" : "NEUTRAL");
+            double rrLog = (slDist > 0) ? tp1Dist / slDist : 0;
+            LogScoringSnapshot(
+               activeSig.signalTime, activeSig.caseNumber, activeSig.isBuySignal,
+               rec.confidence, rec.label,
+               g_currentProb.probTP1, g_currentProb.probSL, g_currentProb.totalSamples,
+               rec.ev, rrLog, mtfAgreePctLog, mtfTrendStr,
+               activeSig.angleStrength, sigDt.hour, sigDt.day_of_week,
+               g_spreadRegime.spreadRatio, g_walkForward.isRobust,
+               SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1),
+               g_currentProb.rawCountT1, g_currentProb.rawCountT2,
+               g_currentProb.countT3, g_currentProb.realPct,
+               g_currentProb.xgbProbTP1);
          }
 
          DrawInfoPanel(g_activeSignalIndex);
@@ -820,50 +767,36 @@ int OnCalculate(const int rates_total,
          bool modeChanged = (suppressDisplay != s_lastSuppressMode);
          s_lastSuppressMode = suppressDisplay;
 
-         if(!signalInvalidated)
+         if(!s_sltpDrawn || forceRedraw || modeChanged)
          {
-            if(!s_sltpDrawn || forceRedraw || modeChanged)
-            {
-               DrawSLTPLines(g_activeSignalIndex, suppressDisplay);
-               s_sltpDrawn = true;
-            }
-            if(s_zonesDrawn && g_validZoneCount > 0 &&
-               MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point)
-               s_zonesDrawn = false;
-            bool needZoneRedraw = !s_zonesDrawn
-                                   || g_activeSignalIndex != s_lastDrawSignalIdx;
-            if(!suppressDisplay && needZoneRedraw)
-            {
-               CalculateEntryZones(
-                  activeSig.isBuySignal, activeSig.barIndex,
-                  activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
-                  activeSig.atrValue, high, low, rates_total);
-               DrawZoneLines(false);
-               s_zonesDrawn = true;
-            }
-            else if(suppressDisplay && s_zonesDrawn)
-            {
-               DeleteObjectsByPrefix(PREFIX_ZONE);
-               s_zonesDrawn = false;
-            }
-            if(InpShowProbability) DrawProbabilityLabels(suppressDisplay);
+            DrawSLTPLines(g_activeSignalIndex, suppressDisplay);
+            s_sltpDrawn = true;
          }
-         else
+
+         if(s_zonesDrawn && g_validZoneCount > 0 &&
+            MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point)
+            s_zonesDrawn = false;
+         bool needZoneRedraw = !s_zonesDrawn
+                               || g_activeSignalIndex != s_lastDrawSignalIdx;
+         if(!suppressDisplay && needZoneRedraw)
          {
-            if(s_sltpDrawn)
-            {
-               DeleteObjectsByPrefix(PREFIX_LINE);
-               s_sltpDrawn = false;
-            }
-            if(s_zonesDrawn)
-            {
-               DeleteObjectsByPrefix(PREFIX_ZONE);
-               s_zonesDrawn = false;
-            }
-            DeleteObjectsByPrefix(PREFIX_PROB);
+            CalculateEntryZones(
+               activeSig.isBuySignal, activeSig.barIndex,
+               activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
+               activeSig.atrValue, high, low, rates_total);
+            DrawZoneLines(false);
+            s_zonesDrawn = true;
          }
+         else if(suppressDisplay && s_zonesDrawn)
+         {
+            DeleteObjectsByPrefix(PREFIX_ZONE);
+            s_zonesDrawn = false;
+         }
+
+         if(InpShowProbability) DrawProbabilityLabels(suppressDisplay);
          ChartRedraw();
       }
+      } // end else (g_activeSignalIndex >= 0)
    }
    else
    {

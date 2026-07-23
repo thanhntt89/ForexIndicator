@@ -62,6 +62,16 @@ void CleanupOldArrows(datetime cutoffTime)
 }
 
 //+------------------------------------------------------------------+
+void DeleteArrowForSignal(datetime barTime, bool isBuy, int caseNum)
+{
+   if(InpEAMode) return;
+   string name = PREFIX_ARROW + (isBuy ? "BUY_" : "SELL_")
+               + IntegerToString(caseNum) + "_"
+               + IntegerToString((int)barTime);
+   ObjectDelete(name);
+}
+
+//+------------------------------------------------------------------+
 void DeleteOppositeArrows(bool newSignalIsBuy)
 {
    if(InpEAMode) return;

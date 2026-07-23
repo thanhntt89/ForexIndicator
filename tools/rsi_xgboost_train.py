@@ -615,7 +615,9 @@ def build_tree_nodes(booster, tree_index: int, feature_cols: list) -> list:
 
     node_map = {}
     for _, row in tree_df.iterrows():
-        node_map[row["Node"]] = row
+        # XGBoost trees_to_dataframe() uses 'ID' for node names (e.g. '0-0', '1-1')
+        node_id = row.get("ID", row.get("Node"))
+        node_map[node_id] = row
 
     flat_nodes = []
     old_to_new = {}
@@ -654,7 +656,11 @@ def build_tree_nodes(booster, tree_index: int, feature_cols: list) -> list:
         dfs(node["No"])
         flat_nodes[new_id]["right_child"] = old_to_new[node["No"]]
 
-    dfs(0)
+    root_id = f"{tree_index}-0"
+    if root_id not in node_map:
+        # Fallback if using integer nodes
+        root_id = 0
+    dfs(root_id)
     return flat_nodes
 
 

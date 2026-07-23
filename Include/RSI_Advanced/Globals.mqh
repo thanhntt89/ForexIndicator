@@ -26,7 +26,6 @@ SignalData g_signals[];
 int        g_signalCount       = 0;
 int        g_activeSignalIndex = -1;
 bool       g_userSelectedSignal = false;  // User clicked an arrow → don't auto-override
-bool       g_autoFallbackActive = false;  // [STALE-FIX2] selection set by invalidation fallback (auto-releasable, NOT a manual pin)
 
 //+------------------------------------------------------------------+
 //| MTF data                                                           |
