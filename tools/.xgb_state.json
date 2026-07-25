@@ -1,0 +1,187 @@
+{
+  "models": {
+    "BTCUSD_D1": {
+      "trained_on_signals": 0,
+      "last_train": "2026-07-25T23:11:39.245086",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "BTCUSD_H1": {
+      "trained_on_signals": 266,
+      "last_attempt": "2026-07-25T23:11:42.394621",
+      "brier": "?",
+      "status": "fail",
+      "message": "validation failed"
+    },
+    "BTCUSD_H4": {
+      "trained_on_signals": 0,
+      "last_train": "2026-07-25T23:11:45.529924",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "BTCUSD_M30": {
+      "trained_on_signals": 57,
+      "last_train": "2026-07-25T23:11:50.759304",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "BTCUSD_M5": {
+      "trained_on_signals": 629,
+      "last_attempt": "2026-07-25T23:11:53.463078",
+      "brier": "?",
+      "status": "fail",
+      "message": "validation failed"
+    },
+    "EURUSDc_D1": {
+      "trained_on_signals": 43,
+      "last_train": "2026-07-25T23:11:57.973125",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "EURUSDc_H1": {
+      "trained_on_signals": 70,
+      "last_train": "2026-07-25T23:12:00.152498",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "EURUSDc_H4": {
+      "trained_on_signals": 99,
+      "last_train": "2026-07-25T23:12:02.327604",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "EURUSDc_M15": {
+      "trained_on_signals": 0,
+      "last_train": "2026-07-25T23:12:04.503993",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "EURUSDc_M30": {
+      "trained_on_signals": 0,
+      "last_train": "2026-07-25T23:12:06.720860",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSD_D1": {
+      "trained_on_signals": 44,
+      "last_train": "2026-07-25T23:12:13.684778",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSD_H1": {
+      "trained_on_signals": 108,
+      "last_train": "2026-07-25T23:12:15.974757",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSD_H4": {
+      "trained_on_signals": 80,
+      "last_train": "2026-07-25T23:12:18.415922",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSD_M15": {
+      "trained_on_signals": 209,
+      "last_attempt": "2026-07-25T23:12:21.176391",
+      "brier": "?",
+      "status": "fail",
+      "message": "validation failed"
+    },
+    "XAUUSD_M30": {
+      "trained_on_signals": 72,
+      "last_train": "2026-07-25T23:12:23.426736",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSD_M5": {
+      "trained_on_signals": 550,
+      "last_attempt": "2026-07-25T23:12:26.049977",
+      "brier": "?",
+      "status": "fail",
+      "message": "validation failed"
+    },
+    "XAUUSDc_D1": {
+      "trained_on_signals": 59,
+      "last_train": "2026-07-25T23:12:28.323259",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSDc_H1": {
+      "trained_on_signals": 91,
+      "last_train": "2026-07-25T23:12:30.506703",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSDc_H4": {
+      "trained_on_signals": 79,
+      "last_train": "2026-07-25T23:12:32.697417",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSDc_M15": {
+      "trained_on_signals": 129,
+      "last_train": "2026-07-25T23:12:34.874244",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSDc_M30": {
+      "trained_on_signals": 118,
+      "last_train": "2026-07-25T23:12:37.007022",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "XAUUSDc_M5": {
+      "trained_on_signals": 138,
+      "last_train": "2026-07-25T23:12:39.124535",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "BTCUSD_M15": {
+      "trained_on_signals": 91,
+      "last_train": "2026-07-25T23:11:48.421725",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "EURUSD_H4": {
+      "trained_on_signals": 0,
+      "last_train": "2026-07-25T23:11:55.791136",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "GBPUSD_H1": {
+      "trained_on_signals": 0,
+      "last_train": "2026-07-25T23:12:08.979164",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    },
+    "GBPUSD_H4": {
+      "trained_on_signals": 0,
+      "last_train": "2026-07-25T23:12:11.351642",
+      "brier": "?",
+      "auc": "?",
+      "status": "pass"
+    }
+  },
+  "last_scan": "2026-07-25T23:12:39.590280"
+}

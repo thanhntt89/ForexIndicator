@@ -13,12 +13,12 @@ $MT5TerminalIDs = @(
     "D3966AA92A61BDC959A1092A330FDFD3"  # TF Global Markets MT5
 )
 
-$IndicatorName = "RSI_Advanced"
+$IndicatorName = "QuantEdge_RSI"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path  # Thư mục gốc project
 $BuildDir = Join-Path $ProjectRoot "Build"
 $SourceFile = Join-Path $ProjectRoot "$IndicatorName.mq4"
 $SourceFile5 = Join-Path $ProjectRoot "$IndicatorName.mq5"
-$DefinesFile = Join-Path $ProjectRoot "Include\RSI_Advanced\Config.mqh"
+$DefinesFile = Join-Path $ProjectRoot "Include\QuantEdge\Config.mqh"
 $LogFile = Join-Path $BuildDir "compile.log"
 $TempLogFile = Join-Path $BuildDir "temp_compile.log"
 $TempLogFile5 = Join-Path $BuildDir "temp_compile5.log"

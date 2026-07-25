@@ -1,52 +1,67 @@
 ﻿//+------------------------------------------------------------------+
-//|                                         RSI_Advanced.mq4           |
-//|                         RSI Advanced - Main Indicator File          |
+//|                                         QuantEdge_RSI.mq5           |
+//|                         RSI Advanced - MT5 Version                 |
 //|                         Master Trading Wave Community               |
 //|                                                                    |
-//| Signal Detection: V9.00 proven logic                               |
-//| + Adaptive angle threshold (Kaufman 1995, Ehlers 2001)            |
-//| + Realistic entry price (open[i+1] / ask / bid)                   |
-//| + Signal only on closed bars                                       |
-//| + Multi-Entry Zone System (Dalton 1993, Van Tharp 1998)           |
-//| + V11: Intermarket + Session + WalkForward + Spread                |
+//| Architecture:                                                      |
+//|   MQLCompat.mqh wraps all MQL4 functions for MQL5                  |
+//|   All .mqh logic files remain unchanged                            |
+//|   This file replaces QuantEdge_RSI.mq4 for MT5 compilation          |
 //+------------------------------------------------------------------+
 #property copyright "Master Trading Wave"
 #property link      "https://mastertradingwave.com"
 #property version "10.20"
 #property strict
 #property indicator_separate_window
-#property indicator_minimum  0
-#property indicator_maximum  100
-#property indicator_buffers  11
-#property indicator_label1  "RSI Fast"
-#property indicator_type1   DRAW_LINE
-#property indicator_color1  clrLime
-#property indicator_style1  STYLE_SOLID
-#property indicator_width1  2
-#property indicator_label2  "Signal"
-#property indicator_type2   DRAW_LINE
-#property indicator_color2  clrRed
-#property indicator_style2  STYLE_SOLID
-#property indicator_width2  2
-#property indicator_label3  "BB Upper"
-#property indicator_type3   DRAW_LINE
-#property indicator_color3  clrDeepSkyBlue
-#property indicator_style3  STYLE_SOLID
-#property indicator_width3  1
-#property indicator_label4  "BB Lower"
-#property indicator_type4   DRAW_LINE
-#property indicator_color4  clrDeepSkyBlue
-#property indicator_style4  STYLE_SOLID
-#property indicator_width4  1
-#property indicator_label5  "Baseline"
-#property indicator_type5   DRAW_LINE
-#property indicator_color5  clrOrange
-#property indicator_style5  STYLE_SOLID
-#property indicator_width5  2
-#property indicator_label6  "BuySignal"
-#property indicator_type6   DRAW_NONE
-#property indicator_label7  "SellSignal"
-#property indicator_type7   DRAW_NONE
+#property indicator_minimum    0
+#property indicator_maximum    100
+#property indicator_buffers    7
+#property indicator_plots      7
+
+//--- Plot 1: RSI Fast (Green)
+#property indicator_label1     "RSI Fast"
+#property indicator_type1      DRAW_LINE
+#property indicator_color1     clrLime
+#property indicator_style1     STYLE_SOLID
+#property indicator_width1     2
+
+//--- Plot 2: Signal (Red)
+#property indicator_label2     "Signal"
+#property indicator_type2      DRAW_LINE
+#property indicator_color2     clrRed
+#property indicator_style2     STYLE_SOLID
+#property indicator_width2     2
+
+//--- Plot 3: BB Upper
+#property indicator_label3     "BB Upper"
+#property indicator_type3      DRAW_LINE
+#property indicator_color3     clrDeepSkyBlue
+#property indicator_style3     STYLE_SOLID
+#property indicator_width3     1
+
+//--- Plot 4: BB Lower
+#property indicator_label4     "BB Lower"
+#property indicator_type4      DRAW_LINE
+#property indicator_color4     clrDeepSkyBlue
+#property indicator_style4     STYLE_SOLID
+#property indicator_width4     1
+
+//--- Plot 5: Baseline (Orange)
+#property indicator_label5     "Baseline"
+#property indicator_type5      DRAW_LINE
+#property indicator_color5     clrOrange
+#property indicator_style5     STYLE_SOLID
+#property indicator_width5     2
+
+//--- Plot 6: BuySignal (hidden data buffer)
+#property indicator_label6     "BuySignal"
+#property indicator_type6      DRAW_NONE
+
+//--- Plot 7: SellSignal (hidden data buffer)
+#property indicator_label7     "SellSignal"
+#property indicator_type7      DRAW_NONE
+
+//--- Level lines
 #property indicator_level1     20
 #property indicator_level2     32
 #property indicator_level3     50
@@ -55,6 +70,7 @@
 #property indicator_levelcolor clrGray
 #property indicator_levelstyle STYLE_DOT
 #property indicator_levelwidth 1
+
 //--- Buffers
 double BufferGreen[];
 double BufferRed[];
@@ -63,35 +79,33 @@ double BufferBBLower[];
 double BufferOrange[];
 double BufferBuySignal[];
 double BufferSellSignal[];
-//--- SLTP output buffers (readable by EA via iCustom)
-double BufferEntry[];  // 7: entry price at signal bar
-double BufferSL[];     // 8: stop loss price
-double BufferTP1[];    // 9: take profit 1 price
-double BufferTP2[];    // 10: take profit 2 price
-//--- Includes
-#include <RSI_Advanced/Config.mqh>
-#include <RSI_Advanced/Structs.mqh>
-#include <RSI_Advanced/Globals.mqh>
-#include <RSI_Advanced/MathUtils.mqh>
-#include <RSI_Advanced/Normalize.mqh>
-#include <RSI_Advanced/CandleNormalize.mqh>
-#include <RSI_Advanced/RSICore.mqh>
-#include <RSI_Advanced/SwingDetection.mqh>
-#include <RSI_Advanced/SignalCases.mqh>
-#include <RSI_Advanced/SLTP.mqh>
-#include <RSI_Advanced/MTFEngine.mqh>
-#include <RSI_Advanced/IntermarketAnalysis.mqh>
-#include <RSI_Advanced/SessionStatistics.mqh>
-#include <RSI_Advanced/WalkForward.mqh>
-#include <RSI_Advanced/ProbabilityEngine.mqh>
-#include <RSI_Advanced/CalibrationEngine.mqh>
-#include <RSI_Advanced/XGBIntegration.mqh>
-#include <RSI_Advanced/RiskManager.mqh>
-#include <RSI_Advanced/ArrowManager.mqh>
-#include <RSI_Advanced/LineDrawing.mqh>
-#include <RSI_Advanced/PanelDrawing.mqh>
-#include <RSI_Advanced/ChartEvents.mqh>
-#include <RSI_Advanced/SignalLogger.mqh>
+
+//--- Includes: MQLCompat MUST be first (wraps MQL4 functions)
+#include <QuantEdge/MQLCompat.mqh>
+#include <QuantEdge/Config.mqh>
+#include <QuantEdge/Structs.mqh>
+#include <QuantEdge/Globals.mqh>
+#include <QuantEdge/MathUtils.mqh>
+#include <QuantEdge/Normalize.mqh>
+#include <QuantEdge/CandleNormalize.mqh>
+#include <QuantEdge/RSICore.mqh>
+#include <QuantEdge/SwingDetection.mqh>
+#include <QuantEdge/SignalCases.mqh>
+#include <QuantEdge/SLTP.mqh>
+#include <QuantEdge/MTFEngine.mqh>
+#include <QuantEdge/IntermarketAnalysis.mqh>
+#include <QuantEdge/SessionStatistics.mqh>
+#include <QuantEdge/WalkForward.mqh>
+#include <QuantEdge/ProbabilityEngine.mqh>
+#include <QuantEdge/CalibrationEngine.mqh>
+#include <QuantEdge/XGBIntegration.mqh>
+#include <QuantEdge/RiskManager.mqh>
+#include <QuantEdge/ArrowManager.mqh>
+#include <QuantEdge/LineDrawing.mqh>
+#include <QuantEdge/PanelDrawing.mqh>
+#include <QuantEdge/ChartEvents.mqh>
+#include <QuantEdge/SignalLogger.mqh>
+
 //+------------------------------------------------------------------+
 int OnInit()
 {
@@ -99,17 +113,18 @@ int OnInit()
       return(INIT_PARAMETERS_INCORRECT);
    if(InpBBDeviation <= 0 || InpSLRatio <= 0 || InpTPRatio <= 0)
       return(INIT_PARAMETERS_INCORRECT);
-   SetIndexBuffer(0, BufferGreen);
-   SetIndexBuffer(1, BufferRed);
-   SetIndexBuffer(2, BufferBBUpper);
-   SetIndexBuffer(3, BufferBBLower);
-   SetIndexBuffer(4, BufferOrange);
-   SetIndexBuffer(5, BufferBuySignal);
-   SetIndexBuffer(6, BufferSellSignal);
-   SetIndexBuffer(7, BufferEntry);
-   SetIndexBuffer(8, BufferSL);
-   SetIndexBuffer(9, BufferTP1);
-   SetIndexBuffer(10, BufferTP2);
+
+   //--- MQL5 SetIndexBuffer requires INDICATOR_DATA / INDICATOR_CALCULATIONS
+   SetIndexBuffer(0, BufferGreen,     INDICATOR_DATA);
+   SetIndexBuffer(1, BufferRed,       INDICATOR_DATA);
+   SetIndexBuffer(2, BufferBBUpper,   INDICATOR_DATA);
+   SetIndexBuffer(3, BufferBBLower,   INDICATOR_DATA);
+   SetIndexBuffer(4, BufferOrange,    INDICATOR_DATA);
+   SetIndexBuffer(5, BufferBuySignal, INDICATOR_DATA);
+   SetIndexBuffer(6, BufferSellSignal,INDICATOR_DATA);
+
+   //--- MQL5: arrays are non-series by default in indicators
+   //--- Match MQL4 behavior (non-series)
    ArraySetAsSeries(BufferGreen, false);
    ArraySetAsSeries(BufferRed, false);
    ArraySetAsSeries(BufferBBUpper, false);
@@ -117,24 +132,19 @@ int OnInit()
    ArraySetAsSeries(BufferOrange, false);
    ArraySetAsSeries(BufferBuySignal, false);
    ArraySetAsSeries(BufferSellSignal, false);
-   ArraySetAsSeries(BufferEntry, false);
-   ArraySetAsSeries(BufferSL, false);
-   ArraySetAsSeries(BufferTP1, false);
-   ArraySetAsSeries(BufferTP2, false);
+
    int mb = GetMinBarsRequired();
-   for(int i = 0; i < 11; i++)
+   for(int i = 0; i < 7; i++)
    {
       SetIndexEmptyValue(i, EMPTY_VALUE);
       SetIndexDrawBegin(i, mb);
    }
-   SetIndexStyle(7,  DRAW_NONE);
-   SetIndexStyle(8,  DRAW_NONE);
-   SetIndexStyle(9,  DRAW_NONE);
-   SetIndexStyle(10, DRAW_NONE);
+
    IndicatorShortName("RSI Advanced (" + IntegerToString(InpRSIPeriod) +
                       ") SL:" + DoubleToString(InpSLRatio, 1) +
                       " TP:" + DoubleToString(InpTPRatio, 1));
    IndicatorDigits(2);
+
    g_prevRatesTotal    = 0;
    g_lastAlertTime     = 0;
    g_signalCount       = 0;
@@ -142,10 +152,11 @@ int OnInit()
    g_outcomeCount      = 0;
    ArrayResize(g_signals, 0);
    ArrayResize(g_outcomes, 0);
+
    InitSessionStats();
    InitPortfolioRisk();
    LoadPanelPosition();
-   if(!InpEAMode) ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
+   ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
 
    // Apply auto TF config profile (scalping params per TF when InpAutoTFConfig=true)
@@ -173,11 +184,15 @@ int OnInit()
 
    return(INIT_SUCCEEDED);
 }
+
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   // Signals binary: always save (accumulates history across restarts).
+   SaveSignalsBinary();
    // [PERF] Session stats binary: save on RECOMPILE/PARAMETERS/CHARTCHANGE for fast warm
-   // restart. Binary paths are TF-specific so no cross-TF contamination.
+   // restart. Binary paths are TF-specific so no cross-TF contamination. fullRecalc + dedup
+   // in TrackSignalForSession refreshes any stale data. Only delete on full REMOVE/CLOSE.
    if(reason == REASON_RECOMPILE || reason == REASON_PARAMETERS ||
       reason == REASON_CHARTCHANGE)
    {
@@ -188,11 +203,13 @@ void OnDeinit(const int reason)
       FileDelete(SS_GetBinaryPath());
    }
    FlushLogQueues();
-   // [PERF] Only release indicator handles on full remove/close — not TF switch.
-   #ifdef __MQL5__
+   // [PERF] Only release indicator handles on full remove/close.
+   // CHARTCHANGE (TF switch) keeps handles alive — new TF creates its own keyed handles,
+   // old-TF handles are harmless. Releasing forces MT5 to re-create async → return(0)
+   // bouncing in OnCalculate costs hundreds of ms per bounce.
    if(reason == REASON_REMOVE || reason == REASON_CLOSE)
       ReleaseAllHandles();
-   #endif
+
    SavePanelPosition();
    DeleteObjectsByPrefix(PREFIX_ARROW);
    DeleteObjectsByPrefix(PREFIX_OSMON);
@@ -210,12 +227,14 @@ void OnDeinit(const int reason)
    g_prevRatesTotal = 0;
    ChartRedraw();
 }
+
 //+------------------------------------------------------------------+
 void OnChartEvent(const int id, const long &lparam,
                   const double &dparam, const string &sparam)
 {
    HandleChartEvent(id, lparam, dparam, sparam);
 }
+
 //+------------------------------------------------------------------+
 int OnCalculate(const int rates_total,
                 const int prev_calculated,
@@ -230,13 +249,19 @@ int OnCalculate(const int rates_total,
 {
    g_ratesTotal = rates_total;
    CheckXGBReload();
+   #ifdef __MQL5__
+   InvalidatePriceCache();  // Force refresh at start of each OnCalculate
+   #endif
+
    ArraySetAsSeries(time, false);
    ArraySetAsSeries(open, false);
    ArraySetAsSeries(high, false);
    ArraySetAsSeries(low, false);
    ArraySetAsSeries(close, false);
+
    int minBars = GetMinBarsRequired();
    if(rates_total < minBars) return(0);
+
    //--- Array management
    // fullRecalc only on first load or when history is shortened (bar indices would shift).
    // New bar added (rates_total increased) keeps cached signals — incremental path handles it.
@@ -258,7 +283,7 @@ int OnCalculate(const int rates_total,
       ArrayResize(g_signals, 0);
       LoggerInit(false);  // [PERF] do NOT wipe CSV logs on fullRecalc (was ~3s FileDelete + data loss
                           //        every TF switch). Forward-only logging below prevents dup rows.
-      // [PERF] BuildNormalizedH4Candles already called in OnInit; per-tick refresh handles updates.
+      // [PERF] BuildNormalizedH4Candles already called in OnInit; line 337 refreshes per-tick.
       MTF_InitRamBuffers();  // Rebuild MTF RAM buffers from historical iRSI data
    }
    else if(rates_total > g_prevRatesTotal)
@@ -268,11 +293,13 @@ int OnCalculate(const int rates_total,
       for(int k = oldSize; k < rates_total; k++)
          g_rawRSI[k] = EMPTY_VALUE;
       int cutoffIdx = MathMax(0, rates_total - 1 - InpMaxBars);
-      CleanupOldArrows(Time[cutoffIdx]);
+      CleanupOldArrows(time[cutoffIdx]);
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);
+
    g_prevRatesTotal = rates_total;
+
    //--- Calculation range
    int startBar;
    if(fullRecalc)
@@ -285,10 +312,6 @@ int OnCalculate(const int rates_total,
       ArrayInitialize(BufferOrange, EMPTY_VALUE);
       ArrayInitialize(BufferBuySignal, EMPTY_VALUE);
       ArrayInitialize(BufferSellSignal, EMPTY_VALUE);
-      ArrayInitialize(BufferEntry, EMPTY_VALUE);
-      ArrayInitialize(BufferSL, EMPTY_VALUE);
-      ArrayInitialize(BufferTP1, EMPTY_VALUE);
-      ArrayInitialize(BufferTP2, EMPTY_VALUE);
    }
    else
    {
@@ -297,10 +320,39 @@ int OnCalculate(const int rates_total,
       startBar = MathMax(InpRSIPeriod, prev_calculated - 1 - lb);
       startBar = MathMax(startBar, rates_total - InpMaxBars);
    }
+
+   //--- MT5: Ensure indicator handles are ready before calculation
+   if(fullRecalc)
+   {
+      InvalidatePriceCache();
+      int barsNeeded = rates_total - startBar;
+      string rsiKey = "RSI_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
+                      IntegerToString(InpRSIPeriod) + "_" + IntegerToString((int)InpPrice);
+      int rsiHandle = GetCachedIndicatorHandle(rsiKey, 2, _Symbol, _Period, InpRSIPeriod, (int)InpPrice);
+      if(rsiHandle != INVALID_HANDLE)
+      {
+         int barsCalc = BarsCalculated(rsiHandle);
+         if(barsCalc < barsNeeded)
+            return(0);
+      }
+      // ATR must also be ready — without it, SL/TP = 0 and all simulations fail.
+      string atrKey = "ATR_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
+                      IntegerToString(InpATRPeriod);
+      int atrHandle = GetCachedIndicatorHandle(atrKey, 1, _Symbol, _Period, InpATRPeriod);
+      if(atrHandle != INVALID_HANDLE)
+      {
+         int atrCalc = BarsCalculated(atrHandle);
+         if(atrCalc < barsNeeded)
+            return(0);
+      }
+   }
    // [GMT-FIX-B3] Refresh normalized H4 candles (internal cache guard skips if no new H1 bar)
    if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
 
    // [GMT-FIX-B3b] Force full recalc when normalization becomes ready.
+   // On MT5, H1 data loads async — first fullRecalc uses native iRSI (wrong GMT).
+   // When normalized RSI becomes available later, only recent bars get updated.
+   // Fix: return(0) to force prev_calculated=0 on next tick → full RSI + MTF redraw.
    if((g_gmtNormActive || g_gmtMTFNormNeeded) && g_normRSICount > 0 && !g_normRecalcDone)
    {
       g_normRecalcDone = true;
@@ -309,15 +361,18 @@ int OnCalculate(const int rates_total,
 
    //--- Calculate RSI lines
    CalculateRSILines(startBar, rates_total);
+
    //--- Signal detection range
    int sigStart = MathMax(startBar, InpRSIPeriod + InpBBPeriod + 2);
    sigStart = MathMax(sigStart, InpRSIPeriod + InpSignalMAPeriod + 2);
+
    if(!fullRecalc)
    {
       while(g_signalCount > 0 && g_signals[g_signalCount-1].barIndex >= rates_total - 1)
          g_signalCount--;
       ArrayResize(g_signals, g_signalCount);
    }
+
    //=================================================================
    // SIGNAL DETECTION
    //=================================================================
@@ -329,10 +384,6 @@ int OnCalculate(const int rates_total,
    {
       BufferBuySignal[i]  = EMPTY_VALUE;
       BufferSellSignal[i] = EMPTY_VALUE;
-      BufferEntry[i]      = EMPTY_VALUE;
-      BufferSL[i]         = EMPTY_VALUE;
-      BufferTP1[i]        = EMPTY_VALUE;
-      BufferTP2[i]        = EMPTY_VALUE;
       if(_storedIdx < g_signalCount && g_signals[_storedIdx].barIndex == i)
       {
          while(_storedIdx < g_signalCount && g_signals[_storedIdx].barIndex == i)
@@ -341,24 +392,24 @@ int OnCalculate(const int rates_total,
                BufferBuySignal[i] = (double)g_signals[_storedIdx].caseNumber;
             else
                BufferSellSignal[i] = (double)g_signals[_storedIdx].caseNumber;
-            BufferEntry[i] = g_signals[_storedIdx].entryPrice;
-            BufferSL[i]    = g_signals[_storedIdx].stopLoss;
-            BufferTP1[i]   = g_signals[_storedIdx].takeProfit1;
-            BufferTP2[i]   = g_signals[_storedIdx].takeProfit2;
             _storedIdx++;
          }
          continue;
       }
       bool isCurrentBar = (i == rates_total - 1);
+
       if(BufferGreen[i]   == EMPTY_VALUE || BufferGreen[i-1]  == EMPTY_VALUE) continue;
       if(BufferRed[i]     == EMPTY_VALUE || BufferRed[i-1]    == EMPTY_VALUE) continue;
       if(BufferOrange[i]  == EMPTY_VALUE) continue;
       if(BufferBBUpper[i] == EMPTY_VALUE || BufferBBLower[i]  == EMPTY_VALUE) continue;
+
       bool greenCrossUp   = (BufferGreen[i-1] <= BufferRed[i-1]) && (BufferGreen[i] > BufferRed[i]);
       bool greenCrossDown = (BufferGreen[i-1] >= BufferRed[i-1]) && (BufferGreen[i] < BufferRed[i]);
+
       double greenDelta = 0.0;
       if(i >= 2 && BufferGreen[i-2] != EMPTY_VALUE)
          greenDelta = BufferGreen[i] - BufferGreen[i-2];
+
       double adaptiveThresh = GetNormalizedAngleThreshold(i, BufferGreen);
       bool strongAngleUp    = (greenDelta >= adaptiveThresh);
       bool strongAngleDown  = (greenDelta <= -adaptiveThresh);
@@ -464,6 +515,7 @@ int OnCalculate(const int rates_total,
          }
          continue;
       }
+
       if(buySignal > 0)
       {
          // [STALE-FIX] Always store/display the signal so the panel reflects the
@@ -494,10 +546,6 @@ int OnCalculate(const int rates_total,
             slDist = MathAbs(entryPrice - sl);
             if(slDist < minSLDist) { sl = entryPrice - minSLDist; slDist = minSLDist; }
          }
-         BufferEntry[i] = entryPrice;
-         BufferSL[i]    = sl;
-         BufferTP1[i]   = tp1;
-         BufferTP2[i]   = tp2;
          double angleZ = CalculateAngleStrength(i);
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -505,11 +553,12 @@ int OnCalculate(const int rates_total,
                      curSpread, sigSessBlock, BufferGreen[i]);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1, (i >= rates_total - 2));
          if(i >= rates_total - 2 && !_buyBlocked) OnNewSignalAccepted();
-         //--- Log signal + pending ONLY for the just-closed bar (forward-only). Re-logging every
-         //--- historical signal on each fullRecalc is what forced the slow CSV wipe in LoggerInit.
+         // [PERF] Log signal + pending ONLY for the just-closed bar (forward-only). Re-logging
+         // every historical signal on each fullRecalc is what forced the slow CSV wipe in
+         // LoggerInit(true); logging once (when the bar closes) removes both cost and dup rows.
          if(i >= rates_total - 2)
          {
-            int   _bs        = rates_total - 1 - i;
+            int    _bs        = rates_total - 1 - i;
             double _atrRatio  = SL_GetATRRatio(_bs);
             double _spreadPips= SL_GetSpreadPips();
             int    _d1Trend   = SL_GetMTFTrendForTF(TF_D1);
@@ -549,10 +598,6 @@ int OnCalculate(const int rates_total,
             slDist = MathAbs(sl - entryPrice);
             if(slDist < minSLDist) { sl = entryPrice + minSLDist; slDist = minSLDist; }
          }
-         BufferEntry[i] = entryPrice;
-         BufferSL[i]    = sl;
-         BufferTP1[i]   = tp1;
-         BufferTP2[i]   = tp2;
          double angleZ = CalculateAngleStrength(i);
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -575,6 +620,7 @@ int OnCalculate(const int rates_total,
             LogOutcomePending(time[i], sellSignal, false);
          }
       }
+
       //--- Alert on newly closed bar
       if(i == rates_total - 2 && (buySignal > 0 || sellSignal > 0))
       {
@@ -593,10 +639,12 @@ int OnCalculate(const int rates_total,
          }
       }
    }
+
+   // After fullRecalc scan: load old signals from binary and merge.
+   // These signals predate the current InpMaxBars window and give Tier 1/2
+   // access to historical data without rescanning the entire price history.
    if(fullRecalc)
-   {
-      FlushLogQueues(); // Bulk flush all historical log rows to CSV
-   }
+      LoadAndMergeSignalsBinary();
 
    //=================================================================
    // V11: Update multi-source data
@@ -604,35 +652,38 @@ int OnCalculate(const int rates_total,
    static datetime s_lastBarTime = 0;
    datetime currentBarTime = iTime(NULL, 0, 0);
    bool isNewBar = (currentBarTime != s_lastBarTime);
+
    // Lightweight: every tick
    RefreshIntermarketData();
    CheckPendingOutcomes();
-   CheckAndLogNewlyResolved(); // Log resolved outcomes to CSV
+   CheckAndLogNewlyResolved();
 
    // Heavy: only per new bar
    if(isNewBar)
    {
       UpdateSpreadRegime();
       s_lastBarTime = currentBarTime;
-      FlushLogQueues(); // Flush any live-queued signals/outcomes to CSV
+      FlushLogQueues();
       UpdateSessionStats();
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
       UpdateBrierMetrics();
       UpdateXGBBrierMetrics();
       UpdatePortfolioRisk();
+
       // Memory management: cap outcomes at 500
       if(g_outcomeCount > 500)
       {
          int removeCount = g_outcomeCount - 500;
-         for(int i = 0; i < 500; i++)
-            g_outcomes[i] = g_outcomes[i + removeCount];
+         for(int i2 = 0; i2 < 500; i2++)
+            g_outcomes[i2] = g_outcomes[i2 + removeCount];
          g_outcomeCount = 500;
          ArrayResize(g_outcomes, 500);
       }
    }
+
    //=================================================================
-   // UPDATE DISPLAY (throttled — ported from MQ5)
+   // UPDATE DISPLAY
    //=================================================================
    if(g_signalCount > 0)
    {
@@ -647,6 +698,9 @@ int OnCalculate(const int rates_total,
       static int s_prevSignalCount = 0;
       static datetime s_prevNewestTime = 0;
       datetime newestTime = (g_signalCount > 0) ? g_signals[g_signalCount-1].signalTime : 0;
+      // [STALE-FIX2] Release any override when a genuinely NEWER signal exists.
+      // Count alone is masked by the per-tick prune+re-detect (g_signalCount stays
+      // constant across ticks); the newest signalTime advancing is NOT masked.
       if((g_signalCount > s_prevSignalCount && s_prevSignalCount > 0) ||
          (newestTime > s_prevNewestTime && s_prevNewestTime > 0))
       {
@@ -671,13 +725,18 @@ int OnCalculate(const int rates_total,
       }
       SignalData activeSig = g_signals[g_activeSignalIndex];
 
+      //--- Throttle: only redraw display at controlled intervals
+
       uint currentTick = GetTickCount();
       bool forceRedraw = false;
-      if(g_activeSignalIndex != s_lastDrawSignalIdx) forceRedraw = true;
-      if(isNewBar) forceRedraw = true;
-      double priceDelta = MathAbs(curPrice - s_lastDrawPrice);
-      if(activeSig.atrValue > 0 && priceDelta > activeSig.atrValue * 0.1) forceRedraw = true;
 
+      if(g_activeSignalIndex != s_lastDrawSignalIdx)
+         forceRedraw = true;
+      if(isNewBar)
+         forceRedraw = true;
+      double priceDelta = MathAbs(curPrice - s_lastDrawPrice);
+      if(activeSig.atrValue > 0 && priceDelta > activeSig.atrValue * 0.1)
+         forceRedraw = true;
       if(!forceRedraw && (currentTick - s_lastDrawTick) < 200)
       {
          // Skip redraw this tick
@@ -779,9 +838,6 @@ int OnCalculate(const int rates_total,
          DeleteObjectsByPrefix(PREFIX_EXPLAIN);
    }
 
-   // Flush scoring queue immediately — LogScoringSnapshot() runs after both new-bar
-   // and fullRecalc FlushLogQueues() calls, so scoring rows would otherwise wait
-   // until the next bar. Scoring is at most 1 row per signal so disk cost is minimal.
    if(s_scoringQueueCount > 0) FlushLogQueues();
 
    return(rates_total);
