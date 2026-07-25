@@ -72,7 +72,6 @@ void CreateProbLabel(string name, string text, double price, color clr, datetime
 // dimMode=true: AVOID/WAIT — draw only entry line in dim color, hide SL/TP lines
 void DrawSLTPLines(int sigIdx, bool dimMode = false)
 {
-   DeleteObjectsByPrefix(PREFIX_ZONE);
    if(!InpShowSLTPLines || sigIdx < 0 || sigIdx >= g_signalCount) return;
    SignalData sig = g_signals[sigIdx];
 

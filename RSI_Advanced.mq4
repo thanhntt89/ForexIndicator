@@ -657,39 +657,13 @@ int OnCalculate(const int rates_total,
 
       double curPrice = iClose(NULL, 0, 0);
 
-      // Find the most recent signal that is NOT SL-invalidated.
       if(!g_userSelectedSignal)
-      {
-         g_activeSignalIndex = -1;
-         for(int si = g_signalCount - 1; si >= 0; si--)
-         {
-            bool slHit = (g_signals[si].isBuySignal && curPrice <= g_signals[si].stopLoss) ||
-                         (!g_signals[si].isBuySignal && curPrice >= g_signals[si].stopLoss);
-            if(!slHit) { g_activeSignalIndex = si; break; }
-         }
-      }
+         g_activeSignalIndex = g_signalCount - 1;
       else if(g_activeSignalIndex < 0 || g_activeSignalIndex >= g_signalCount)
       {
          g_activeSignalIndex = g_signalCount - 1;
          g_userSelectedSignal = false;
       }
-
-      // All signals SL-hit → show Monitoring
-      if(g_activeSignalIndex < 0)
-      {
-         DeleteObjectsByPrefix(PREFIX_LINE);
-         DeleteObjectsByPrefix(PREFIX_PROB);
-         DeleteObjectsByPrefix(PREFIX_ZONE);
-         if(InpShowMTF) RefreshMTFData();
-         DrawInfoPanel(-1);
-         if(InpShowProbExplain) DeleteObjectsByPrefix(PREFIX_EXPLAIN);
-         s_lastDrawSignalIdx = -1;
-         s_sltpDrawn = false;
-         s_zonesDrawn = false;
-         ChartRedraw();
-      }
-      else
-      {
       if(g_activeSignalIndex != s_lastDrawSignalIdx)
       {
          s_zonesDrawn = false;
@@ -796,7 +770,6 @@ int OnCalculate(const int rates_total,
          if(InpShowProbability) DrawProbabilityLabels(suppressDisplay);
          ChartRedraw();
       }
-      } // end else (g_activeSignalIndex >= 0)
    }
    else
    {
