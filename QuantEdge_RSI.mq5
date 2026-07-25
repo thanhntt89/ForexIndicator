@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                         QuantEdge_RSI.mq5           |
 //|                         RSI Advanced - MT5 Version                 |
 //|                         Master Trading Wave Community               |
@@ -140,7 +140,7 @@ int OnInit()
       SetIndexDrawBegin(i, mb);
    }
 
-   IndicatorShortName("RSI Advanced (" + IntegerToString(InpRSIPeriod) +
+   IndicatorShortName("QuantEdge (" + IntegerToString(InpRSIPeriod) +
                       ") SL:" + DoubleToString(InpSLRatio, 1) +
                       " TP:" + DoubleToString(InpTPRatio, 1));
    IndicatorDigits(2);
@@ -627,7 +627,7 @@ int OnCalculate(const int rates_total,
          if(time[i] != g_lastAlertTime)
          {
             g_lastAlertTime = time[i];
-            string alertMsg = Symbol() + " " + GetTimeframeString() + " RSI Advanced: ";
+            string alertMsg = Symbol() + " " + GetTimeframeString() + " QuantEdge: ";
             if(buySignal > 0)
                alertMsg += "BUY Case " + IntegerToString(buySignal) +
                            " (" + GetCaseName(buySignal) + ")";

@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                         QuantEdge_RSI.mq4           |
 //|                         RSI Advanced - Main Indicator File          |
 //|                         Master Trading Wave Community               |
@@ -131,7 +131,7 @@ int OnInit()
    SetIndexStyle(8,  DRAW_NONE);
    SetIndexStyle(9,  DRAW_NONE);
    SetIndexStyle(10, DRAW_NONE);
-   IndicatorShortName("RSI Advanced (" + IntegerToString(InpRSIPeriod) +
+   IndicatorShortName("QuantEdge (" + IntegerToString(InpRSIPeriod) +
                       ") SL:" + DoubleToString(InpSLRatio, 1) +
                       " TP:" + DoubleToString(InpTPRatio, 1));
    IndicatorDigits(2);
@@ -581,7 +581,7 @@ int OnCalculate(const int rates_total,
          if(time[i] != g_lastAlertTime)
          {
             g_lastAlertTime = time[i];
-            string alertMsg = Symbol() + " " + GetTimeframeString() + " RSI Advanced: ";
+            string alertMsg = Symbol() + " " + GetTimeframeString() + " QuantEdge: ";
             if(buySignal > 0)
                alertMsg += "BUY Case " + IntegerToString(buySignal) +
                            " (" + GetCaseName(buySignal) + ")";
