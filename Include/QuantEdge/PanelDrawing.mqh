@@ -1,4 +1,4 @@
-﻿//+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
 //|                                            PanelDrawing.mqh       |
 //|                         RSI Advanced - Info Panel Drawing         |
 //+------------------------------------------------------------------+
@@ -109,7 +109,7 @@ void DrawInfoPanel(int signalIndex)
       CreateRectangleLabel(PREFIX_PANEL+"0_TB", px, py, pw, titleBarH, InpPanelBorderColor, InpPanelBorderColor);
       int cy = py + 3;
       CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy,
-         "RSI Advanced - Monitoring", InpPanelTitleColor, fs+1, true);
+         "QuantEdge - Monitoring", InpPanelTitleColor, fs+1, true);
       cy += titleBarH + 2 - 3;
       CreateTextLabel(PREFIX_PANEL+"2_SYM", px+pad, cy,
          GetCleanSymbolName()+" | "+GetTimeframeString()+" | No active signal",
@@ -421,7 +421,7 @@ void DrawInfoPanel(int signalIndex)
    // ============================================
    int cy = py + 3;
    //--- TITLE ---
-   string titleText = "RSI Advanced - " + dir;
+   string titleText = "QuantEdge - " + dir;
    color titleClr = InpPanelTitleColor;
    if(isInvalidated)
    {
