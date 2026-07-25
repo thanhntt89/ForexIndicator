@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                            PanelDrawing.mqh       |
-//|                         RSI Advanced - Info Panel Drawing         |
+//|                         QuantEdge - Info Panel Drawing         |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_PANELDRAWING_MQH
 #define RSI_ADV_PANELDRAWING_MQH

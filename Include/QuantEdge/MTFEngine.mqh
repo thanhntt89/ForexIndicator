@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                               MTFEngine.mqh        |
-//|                         RSI Advanced - Multi-Timeframe Engine       |
+//|                         QuantEdge - Multi-Timeframe Engine       |
 //|                                                                    |
 //| Architecture: RAM buffer system                                    |
 //|   g_mtfRamGreen/Red/Orange[slot][barIdx]  — 250 bars per TF       |

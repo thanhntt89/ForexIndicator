@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                        ProbabilityEngine.mqh       |
-//|                         RSI Advanced - Probability Calculation      |
+//|                         QuantEdge - Probability Calculation      |
 //+------------------------------------------------------------------+
 //|                                                                    |
 //| PROBABILITY CALCULATION PIPELINE                                   |

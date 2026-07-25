@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                            SwingDetection.mqh      |
-//|                         RSI Advanced - Swing High/Low Detection     |
+//|                         QuantEdge - Swing High/Low Detection     |
 //|                                                                    |
 //| Theory: Fractal Market Hypothesis (Peters, 1994)                   |
 //| - Market structure is fractal = same pattern at all scales         |

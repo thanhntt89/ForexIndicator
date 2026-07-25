@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                                    Config.mqh      |
-//|                         RSI Advanced - Configuration & Inputs      |
+//|                         QuantEdge - Configuration & Inputs      |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_CONFIG_MQH
 #define RSI_ADV_CONFIG_MQH

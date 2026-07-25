@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                        VolatilityAnalysis.mqh      |
-//|                         RSI Advanced - Volatility Structure         |
+//|                         QuantEdge - Volatility Structure         |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_VOLATILITYANALYSIS_MQH
 #define RSI_ADV_VOLATILITYANALYSIS_MQH

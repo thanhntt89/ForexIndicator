@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                         SessionStatistics.mqh      |
-//|                         RSI Advanced - Time-of-Day Win Rate         |
+//|                         QuantEdge - Time-of-Day Win Rate         |
 //|                                                                    |
 //| Theory: Andersen & Bollerslev (1998) "Intraday Periodicity"        |
 //| Market behavior differs by session                                 |

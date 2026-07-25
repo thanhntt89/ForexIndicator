@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                                     SLTP.mqh       |
-//|                         RSI Advanced - SL/TP Calculation            |
+//|                         QuantEdge - SL/TP Calculation            |
 //|                                                                    |
 //| Method 0: ATR-based (Wilder 1978 + Van Tharp 1998)                |
 //| Method 1: Fibonacci (Gaucan 2011 + Osler 2000)                    |

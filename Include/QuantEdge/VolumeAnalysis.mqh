@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                            VolumeAnalysis.mqh      |
-//|                         RSI Advanced - Volume Confirmation         |
+//|                         QuantEdge - Volume Confirmation         |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_VOLUMEANALYSIS_MQH
 #define RSI_ADV_VOLUMEANALYSIS_MQH

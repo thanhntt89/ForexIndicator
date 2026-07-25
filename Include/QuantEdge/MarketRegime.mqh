@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                            MarketRegime.mqh        |
-//|                         RSI Advanced - Market Regime Detection      |
+//|                         QuantEdge - Market Regime Detection      |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_MARKETREGIME_MQH
 #define RSI_ADV_MARKETREGIME_MQH

@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                              WalkForward.mqh       |
-//|                         RSI Advanced - Walk-Forward Validation      |
+//|                         QuantEdge - Walk-Forward Validation      |
 //|                                                                    |
 //| Theory: Pardo (2008) "Evaluation and Optimization of Trading       |
 //|         Strategies"                                                |

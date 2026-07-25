@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                              SignalCases.mqh       |
-//|                         RSI Advanced - 7 Case Detection Functions  |
+//|                         QuantEdge - 7 Case Detection Functions  |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_SIGNALCASES_MQH
 #define RSI_ADV_SIGNALCASES_MQH

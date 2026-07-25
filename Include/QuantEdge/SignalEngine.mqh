@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                            SignalEngine.mqh        |
-//|                         RSI Advanced - Composite Signal Scoring     |
+//|                         QuantEdge - Composite Signal Scoring     |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_SIGNALENGINE_MQH
 #define RSI_ADV_SIGNALENGINE_MQH

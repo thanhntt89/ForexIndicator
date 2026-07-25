@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                            ChartEvents.mqh         |
-//|                         RSI Advanced - Chart Event Handling         |
+//|                         QuantEdge - Chart Event Handling         |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_CHARTEVENTS_MQH
 #define RSI_ADV_CHARTEVENTS_MQH

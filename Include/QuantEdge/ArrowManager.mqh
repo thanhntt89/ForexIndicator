@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                            ArrowManager.mqh        |
-//|                         RSI Advanced - Arrow Object Management     |
+//|                         QuantEdge - Arrow Object Management     |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_ARROWMANAGER_MQH
 #define RSI_ADV_ARROWMANAGER_MQH

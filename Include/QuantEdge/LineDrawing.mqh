@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                             LineDrawing.mqh        |
-//|                         RSI Advanced - SL/TP Lines & Labels        |
+//|                         QuantEdge - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_LINEDRAWING_MQH
 #define RSI_ADV_LINEDRAWING_MQH

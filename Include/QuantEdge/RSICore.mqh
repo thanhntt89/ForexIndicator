@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                                   RSICore.mqh      |
-//|                         RSI Advanced - Core RSI Line Calculation    |
+//|                         QuantEdge - Core RSI Line Calculation    |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_RSICORE_MQH
 #define RSI_ADV_RSICORE_MQH

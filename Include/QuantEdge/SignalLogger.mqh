@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                            SignalLogger.mqh        |
-//|                         RSI Advanced - Signal Logging to CSV       |
+//|                         QuantEdge - Signal Logging to CSV       |
 //|                                                                    |
 //| Ghi 3 file CSV comma-separated vào MQL4/Files/<InpLogFolder>/:      |
 //|   signals_SYMBOL_TF_YYYY.csv  — 1 dòng mỗi tín hiệu mới          |

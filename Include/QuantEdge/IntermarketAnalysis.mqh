@@ -1,6 +1,6 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                       IntermarketAnalysis.mqh      |
-//|                         RSI Advanced - Intermarket Correlation      |
+//|                         QuantEdge - Intermarket Correlation      |
 //|                                                                    |
 //| Theory: Murphy (1991) "Intermarket Technical Analysis"             |
 //| Gold inverse correlation with USD: -0.85                           |

@@ -1,6 +1,6 @@
 ﻿//+------------------------------------------------------------------+
 //|                                                 MathUtils.mqh      |
-//|                         RSI Advanced - Math Helper Functions        |
+//|                         QuantEdge - Math Helper Functions        |
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_MATHUTILS_MQH
 #define RSI_ADV_MATHUTILS_MQH
