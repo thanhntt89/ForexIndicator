@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //|                                         QuantEdge_RSI.mq5           |
-//|                         RSI Advanced - MT5 Version                 |
+//|                         QuantEdge_RSI - MT5 Version                 |
 //|                         Master Trading Wave Community               |
 //|                                                                    |
 //| Architecture:                                                      |
@@ -8,6 +8,14 @@
 //|   All .mqh logic files remain unchanged                            |
 //|   This file replaces QuantEdge_RSI.mq4 for MT5 compilation          |
 //+------------------------------------------------------------------+
+#property description "QuantEdge RSI Signal Engine"
+#property description " "
+#property description "Signal Detection: V9.00 proven logic"
+#property description "+ Adaptive angle threshold (Kaufman 1995, Ehlers 2001)"
+#property description "+ Realistic entry price (open[i+1] / ask / bid)"
+#property description "+ Signal only on closed bars"
+#property description "+ Multi-Entry Zone System (Dalton 1993, Van Tharp 1998)"
+#property description "+ V11: Intermarket + Session + WalkForward + Spread"
 #property copyright "Master Trading Wave"
 #property link      "https://mastertradingwave.com"
 #property version "10.20"
@@ -351,7 +359,7 @@ int OnCalculate(const int rates_total,
 
    // [GMT-FIX-B3b] Force full recalc when normalization becomes ready.
    // On MT5, H1 data loads async — first fullRecalc uses native iRSI (wrong GMT).
-   // When normalized RSI becomes available later, only recent bars get updated.
+   // Check buffer directly.
    // Fix: return(0) to force prev_calculated=0 on next tick → full RSI + MTF redraw.
    if((g_gmtNormActive || g_gmtMTFNormNeeded) && g_normRSICount > 0 && !g_normRecalcDone)
    {

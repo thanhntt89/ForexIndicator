@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //|                                         QuantEdge_RSI.mq4           |
-//|                         RSI Advanced - Main Indicator File          |
+//|                         QuantEdge_RSI - Main Indicator File         |
 //|                         Master Trading Wave Community               |
 //|                                                                    |
 //| Signal Detection: V9.00 proven logic                               |
@@ -10,7 +10,15 @@
 //| + Multi-Entry Zone System (Dalton 1993, Van Tharp 1998)           |
 //| + V11: Intermarket + Session + WalkForward + Spread                |
 //+------------------------------------------------------------------+
-#property copyright "Master Trading Wave"
+#property description "QuantEdge RSI Signal Engine"
+#property description " "
+#property description "Signal Detection: V9.00 proven logic"
+#property description "+ Adaptive angle threshold (Kaufman 1995, Ehlers 2001)"
+#property description "+ Realistic entry price (open[i+1] / ask / bid)"
+#property description "+ Signal only on closed bars"
+#property description "+ Multi-Entry Zone System (Dalton 1993, Van Tharp 1998)"
+#property description "+ V11: Intermarket + Session + WalkForward + Spread"
+#property copyright "Jimmii"
 #property link      "https://mastertradingwave.com"
 #property version "10.20"
 #property strict
