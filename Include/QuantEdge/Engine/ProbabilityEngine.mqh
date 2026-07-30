@@ -585,10 +585,10 @@ void ScanHistoricalATRBased(const SignalData &curSig,
 
       double ep = iClose(NULL, 0, bs);
       double s1, t1, t2, t3;
-      double sd = atr * InpSLRatio;
-      double td1 = atr * InpTPRatio;
-      double td2 = td1 * InpTP2Multiplier;
-      double td3 = td1 * InpTP3Multiplier;
+      double sd  = atr * GetDynamicSLRatio();
+      double td1 = atr * GetDynamicTP1Ratio();
+      double td2 = atr * GetDynamicTP2Ratio();
+      double td3 = atr * GetDynamicTP3Ratio();
 
       if(curSig.isBuySignal) { s1=ep-sd; t1=ep+td1; t2=ep+td2; t3=ep+td3; }
       else                   { s1=ep+sd; t1=ep-td1; t2=ep-td2; t3=ep-td3; }

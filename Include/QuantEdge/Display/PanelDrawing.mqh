@@ -534,12 +534,14 @@ void DrawInfoPanel(int signalIndex)
    }
    cy += 3;
    //--- ATR + SL:TP ---
+   string sltpMode = (InpSLTPMode == 0) ? "[DYN]" : "[FIX]";
    CreateTextLabel(PREFIX_PANEL+"5_A", px+pad, cy,
       "ATR:"+DoubleToString(sig.atrValue,_Digits)+
-      " | SL:"+DoubleToString(InpSLRatio,1)+
-      " TP:"+DoubleToString(InpTPRatio,1)+"/"+
-      DoubleToString(InpTPRatio*InpTP2Multiplier,1)+"/"+
-      DoubleToString(InpTPRatio*InpTP3Multiplier,1),
+      " "+sltpMode+
+      " SL:"+DoubleToString(GetDynamicSLRatio(),1)+
+      " TP:"+DoubleToString(GetDynamicTP1Ratio(),1)+"/"+
+      DoubleToString(GetDynamicTP2Ratio(),1)+"/"+
+      DoubleToString(GetDynamicTP3Ratio(),1),
       InpPanelDimColor, fs-2, false);
    cy += lh;
    //--- P/L + R:R ---

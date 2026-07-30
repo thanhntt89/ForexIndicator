@@ -118,6 +118,7 @@ input color  InpSellArrowColor= clrRed;    // Sell arrow color
 //+------------------------------------------------------------------+
 input string inp_grp_sltp       = "========== SL/TP Config =========="; // ---
 input ENUM_SLTP_METHOD InpSLTPMethod = SLTP_HYBRID;  // SL/TP Method
+input int    InpSLTPMode        = 0;            // SL/TP Mode: 0=Dynamic 1=Fixed
 input bool   InpShowSLTPLines   = true;         // Show SL/TP lines
 input bool   InpShowEntryLine   = true;         // Show Entry line
 input int    InpATRPeriod       = 14;           // ATR Period

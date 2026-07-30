@@ -557,6 +557,123 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
    }
 }
 
+//+------------------------------------------------------------------+
+//| Measure optimal SL ratio from MAE of resolved outcomes             |
+//| Uses g_outcomes[].mae / matched signal ATR → percentile 80th      |
+//| Fallback to GetActiveSLRatio() when < 15 resolved outcomes        |
+//+------------------------------------------------------------------+
+double MeasureOptimalSLRatio(bool isBuy, int caseNum = 0)
+{
+   static int    s_slCachedCount = -1;
+   static double s_slCache[20];
+   static bool   s_slValid[20];
+
+   if(s_slCachedCount != g_outcomeCount)
+   {
+      for(int c = 0; c < 20; c++) s_slValid[c] = false;
+      s_slCachedCount = g_outcomeCount;
+   }
+   int slot = (caseNum >= 0 && caseNum <= 9) ? (caseNum * 2 + (isBuy ? 1 : 0)) : -1;
+   if(slot >= 0 && s_slValid[slot])
+      return s_slCache[slot];
+
+   double maeRatios[];
+   int count = 0;
+
+   for(int i = 0; i < g_outcomeCount; i++)
+   {
+      if(g_outcomes[i].outcome == 0) continue;
+      if(g_outcomes[i].isBuy != isBuy) continue;
+      if(g_outcomes[i].mae <= 0) continue;
+
+      double sigATR = 0;
+      for(int s = 0; s < g_signalCount; s++)
+      {
+         if(g_signals[s].signalTime == g_outcomes[i].signalTime &&
+            g_signals[s].caseNumber == g_outcomes[i].caseNumber &&
+            g_signals[s].isBuySignal == g_outcomes[i].isBuy)
+         {
+            sigATR = g_signals[s].atrValue;
+            break;
+         }
+      }
+      if(sigATR <= 0) continue;
+
+      if(caseNum > 0 && g_outcomes[i].caseNumber != caseNum) continue;
+
+      count++;
+      ArrayResize(maeRatios, count, 32);
+      maeRatios[count - 1] = g_outcomes[i].mae / sigATR;
+   }
+
+   double result = GetActiveSLRatio();
+   if(count >= 15)
+   {
+      ArraySort(maeRatios);
+      int p80 = MathMax(0, MathMin((int)(count * 0.80), count - 1));
+      result = maeRatios[p80];
+      result = MathMax(result, 0.5);
+      result = MathMin(result, 5.0);
+   }
+
+   if(slot >= 0)
+   {
+      s_slCache[slot] = result;
+      s_slValid[slot] = true;
+   }
+   return result;
+}
+
+//+------------------------------------------------------------------+
+//| Dynamic SL/TP getter functions                                     |
+//| Dynamic mode: return measured ratios from outcome history          |
+//| Fixed mode: return parametric values from user inputs              |
+//+------------------------------------------------------------------+
+static double s_dynSL = 0, s_dynTP1 = 0, s_dynTP2 = 0, s_dynTP3 = 0;
+static int    s_dynCachedCount = -1;
+static bool   s_dynIsBuy = false;
+static int    s_dynCase = -1;
+
+void _UpdateDynamicCache(bool isBuy, int caseNum)
+{
+   if(s_dynCachedCount == g_outcomeCount && s_dynIsBuy == isBuy && s_dynCase == caseNum)
+      return;
+   s_dynCachedCount = g_outcomeCount;
+   s_dynIsBuy = isBuy;
+   s_dynCase = caseNum;
+
+   if(InpSLTPMode == 0)
+   {
+      s_dynSL = MeasureOptimalSLRatio(isBuy, caseNum);
+      double tp1, tp2, tp3;
+      MeasureOptimalTPRatios(isBuy, 0, Bars, tp1, tp2, tp3, caseNum);
+      bool tpMeasured = (MathAbs(tp1 - GetActiveTPRatio()) > 0.01);
+      if(tpMeasured)
+      {
+         s_dynTP1 = tp1;
+         s_dynTP2 = tp2;
+         s_dynTP3 = tp3;
+      }
+      else
+      {
+         s_dynTP1 = GetActiveTPRatio();
+         s_dynTP2 = GetActiveTPRatio() * GetActiveTP2Mult();
+         s_dynTP3 = GetActiveTPRatio() * GetActiveTP3Mult();
+      }
+   }
+   else
+   {
+      s_dynSL  = GetActiveSLRatio();
+      s_dynTP1 = GetActiveTPRatio();
+      s_dynTP2 = GetActiveTPRatio() * GetActiveTP2Mult();
+      s_dynTP3 = GetActiveTPRatio() * GetActiveTP3Mult();
+   }
+}
+
+double GetDynamicSLRatio()  { return s_dynSL  > 0 ? s_dynSL  : GetActiveSLRatio(); }
+double GetDynamicTP1Ratio() { return s_dynTP1 > 0 ? s_dynTP1 : GetActiveTPRatio(); }
+double GetDynamicTP2Ratio() { return s_dynTP2 > 0 ? s_dynTP2 : GetActiveTPRatio() * GetActiveTP2Mult(); }
+double GetDynamicTP3Ratio() { return s_dynTP3 > 0 ? s_dynTP3 : GetActiveTPRatio() * GetActiveTP3Mult(); }
 
 //+------------------------------------------------------------------+
 //|        MAIN ENTRY POINT - Routes to selected method                |
@@ -566,6 +683,8 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
                    double &outSL, double &outTP1, double &outTP2, double &outTP3,
                    double &outATR, int caseNum = 0)
 {
+   _UpdateDynamicCache(isBuy, caseNum);
+
    // Measure optimal TP ratios from actual market data (case-specific, IS-only, NEW→OLD)
    double optTP1, optTP2, optTP3;
    MeasureOptimalTPRatios(isBuy, barNS, total, optTP1, optTP2, optTP3, caseNum);
@@ -587,55 +706,84 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
          break;
    }
 
-   // [BUG1-FIX] Bayesian shrinkage + conservative gate.
-   // Old code: always replace with measured TP regardless of direction.
-   // New: blend measured toward parametric (shrinkage), then only apply if blended
-   // is CLOSER to entry than method TP (conservative — measured may only tighten, not widen).
-   // Shrinkage prior k scales with TF: higher TF has fewer samples → heavier prior.
-   // Clip: [InpSLRatio*0.8, InpTPRatio*2.0] prevents extreme outlier regimes.
+   // Dynamic mode: replace SL with MAE-based ratio
+   if(InpSLTPMode == 0)
+   {
+      double dynSLRatio = GetDynamicSLRatio() * GetCaseTFSLMultiplier(caseNum, Period());
+      double dynSLDist = outATR * dynSLRatio;
+      double minSL = GetMinSLDistance();
+      if(isBuy)
+      {
+         outSL = entry - dynSLDist;
+         if(entry - outSL < minSL) outSL = entry - minSL;
+      }
+      else
+      {
+         outSL = entry + dynSLDist;
+         if(outSL - entry < minSL) outSL = entry + minSL;
+      }
+   }
+
+   // Bayesian shrinkage: blend measured TP toward parametric
    int tf = Period();
    double k_tf = (tf <= TF_M5) ? 50 : (tf <= TF_M30) ? 80 :
                  (tf <= TF_H1) ? 180 : (tf <= TF_H4) ? 300 : 600;
 
-   // Approximate moveCount credibility from ratio (MeasureOptimalTPRatios already
-   // only returns non-parametric when samples passed minSamples threshold).
-   // Use ratio deviation as proxy: if optTP1==InpTPRatio, no data was applied (L4).
    bool measuredApplied = (MathAbs(optTP1 - GetActiveTPRatio()) > 0.01 ||
                            MathAbs(optTP2 - GetActiveTPRatio()*GetActiveTP2Mult()) > 0.01);
-   if(measuredApplied)
+
+   if(measuredApplied && InpSLTPMode != 1)
    {
-      // Estimate sample count proxy from level used (conservative: assume min threshold)
-      int minSamp = _TPRatioMinSamples(1, tf); // level 1 min as conservative proxy
-      double credibility = MathMin(1.0, (double)minSamp / (minSamp + k_tf));
+      int minSamp = _TPRatioMinSamples(1, tf);
+
+      // Dynamic mode: higher credibility (trust data more)
+      double credBase = (double)minSamp / (minSamp + k_tf);
+      double credibility = (InpSLTPMode == 0) ? MathMin(1.0, credBase * 1.5) : MathMin(1.0, credBase);
 
       double b1 = optTP1 * credibility + GetActiveTPRatio() * (1.0 - credibility);
       double b2 = optTP2 * credibility + GetActiveTPRatio()*GetActiveTP2Mult()*(1.0-credibility);
       double b3 = optTP3 * credibility + GetActiveTPRatio()*GetActiveTP3Mult()*(1.0-credibility);
 
-      // Hard clip: measured ratio bounded within [SLRatio*0.8, TPRatio*2.0]
-      b1 = MathMax(GetActiveSLRatio()*0.8, MathMin(GetActiveTPRatio()*2.0, b1));
-      b2 = MathMax(b1, MathMin(GetActiveTPRatio()*2.5, b2));
-      b3 = MathMax(b2, MathMin(GetActiveTPRatio()*3.0, b3));
+      b1 = MathMax(0.5, MathMin(GetActiveTPRatio()*3.0, b1));
+      b2 = MathMax(b1, MathMin(GetActiveTPRatio()*4.0, b2));
+      b3 = MathMax(b2, MathMin(GetActiveTPRatio()*5.0, b3));
 
       double mTP1 = entry + (isBuy ? 1.0 : -1.0) * outATR * b1;
       double mTP2 = entry + (isBuy ? 1.0 : -1.0) * outATR * b2;
       double mTP3 = entry + (isBuy ? 1.0 : -1.0) * outATR * b3;
 
-      // Conservative gate: only apply if blended TP is closer to entry than method TP.
-      // Closer = more achievable = lower risk of TP not being hit.
+      if(InpSLTPMode == 0)
+      {
+         // Dynamic: use measured TP directly (can widen or tighten)
+         outTP1 = mTP1;
+         outTP2 = mTP2;
+         outTP3 = mTP3;
+      }
+      else
+      {
+         // Default (shouldn't reach here with mode==1 guard above, but safe fallback)
+         if(isBuy)
+         {
+            if(mTP1 < outTP1) outTP1 = mTP1;
+            if(mTP2 < outTP2) outTP2 = mTP2;
+            if(mTP3 < outTP3) outTP3 = mTP3;
+         }
+         else
+         {
+            if(mTP1 > outTP1) outTP1 = mTP1;
+            if(mTP2 > outTP2) outTP2 = mTP2;
+            if(mTP3 > outTP3) outTP3 = mTP3;
+         }
+      }
+
+      // Ensure TP ordering
       if(isBuy)
       {
-         if(mTP1 < outTP1) outTP1 = mTP1;
-         if(mTP2 < outTP2) outTP2 = mTP2;
-         if(mTP3 < outTP3) outTP3 = mTP3;
          if(outTP2 <= outTP1) outTP2 = outTP1 + outATR * 0.5;
          if(outTP3 <= outTP2) outTP3 = outTP2 + outATR * 0.5;
       }
       else
       {
-         if(mTP1 > outTP1) outTP1 = mTP1;
-         if(mTP2 > outTP2) outTP2 = mTP2;
-         if(mTP3 > outTP3) outTP3 = mTP3;
          if(outTP2 >= outTP1) outTP2 = outTP1 - outATR * 0.5;
          if(outTP3 >= outTP2) outTP3 = outTP2 - outATR * 0.5;
       }
