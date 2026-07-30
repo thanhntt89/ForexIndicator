@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                         QuantEdge_RSI.mq4           |
 //|                         QuantEdge_RSI - Main Indicator File         |
 //|                         Master Trading Wave Community               |
@@ -77,29 +77,29 @@ double BufferSL[];     // 8: stop loss price
 double BufferTP1[];    // 9: take profit 1 price
 double BufferTP2[];    // 10: take profit 2 price
 //--- Includes
-#include <QuantEdge/Config.mqh>
-#include <QuantEdge/Structs.mqh>
-#include <QuantEdge/Globals.mqh>
-#include <QuantEdge/MathUtils.mqh>
-#include <QuantEdge/Normalize.mqh>
-#include <QuantEdge/CandleNormalize.mqh>
-#include <QuantEdge/RSICore.mqh>
-#include <QuantEdge/SwingDetection.mqh>
-#include <QuantEdge/SignalCases.mqh>
-#include <QuantEdge/SLTP.mqh>
-#include <QuantEdge/MTFEngine.mqh>
-#include <QuantEdge/IntermarketAnalysis.mqh>
-#include <QuantEdge/SessionStatistics.mqh>
-#include <QuantEdge/WalkForward.mqh>
-#include <QuantEdge/ProbabilityEngine.mqh>
-#include <QuantEdge/CalibrationEngine.mqh>
-#include <QuantEdge/XGBIntegration.mqh>
-#include <QuantEdge/RiskManager.mqh>
-#include <QuantEdge/ArrowManager.mqh>
-#include <QuantEdge/LineDrawing.mqh>
-#include <QuantEdge/PanelDrawing.mqh>
-#include <QuantEdge/ChartEvents.mqh>
-#include <QuantEdge/SignalLogger.mqh>
+#include <QuantEdge/Core/Config.mqh>
+#include <QuantEdge/Core/Structs.mqh>
+#include <QuantEdge/Core/Globals.mqh>
+#include <QuantEdge/Core/MathUtils.mqh>
+#include <QuantEdge/Analysis/Normalize.mqh>
+#include <QuantEdge/Signal/CandleNormalize.mqh>
+#include <QuantEdge/Signal/RSICore.mqh>
+#include <QuantEdge/Signal/SwingDetection.mqh>
+#include <QuantEdge/Signal/SignalCases.mqh>
+#include <QuantEdge/Engine/SLTP.mqh>
+#include <QuantEdge/Engine/MTFEngine.mqh>
+#include <QuantEdge/Analysis/IntermarketAnalysis.mqh>
+#include <QuantEdge/Analysis/SessionStatistics.mqh>
+#include <QuantEdge/Engine/WalkForward.mqh>
+#include <QuantEdge/Engine/ProbabilityEngine.mqh>
+#include <QuantEdge/Engine/CalibrationEngine.mqh>
+#include <QuantEdge/AI/XGBIntegration.mqh>
+#include <QuantEdge/Risk/RiskManager.mqh>
+#include <QuantEdge/Display/ArrowManager.mqh>
+#include <QuantEdge/Display/LineDrawing.mqh>
+#include <QuantEdge/Display/PanelDrawing.mqh>
+#include <QuantEdge/Display/ChartEvents.mqh>
+#include <QuantEdge/Data/SignalLogger.mqh>
 //+------------------------------------------------------------------+
 int OnInit()
 {
@@ -168,7 +168,7 @@ int OnInit()
 
    // Restore stats on restart AND on TF/symbol switch.
    //   RECOMPILE/PARAMETERS/CHARTCHANGE: load session-stats binary (fast warm restart).
-   //   Binary paths are TF-specific — no cross-TF contamination.
+   //   Binary paths are TF-specific Ã¢â‚¬â€ no cross-TF contamination.
    //   Dedup in TrackSignalForSession() prevents double-count when fullRecalc re-tracks.
    int prevReason = UninitializeReason();
    if(prevReason == REASON_RECOMPILE || prevReason == REASON_PARAMETERS ||
@@ -196,7 +196,7 @@ void OnDeinit(const int reason)
       FileDelete(SS_GetBinaryPath());
    }
    FlushLogQueues();
-   // [PERF] Only release indicator handles on full remove/close — not TF switch.
+   // [PERF] Only release indicator handles on full remove/close Ã¢â‚¬â€ not TF switch.
    #ifdef __MQL5__
    if(reason == REASON_REMOVE || reason == REASON_CLOSE)
       ReleaseAllHandles();
@@ -247,7 +247,7 @@ int OnCalculate(const int rates_total,
    if(rates_total < minBars) return(0);
    //--- Array management
    // fullRecalc only on first load or when history is shortened (bar indices would shift).
-   // New bar added (rates_total increased) keeps cached signals — incremental path handles it.
+   // New bar added (rates_total increased) keeps cached signals Ã¢â‚¬â€ incremental path handles it.
    bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
    if(fullRecalc)
    {
@@ -382,7 +382,7 @@ int OnCalculate(const int rates_total,
          int lastBar = g_signals[g_signalCount-1].barIndex;
          int stableAnchor = rates_total - 500;
          if(InpMaxBars > 500 && lastBar < stableAnchor && i >= stableAnchor)
-         { /* crossing anchor — don't carry cooldown from deep history */ }
+         { /* crossing anchor Ã¢â‚¬â€ don't carry cooldown from deep history */ }
          else if(i - lastBar < _cooldown)
             continue;
       }
@@ -392,7 +392,7 @@ int OnCalculate(const int rates_total,
 
       int buySignal  = 0;
       int sellSignal = 0;
-      // Priority: Case 6→2→4→3→1→5→7 (optimized for M1/M5)
+      // Priority: Case 6Ã¢â€ â€™2Ã¢â€ â€™4Ã¢â€ â€™3Ã¢â€ â€™1Ã¢â€ â€™5Ã¢â€ â€™7 (optimized for M1/M5)
       if(GetActiveCaseEnabled(6) && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase6_Buy(i))       buySignal  = 6;
@@ -428,7 +428,7 @@ int OnCalculate(const int rates_total,
          if(CheckCase7_Buy(i))       buySignal  = 7;
          else if(CheckCase7_Sell(i)) sellSignal = 7;
       }
-      // Case 8: Basic Crossover (lowest priority) — Green x Red + strong angle.
+      // Case 8: Basic Crossover (lowest priority) Ã¢â‚¬â€ Green x Red + strong angle.
       // Catches the core RSI rule when no higher-quality pattern fired.
       if(GetActiveCaseEnabled(8) && buySignal == 0 && sellSignal == 0)
       {
@@ -640,7 +640,7 @@ int OnCalculate(const int rates_total,
       }
    }
    //=================================================================
-   // UPDATE DISPLAY (throttled — ported from MQ5)
+   // UPDATE DISPLAY (throttled Ã¢â‚¬â€ ported from MQ5)
    //=================================================================
    if(g_signalCount > 0)
    {
@@ -787,7 +787,7 @@ int OnCalculate(const int rates_total,
          DeleteObjectsByPrefix(PREFIX_EXPLAIN);
    }
 
-   // Flush scoring queue immediately — LogScoringSnapshot() runs after both new-bar
+   // Flush scoring queue immediately Ã¢â‚¬â€ LogScoringSnapshot() runs after both new-bar
    // and fullRecalc FlushLogQueues() calls, so scoring rows would otherwise wait
    // until the next bar. Scoring is at most 1 row per signal so disk cost is minimal.
    if(s_scoringQueueCount > 0) FlushLogQueues();

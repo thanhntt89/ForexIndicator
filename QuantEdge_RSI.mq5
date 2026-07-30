@@ -1,4 +1,4 @@
-//+------------------------------------------------------------------+
+﻿//+------------------------------------------------------------------+
 //|                                         QuantEdge_RSI.mq5           |
 //|                         QuantEdge_RSI - MT5 Version                 |
 //|                         Master Trading Wave Community               |
@@ -89,30 +89,30 @@ double BufferBuySignal[];
 double BufferSellSignal[];
 
 //--- Includes: MQLCompat MUST be first (wraps MQL4 functions)
-#include <QuantEdge/MQLCompat.mqh>
-#include <QuantEdge/Config.mqh>
-#include <QuantEdge/Structs.mqh>
-#include <QuantEdge/Globals.mqh>
-#include <QuantEdge/MathUtils.mqh>
-#include <QuantEdge/Normalize.mqh>
-#include <QuantEdge/CandleNormalize.mqh>
-#include <QuantEdge/RSICore.mqh>
-#include <QuantEdge/SwingDetection.mqh>
-#include <QuantEdge/SignalCases.mqh>
-#include <QuantEdge/SLTP.mqh>
-#include <QuantEdge/MTFEngine.mqh>
-#include <QuantEdge/IntermarketAnalysis.mqh>
-#include <QuantEdge/SessionStatistics.mqh>
-#include <QuantEdge/WalkForward.mqh>
-#include <QuantEdge/ProbabilityEngine.mqh>
-#include <QuantEdge/CalibrationEngine.mqh>
-#include <QuantEdge/XGBIntegration.mqh>
-#include <QuantEdge/RiskManager.mqh>
-#include <QuantEdge/ArrowManager.mqh>
-#include <QuantEdge/LineDrawing.mqh>
-#include <QuantEdge/PanelDrawing.mqh>
-#include <QuantEdge/ChartEvents.mqh>
-#include <QuantEdge/SignalLogger.mqh>
+#include <QuantEdge/Core/MQLCompat.mqh>
+#include <QuantEdge/Core/Config.mqh>
+#include <QuantEdge/Core/Structs.mqh>
+#include <QuantEdge/Core/Globals.mqh>
+#include <QuantEdge/Core/MathUtils.mqh>
+#include <QuantEdge/Analysis/Normalize.mqh>
+#include <QuantEdge/Signal/CandleNormalize.mqh>
+#include <QuantEdge/Signal/RSICore.mqh>
+#include <QuantEdge/Signal/SwingDetection.mqh>
+#include <QuantEdge/Signal/SignalCases.mqh>
+#include <QuantEdge/Engine/SLTP.mqh>
+#include <QuantEdge/Engine/MTFEngine.mqh>
+#include <QuantEdge/Analysis/IntermarketAnalysis.mqh>
+#include <QuantEdge/Analysis/SessionStatistics.mqh>
+#include <QuantEdge/Engine/WalkForward.mqh>
+#include <QuantEdge/Engine/ProbabilityEngine.mqh>
+#include <QuantEdge/Engine/CalibrationEngine.mqh>
+#include <QuantEdge/AI/XGBIntegration.mqh>
+#include <QuantEdge/Risk/RiskManager.mqh>
+#include <QuantEdge/Display/ArrowManager.mqh>
+#include <QuantEdge/Display/LineDrawing.mqh>
+#include <QuantEdge/Display/PanelDrawing.mqh>
+#include <QuantEdge/Display/ChartEvents.mqh>
+#include <QuantEdge/Data/SignalLogger.mqh>
 
 //+------------------------------------------------------------------+
 int OnInit()
@@ -179,7 +179,7 @@ int OnInit()
 
    // Restore stats on restart AND on TF/symbol switch.
    //   RECOMPILE/PARAMETERS/CHARTCHANGE: load session-stats binary (fast warm restart).
-   //   Binary paths are TF-specific — no cross-TF contamination.
+   //   Binary paths are TF-specific Ã¢â‚¬â€ no cross-TF contamination.
    //   Dedup in TrackSignalForSession() prevents double-count when fullRecalc re-tracks.
    int prevReason = UninitializeReason();
    if(prevReason == REASON_RECOMPILE || prevReason == REASON_PARAMETERS ||
@@ -212,8 +212,8 @@ void OnDeinit(const int reason)
    }
    FlushLogQueues();
    // [PERF] Only release indicator handles on full remove/close.
-   // CHARTCHANGE (TF switch) keeps handles alive — new TF creates its own keyed handles,
-   // old-TF handles are harmless. Releasing forces MT5 to re-create async → return(0)
+   // CHARTCHANGE (TF switch) keeps handles alive Ã¢â‚¬â€ new TF creates its own keyed handles,
+   // old-TF handles are harmless. Releasing forces MT5 to re-create async Ã¢â€ â€™ return(0)
    // bouncing in OnCalculate costs hundreds of ms per bounce.
    if(reason == REASON_REMOVE || reason == REASON_CLOSE)
       ReleaseAllHandles();
@@ -272,7 +272,7 @@ int OnCalculate(const int rates_total,
 
    //--- Array management
    // fullRecalc only on first load or when history is shortened (bar indices would shift).
-   // New bar added (rates_total increased) keeps cached signals — incremental path handles it.
+   // New bar added (rates_total increased) keeps cached signals Ã¢â‚¬â€ incremental path handles it.
    bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
    if(fullRecalc)
    {
@@ -343,7 +343,7 @@ int OnCalculate(const int rates_total,
          if(barsCalc < barsNeeded)
             return(0);
       }
-      // ATR must also be ready — without it, SL/TP = 0 and all simulations fail.
+      // ATR must also be ready Ã¢â‚¬â€ without it, SL/TP = 0 and all simulations fail.
       string atrKey = "ATR_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
                       IntegerToString(InpATRPeriod);
       int atrHandle = GetCachedIndicatorHandle(atrKey, 1, _Symbol, _Period, InpATRPeriod);
@@ -358,9 +358,9 @@ int OnCalculate(const int rates_total,
    if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
 
    // [GMT-FIX-B3b] Force full recalc when normalization becomes ready.
-   // On MT5, H1 data loads async — first fullRecalc uses native iRSI (wrong GMT).
+   // On MT5, H1 data loads async Ã¢â‚¬â€ first fullRecalc uses native iRSI (wrong GMT).
    // Check buffer directly.
-   // Fix: return(0) to force prev_calculated=0 on next tick → full RSI + MTF redraw.
+   // Fix: return(0) to force prev_calculated=0 on next tick Ã¢â€ â€™ full RSI + MTF redraw.
    if((g_gmtNormActive || g_gmtMTFNormNeeded) && g_normRSICount > 0 && !g_normRecalcDone)
    {
       g_normRecalcDone = true;
@@ -433,7 +433,7 @@ int OnCalculate(const int rates_total,
          int lastBar = g_signals[g_signalCount-1].barIndex;
          int stableAnchor = rates_total - 500;
          if(InpMaxBars > 500 && lastBar < stableAnchor && i >= stableAnchor)
-         { /* crossing anchor — don't carry cooldown from deep history */ }
+         { /* crossing anchor Ã¢â‚¬â€ don't carry cooldown from deep history */ }
          else if(i - lastBar < _cooldown)
             continue;
       }
@@ -443,7 +443,7 @@ int OnCalculate(const int rates_total,
 
       int buySignal  = 0;
       int sellSignal = 0;
-      // Priority: Case 6→2→4→3→1→5→7 (optimized for M1/M5)
+      // Priority: Case 6Ã¢â€ â€™2Ã¢â€ â€™4Ã¢â€ â€™3Ã¢â€ â€™1Ã¢â€ â€™5Ã¢â€ â€™7 (optimized for M1/M5)
       if(GetActiveCaseEnabled(6) && buySignal == 0 && sellSignal == 0)
       {
          if(CheckCase6_Buy(i))       buySignal  = 6;
@@ -479,7 +479,7 @@ int OnCalculate(const int rates_total,
          if(CheckCase7_Buy(i))       buySignal  = 7;
          else if(CheckCase7_Sell(i)) sellSignal = 7;
       }
-      // Case 8: Basic Crossover (lowest priority) — Green x Red + strong angle.
+      // Case 8: Basic Crossover (lowest priority) Ã¢â‚¬â€ Green x Red + strong angle.
       // Catches the core RSI rule when no higher-quality pattern fired.
       if(GetActiveCaseEnabled(8) && buySignal == 0 && sellSignal == 0)
       {
