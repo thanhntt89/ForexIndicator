@@ -18,7 +18,7 @@ $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path  # Thư mục g�
 $BuildDir = Join-Path $ProjectRoot "Build"
 $SourceFile = Join-Path $ProjectRoot "$IndicatorName.mq4"
 $SourceFile5 = Join-Path $ProjectRoot "$IndicatorName.mq5"
-$DefinesFile = Join-Path $ProjectRoot "Include\QuantEdge\Config.mqh"
+$DefinesFile = Join-Path $ProjectRoot "Include\QuantEdge\Core\Config.mqh"
 $LogFile = Join-Path $BuildDir "compile.log"
 $TempLogFile = Join-Path $BuildDir "temp_compile.log"
 $TempLogFile5 = Join-Path $BuildDir "temp_compile5.log"
@@ -28,7 +28,65 @@ $MetaEditor5 = "C:\Program Files\TF Global Markets MetaTrader 5 Terminal\MetaEdi
 $AppDataPath = "$env:USERPROFILE\AppData\Roaming\MetaQuotes\Terminal"
 
 # ============================================
-# 2. VALIDATION
+# 2. SYNC INCLUDES TO ALL TERMINALS
+# ============================================
+Write-Host "==========================================" -ForegroundColor Cyan
+Write-Host "SYNCING INCLUDES TO TERMINALS"
+Write-Host "=========================================="
+
+$SourceInclude = Join-Path $ProjectRoot "Include\QuantEdge"
+
+# Sync to all MT4 terminals
+foreach ($ID in $MT4TerminalIDs) {
+    $TargetIncDir = Join-Path (Join-Path $AppDataPath $ID) "MQL4\Include"
+    if (Test-Path $TargetIncDir) {
+        $TargetQE = Join-Path $TargetIncDir "QuantEdge"
+        # Remove old flat files or stale folder
+        if (Test-Path $TargetQE) {
+            $item = Get-Item $TargetQE -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                cmd /c rmdir "$TargetQE" 2>$null
+            } else {
+                Remove-Item $TargetQE -Recurse -Force -Confirm:$false
+            }
+        }
+        # Create junction (symlink) — changes in repo auto-visible
+        cmd /c mklink /J "$TargetQE" "$SourceInclude" 2>$null | Out-Null
+        if (Test-Path $TargetQE) {
+            Write-Host "  [MT4] Include synced -> $ID" -ForegroundColor Green
+        } else {
+            # Fallback: copy
+            Copy-Item $SourceInclude $TargetQE -Recurse -Force
+            Write-Host "  [MT4] Include copied -> $ID" -ForegroundColor Yellow
+        }
+    }
+}
+
+# Sync to all MT5 terminals
+foreach ($ID in $MT5TerminalIDs) {
+    $TargetIncDir = Join-Path (Join-Path $AppDataPath $ID) "MQL5\Include"
+    if (Test-Path $TargetIncDir) {
+        $TargetQE = Join-Path $TargetIncDir "QuantEdge"
+        if (Test-Path $TargetQE) {
+            $item = Get-Item $TargetQE -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                cmd /c rmdir "$TargetQE" 2>$null
+            } else {
+                Remove-Item $TargetQE -Recurse -Force -Confirm:$false
+            }
+        }
+        cmd /c mklink /J "$TargetQE" "$SourceInclude" 2>$null | Out-Null
+        if (Test-Path $TargetQE) {
+            Write-Host "  [MT5] Include synced -> $ID" -ForegroundColor Green
+        } else {
+            Copy-Item $SourceInclude $TargetQE -Recurse -Force
+            Write-Host "  [MT5] Include copied -> $ID" -ForegroundColor Yellow
+        }
+    }
+}
+
+# ============================================
+# 3. VALIDATION
 # ============================================
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "VALIDATING ENVIRONMENT"
@@ -44,7 +102,7 @@ if (!(Test-Path $DefinesFile)) { Write-Error "Config file (containing version) n
 if (!(Test-Path $BuildDir)) { New-Item -ItemType Directory -Path $BuildDir | Out-Null }
 
 # ============================================
-# 3. VERSION MANAGEMENT
+# 4. VERSION MANAGEMENT
 # ============================================
 Write-Host "Reading version from Config.mqh..."
 $DefinesContent = Get-Content $DefinesFile
@@ -65,11 +123,11 @@ $Updated5Content = $Source5Content -replace '#property\s+version\s+".*?"', "#pro
 Set-Content -Path $SourceFile5 -Value $Updated5Content -Encoding UTF8
 
 # ============================================
-# 4. COMPILATION
+# 5. COMPILATION
 # ============================================
 $Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
-# --- 4.1 COMPILE MT4 ---
+# --- 5.1 COMPILE MT4 ---
 $BuildName = "${IndicatorName}_v${Version}_$Timestamp.ex4"
 $BuildOutput = Join-Path $BuildDir $BuildName
 
@@ -103,7 +161,7 @@ if (!(Test-Path $GeneratedEX4)) { Write-Error "EX4 not found after compilation."
 Move-Item -Path $GeneratedEX4 -Destination $BuildOutput -Force
 
 
-# --- 4.2 COMPILE MT5 ---
+# --- 5.2 COMPILE MT5 ---
 $BuildName5 = "${IndicatorName}_v${Version}_$Timestamp.ex5"
 $BuildOutput5 = Join-Path $BuildDir $BuildName5
 
@@ -138,7 +196,7 @@ Move-Item -Path $GeneratedEX5 -Destination $BuildOutput5 -Force
 
 
 # ============================================
-# 5. MULTI-TERMINAL DEPLOYMENT
+# 6. MULTI-TERMINAL DEPLOYMENT
 # ============================================
 Write-Host ""
 Write-Host "DEPLOYING TO TERMINALS..." -ForegroundColor Cyan
@@ -171,40 +229,9 @@ foreach ($ID in $MT5TerminalIDs) {
     }
 }
 
-
-# ============================================
-# 6. DEPLOY TO SALES
-# ============================================
-Write-Host ""
-Write-Host "DEPLOYING TO SALES..." -ForegroundColor Cyan
-
-$SalesDir = Join-Path $ProjectRoot "sales\01_source_code"
-if (!(Test-Path $SalesDir)) { New-Item -ItemType Directory -Path $SalesDir | Out-Null }
-
-# Copy .ex4 (versioned name)
-$SalesEx4 = Join-Path $SalesDir "${IndicatorName}_v${Version}_$Timestamp.ex4"
-Copy-Item -Path $BuildOutput -Destination $SalesEx4 -Force
-Write-Host "  [SALES] $BuildName -> sales\01_source_code\" -ForegroundColor Green
-
-# Copy .ex5 (versioned name)
-$SalesEx5 = Join-Path $SalesDir "${IndicatorName}_v${Version}_$Timestamp.ex5"
-Copy-Item -Path $BuildOutput5 -Destination $SalesEx5 -Force
-Write-Host "  [SALES] $BuildName5 -> sales\01_source_code\" -ForegroundColor Green
-
-# Copy source .mq4
-$SalesMq4 = Join-Path $SalesDir "$IndicatorName.mq4"
-Copy-Item -Path $SourceFile -Destination $SalesMq4 -Force
-Write-Host "  [SALES] $IndicatorName.mq4 -> sales\01_source_code\" -ForegroundColor Green
-
-# Copy source .mq5
-$SalesMq5 = Join-Path $SalesDir "$IndicatorName.mq5"
-Copy-Item -Path $SourceFile5 -Destination $SalesMq5 -Force
-Write-Host "  [SALES] $IndicatorName.mq5 -> sales\01_source_code\" -ForegroundColor Green
-
 Write-Host ""
 Write-Host "=========================================="
 Write-Host "BUILD & DEPLOY SUCCESS" -ForegroundColor Green
-Write-Host "MT4 Artifact : $BuildOutput"
-Write-Host "MT5 Artifact : $BuildOutput5"
-Write-Host "Sales Folder : $SalesDir"
+Write-Host "MT4 Artifact: $BuildOutput"
+Write-Host "MT5 Artifact: $BuildOutput5"
 Write-Host "=========================================="
