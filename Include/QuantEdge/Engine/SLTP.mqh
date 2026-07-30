@@ -1034,7 +1034,7 @@ void CalculateEntryZones(bool isBuy, int barIndex,
 
    double accountBalance = AccountBalance();
    if(accountBalance <= 0) accountBalance = 1000;
-   double totalRisk = accountBalance * GetActiveRiskPct() / 100.0;
+   double totalRisk = accountBalance * GetEffectiveRiskPct() / 100.0;
 
    g_entryZones[0].price = marketEntry;
    g_entryZones[0].zoneName = "Market";

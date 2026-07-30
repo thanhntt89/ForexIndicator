@@ -260,6 +260,13 @@ input double InpMaxDailyDrawdown = 3.0;    // Circuit breaker DD %
 input int    InpMaxDailyTrades   = 15;     // Max trades per day
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Position Sizing                                       |
+//+------------------------------------------------------------------+
+input string inp_grp_possizing   = "========== Position Sizing =========="; // ---
+input bool   InpUseKellyLot      = true;    // Use Kelly-adjusted lot sizing
+input double InpMaxRiskPct       = 2.0;     // Max risk % per trade (hard cap)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Debug                                                 |
 //+------------------------------------------------------------------+
 input string inp_grp_debug      = "========== Debug =========="; // ---

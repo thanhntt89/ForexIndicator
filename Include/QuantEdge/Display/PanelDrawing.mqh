@@ -373,6 +373,15 @@ void DrawInfoPanel(int signalIndex)
       calcY += lh; // Kelly + P-value line
       calcY += lh; // Angle IC diagnostic line
    }
+   // Position Sizing section
+   if(InpUseKellyLot || g_outcomeCount > 0)
+   {
+      calcY += 3;
+      calcY += lh;  // title
+      if(InpUseKellyLot) calcY += lh;  // Kelly | Vol | Brier
+      if(InpUseKellyLot) calcY += lh;  // Risk% -> Lot
+      if(g_outcomeCount > 0) calcY += lh;  // W/L EV
+   }
    if(hasMTF)
    {
       calcY += 3;
@@ -873,6 +882,51 @@ void DrawInfoPanel(int signalIndex)
       }
       CreateTextLabel(PREFIX_PANEL+"P_AM", px+pad, cy, accMtf, InpPanelDimColor, fs-2, false);
       cy += lh;
+   }
+   //==========================================================
+   // POSITION SIZING + TRADE SUMMARY
+   //==========================================================
+   if(InpUseKellyLot || g_outcomeCount > 0)
+   {
+      cy += 3;
+      CreateTextLabel(PREFIX_PANEL+"PS_T", px+pad, cy,
+         "Position Sizing", InpPanelTitleColor, fs-1, true);
+      cy += lh;
+
+      if(InpUseKellyLot)
+      {
+         string psLine1 = " Kelly:" + DoubleToString(g_positionSize.kellyPct, 1) + "%"
+                        + " | Vol:" + DoubleToString(g_positionSize.volScale, 1) + "x"
+                        + " | Brier:" + DoubleToString(g_positionSize.brierScale, 1) + "x";
+         color psClr1 = (g_positionSize.kellyPct > 1.0) ? clrLime
+                      : (g_positionSize.kellyPct > 0)   ? clrYellow
+                      : clrOrange;
+         CreateTextLabel(PREFIX_PANEL+"PS_L1", px+pad, cy, psLine1, psClr1, fs-2, false);
+         cy += lh;
+
+         string psLine2 = " Risk:" + DoubleToString(g_positionSize.adjustedRiskPct, 2) + "%";
+         if(g_positionSize.recommendedLot > 0)
+            psLine2 += " -> " + DoubleToString(g_positionSize.recommendedLot, 2) + " lot";
+         CreateTextLabel(PREFIX_PANEL+"PS_L2", px+pad, cy, psLine2, clrWhite, fs-2, false);
+         cy += lh;
+      }
+
+      if(g_outcomeCount > 0)
+      {
+         int total = g_positionSize.totalWins + g_positionSize.totalLosses;
+         string tsLine = " W/L:" + IntegerToString(g_positionSize.totalWins)
+                       + "/" + IntegerToString(g_positionSize.totalLosses);
+         if(total > 0)
+            tsLine += " (" + DoubleToString(g_positionSize.winRate, 0) + "%)";
+         tsLine += " EV:" + (g_positionSize.avgEV >= 0 ? "+" : "")
+                 + DoubleToString(g_positionSize.avgEV, 2);
+         color tsClr = (g_positionSize.winRate > 55) ? clrLime
+                     : (g_positionSize.winRate > 45) ? clrYellow
+                     : clrOrange;
+         if(total == 0) tsClr = InpPanelDimColor;
+         CreateTextLabel(PREFIX_PANEL+"PS_TS", px+pad, cy, tsLine, tsClr, fs-2, false);
+         cy += lh;
+      }
    }
    //==========================================================
    // MTF

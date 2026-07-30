@@ -99,6 +99,7 @@ double BufferSellSignal[];
 #include <QuantEdge/Signal/RSICore.mqh>
 #include <QuantEdge/Signal/SwingDetection.mqh>
 #include <QuantEdge/Signal/SignalCases.mqh>
+#include <QuantEdge/Risk/PositionSizing.mqh>
 #include <QuantEdge/Engine/SLTP.mqh>
 #include <QuantEdge/Engine/MTFEngine.mqh>
 #include <QuantEdge/Analysis/IntermarketAnalysis.mqh>
@@ -801,6 +802,7 @@ int OnCalculate(const int rates_total,
                g_currentProb.xgbProbTP1);
          }
 
+         CalculatePositionSize();
          DrawInfoPanel(g_activeSignalIndex);
          if(InpShowProbExplain && g_activeSignalIndex >= 0)
             DrawExplainPanel();
