@@ -12,8 +12,8 @@
 #ifndef RSI_ADV_SIGNALLOGGER_MQH
 #define RSI_ADV_SIGNALLOGGER_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
 
 #ifndef ISBACKTESTMODE_DEFINED
    #ifdef __MQL5__

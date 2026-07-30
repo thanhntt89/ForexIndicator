@@ -9,9 +9,9 @@
 #ifndef RSI_ADV_INTERMARKET_MQH
 #define RSI_ADV_INTERMARKET_MQH
 
-#include "Config.mqh"
-#include "Structs.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
+#include "../Core/Globals.mqh"
 
 //+------------------------------------------------------------------+
 //| Detect which intermarket symbol is available on broker             |

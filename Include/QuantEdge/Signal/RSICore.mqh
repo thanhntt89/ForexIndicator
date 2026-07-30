@@ -5,9 +5,9 @@
 #ifndef RSI_ADV_RSICORE_MQH
 #define RSI_ADV_RSICORE_MQH
 
-#include "Config.mqh"
-#include "MathUtils.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/MathUtils.mqh"
+#include "../Core/Globals.mqh"
 
 //+------------------------------------------------------------------+
 //| Calculate all RSI Advanced lines                                   |

@@ -5,8 +5,8 @@
 #ifndef RSI_ADV_ARROWMANAGER_MQH
 #define RSI_ADV_ARROWMANAGER_MQH
 
-#include "Config.mqh"
-#include "SignalCases.mqh"
+#include "../Core/Config.mqh"
+#include "../Signal/SignalCases.mqh"
 
 //+------------------------------------------------------------------+
 void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)

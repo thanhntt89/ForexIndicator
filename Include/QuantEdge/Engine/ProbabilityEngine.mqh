@@ -218,14 +218,14 @@
 #ifndef RSI_ADV_PROBABILITYENGINE_MQH
 #define RSI_ADV_PROBABILITYENGINE_MQH
 
-#include "Config.mqh"
-#include "Structs.mqh"
-#include "Globals.mqh"
-#include "MathUtils.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
+#include "../Core/Globals.mqh"
+#include "../Core/MathUtils.mqh"
 #include "MTFEngine.mqh"
-#include "Normalize.mqh"
-#include "IntermarketAnalysis.mqh"
-#include "SessionStatistics.mqh"
+#include "../Analysis/Normalize.mqh"
+#include "../Analysis/IntermarketAnalysis.mqh"
+#include "../Analysis/SessionStatistics.mqh"
 #include "WalkForward.mqh"
 
 //+------------------------------------------------------------------+

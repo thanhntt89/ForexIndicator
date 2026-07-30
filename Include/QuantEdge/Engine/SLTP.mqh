@@ -9,12 +9,12 @@
 #ifndef RSI_ADV_SLTP_MQH
 #define RSI_ADV_SLTP_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
-#include "Normalize.mqh"
-#include "IntermarketAnalysis.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
+#include "../Analysis/Normalize.mqh"
+#include "../Analysis/IntermarketAnalysis.mqh"
 #include "WalkForward.mqh"
-#include "TFConfig.mqh"
+#include "../Core/TFConfig.mqh"
 
 double GetATRValue(int barShift)
 { return(iATR(NULL, 0, InpATRPeriod, barShift)); }

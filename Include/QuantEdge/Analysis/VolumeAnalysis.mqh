@@ -5,7 +5,7 @@
 #ifndef RSI_ADV_VOLUMEANALYSIS_MQH
 #define RSI_ADV_VOLUMEANALYSIS_MQH
 
-#include "Config.mqh"
+#include "../Core/Config.mqh"
 
 //+------------------------------------------------------------------+
 //| Volume relative to average                                         |

@@ -5,13 +5,13 @@
 #ifndef RSI_ADV_SIGNALENGINE_MQH
 #define RSI_ADV_SIGNALENGINE_MQH
 
-#include "Config.mqh"
-#include "Structs.mqh"
-#include "Globals.mqh"
-#include "MarketRegime.mqh"
-#include "VolumeAnalysis.mqh"
-#include "VolatilityAnalysis.mqh"
-#include "SessionFilter.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
+#include "../Core/Globals.mqh"
+#include "../Analysis/MarketRegime.mqh"
+#include "../Analysis/VolumeAnalysis.mqh"
+#include "../Analysis/VolatilityAnalysis.mqh"
+#include "../Analysis/SessionFilter.mqh"
 #include "MTFEngine.mqh"
 
 //+------------------------------------------------------------------+

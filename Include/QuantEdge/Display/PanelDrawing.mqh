@@ -4,17 +4,17 @@
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_PANELDRAWING_MQH
 #define RSI_ADV_PANELDRAWING_MQH
-#include "Config.mqh"
-#include "Structs.mqh"
-#include "Globals.mqh"
-#include "MathUtils.mqh"
-#include "SignalCases.mqh"
-#include "MTFEngine.mqh"
-#include "Normalize.mqh"
-#include "SLTP.mqh"
-#include "IntermarketAnalysis.mqh"
-#include "SessionStatistics.mqh"
-#include "WalkForward.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
+#include "../Core/Globals.mqh"
+#include "../Core/MathUtils.mqh"
+#include "../Signal/SignalCases.mqh"
+#include "../Engine/MTFEngine.mqh"
+#include "../Analysis/Normalize.mqh"
+#include "../Engine/SLTP.mqh"
+#include "../Analysis/IntermarketAnalysis.mqh"
+#include "../Analysis/SessionStatistics.mqh"
+#include "../Engine/WalkForward.mqh"
 //+------------------------------------------------------------------+
 void CreateRectangleLabel(string name,int x,int y,int w,int h,color bg,color brd)
 {

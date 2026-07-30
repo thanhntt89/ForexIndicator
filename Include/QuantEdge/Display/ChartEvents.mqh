@@ -5,12 +5,12 @@
 #ifndef RSI_ADV_CHARTEVENTS_MQH
 #define RSI_ADV_CHARTEVENTS_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
-#include "MathUtils.mqh"
-#include "SignalEngine.mqh"
-#include "MTFEngine.mqh"
-#include "ProbabilityEngine.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
+#include "../Core/MathUtils.mqh"
+#include "../Engine/SignalEngine.mqh"
+#include "../Engine/MTFEngine.mqh"
+#include "../Engine/ProbabilityEngine.mqh"
 #include "PanelDrawing.mqh"
 #include "LineDrawing.mqh"
 

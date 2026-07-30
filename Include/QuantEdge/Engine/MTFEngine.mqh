@@ -11,9 +11,9 @@
 #ifndef RSI_ADV_MTFENGINE_MQH
 #define RSI_ADV_MTFENGINE_MQH
 
-#include "Config.mqh"
-#include "Structs.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
+#include "../Core/Globals.mqh"
 
 //+------------------------------------------------------------------+
 //| Slot helpers — inline lookup tables                               |

@@ -4,10 +4,10 @@
 #ifndef RSI_ADV_SESSIONFILTER_MQH
 #define RSI_ADV_SESSIONFILTER_MQH
 
-#include "Config.mqh"
+#include "../Core/Config.mqh"
 #include "Normalize.mqh"
 #include "IntermarketAnalysis.mqh"
-#include "WalkForward.mqh"
+#include "../Engine/WalkForward.mqh"
 
 double GetSessionQuality(int caseNum, datetime signalTime)
 {

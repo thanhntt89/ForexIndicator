@@ -16,5 +16,4 @@ Build/Debug/
 # Windows
 Thumbs.db
 Desktop.ini
-*.mqh
 Include/RSI_Advanced/Normalize.mqh

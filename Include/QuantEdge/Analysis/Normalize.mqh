@@ -1,8 +1,8 @@
 #ifndef RSI_ADV_NORMALIZE_MQH
 #define RSI_ADV_NORMALIZE_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
 
 // Forward declarations - these modules include Normalize.mqh's dependencies
 // but Normalize.mqh does NOT include them to avoid circular dependency

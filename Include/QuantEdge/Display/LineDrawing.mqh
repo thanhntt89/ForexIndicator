@@ -4,10 +4,10 @@
 //+------------------------------------------------------------------+
 #ifndef RSI_ADV_LINEDRAWING_MQH
 #define RSI_ADV_LINEDRAWING_MQH
-#include "Config.mqh"
-#include "Structs.mqh"
-#include "Globals.mqh"
-#include "MathUtils.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
+#include "../Core/Globals.mqh"
+#include "../Core/MathUtils.mqh"
 
 double GetCachedATROffset()
 {
@@ -21,7 +21,7 @@ double GetCachedATROffset()
    }
    return(s_cachedOffset);
 }
-#include "SLTP.mqh"
+#include "../Engine/SLTP.mqh"
 //+------------------------------------------------------------------+
 void CreateHorizontalLine(string name, double price, color clr, int style, int width, string tip)
 {

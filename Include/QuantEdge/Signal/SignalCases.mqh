@@ -5,8 +5,8 @@
 #ifndef RSI_ADV_SIGNALCASES_MQH
 #define RSI_ADV_SIGNALCASES_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
 #include "SwingDetection.mqh"
 
 //+------------------------------------------------------------------+

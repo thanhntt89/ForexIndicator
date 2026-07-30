@@ -9,8 +9,8 @@
 #ifndef RSI_ADV_SESSIONSTATS_MQH
 #define RSI_ADV_SESSIONSTATS_MQH
 
-#include "Config.mqh"
-#include "Structs.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
 
 #ifndef ISBACKTESTMODE_DEFINED
    #ifdef __MQL5__
@@ -20,10 +20,10 @@
    #endif
    #define ISBACKTESTMODE_DEFINED
 #endif
-#include "Globals.mqh"
+#include "../Core/Globals.mqh"
 #include "Normalize.mqh"
 #include "IntermarketAnalysis.mqh"
-#include "WalkForward.mqh"
+#include "../Engine/WalkForward.mqh"
 
 //+------------------------------------------------------------------+
 //| Session block definitions (UTC)                                    |

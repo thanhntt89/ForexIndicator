@@ -12,10 +12,10 @@
 #ifndef RSI_ADV_WALKFORWARD_MQH
 #define RSI_ADV_WALKFORWARD_MQH
 
-#include "Config.mqh"
-#include "Structs.mqh"
-#include "Globals.mqh"
-#include "MathUtils.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Structs.mqh"
+#include "../Core/Globals.mqh"
+#include "../Core/MathUtils.mqh"
 
 //+------------------------------------------------------------------+
 //|     SECTION 1: IN-SAMPLE / OUT-OF-SAMPLE SPLIT                     |

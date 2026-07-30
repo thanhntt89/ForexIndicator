@@ -5,8 +5,8 @@
 #ifndef RSI_ADV_MARKETREGIME_MQH
 #define RSI_ADV_MARKETREGIME_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
 
 //+------------------------------------------------------------------+
 //| Detect market regime: 1=uptrend, -1=downtrend, 0=ranging           |

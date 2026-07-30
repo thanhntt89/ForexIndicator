@@ -5,8 +5,8 @@
 #ifndef RSI_ADV_VOLATILITYANALYSIS_MQH
 #define RSI_ADV_VOLATILITYANALYSIS_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
 
 //+------------------------------------------------------------------+
 //| BB Width Percentile (0-100)                                        |

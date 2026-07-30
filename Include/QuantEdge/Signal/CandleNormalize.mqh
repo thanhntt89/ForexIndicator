@@ -13,9 +13,9 @@
 #ifndef RSI_ADV_CANDLENORMALIZE_MQH
 #define RSI_ADV_CANDLENORMALIZE_MQH
 
-#include "Config.mqh"
-#include "Globals.mqh"
-#include "Normalize.mqh"
+#include "../Core/Config.mqh"
+#include "../Core/Globals.mqh"
+#include "../Analysis/Normalize.mqh"
 
 //+------------------------------------------------------------------+
 //| Structs and constants                                              |
