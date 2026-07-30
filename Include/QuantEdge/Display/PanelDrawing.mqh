@@ -534,7 +534,7 @@ void DrawInfoPanel(int signalIndex)
    }
    cy += 3;
    //--- ATR + SL:TP ---
-   string sltpMode = (InpSLTPMode == 0) ? "[DYN]" : "[FIX]";
+   string sltpMode = (InpSLTPMode == SLTP_DYNAMIC) ? "[DYN]" : "[FIX]";
    CreateTextLabel(PREFIX_PANEL+"5_A", px+pad, cy,
       "ATR:"+DoubleToString(sig.atrValue,_Digits)+
       " "+sltpMode+

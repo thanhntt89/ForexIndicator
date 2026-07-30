@@ -40,6 +40,12 @@ enum ENUM_SLTP_METHOD
    SLTP_HYBRID     = 2   // ATR + Fibonacci (Hybrid)
 };
 
+enum ENUM_SLTP_MODE
+{
+   SLTP_DYNAMIC = 0,  // Dynamic (probability-based)
+   SLTP_FIXED   = 1   // Fixed (user input values)
+};
+
 enum ENUM_PROB_MODE
 {
    PROB_CALIBRATION = 0,  // Calibration (Bayesian pipeline only)
@@ -118,7 +124,7 @@ input color  InpSellArrowColor= clrRed;    // Sell arrow color
 //+------------------------------------------------------------------+
 input string inp_grp_sltp       = "========== SL/TP Config =========="; // ---
 input ENUM_SLTP_METHOD InpSLTPMethod = SLTP_HYBRID;  // SL/TP Method
-input int    InpSLTPMode        = 0;            // SL/TP Mode: 0=Dynamic 1=Fixed
+input ENUM_SLTP_MODE InpSLTPMode = SLTP_DYNAMIC; // SL/TP Mode
 input bool   InpShowSLTPLines   = true;         // Show SL/TP lines
 input bool   InpShowEntryLine   = true;         // Show Entry line
 input int    InpATRPeriod       = 14;           // ATR Period

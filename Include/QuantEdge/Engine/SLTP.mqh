@@ -642,7 +642,7 @@ void _UpdateDynamicCache(bool isBuy, int caseNum)
    s_dynIsBuy = isBuy;
    s_dynCase = caseNum;
 
-   if(InpSLTPMode == 0)
+   if(InpSLTPMode == SLTP_DYNAMIC)
    {
       s_dynSL = MeasureOptimalSLRatio(isBuy, caseNum);
       double tp1, tp2, tp3;
@@ -707,7 +707,7 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
    }
 
    // Dynamic mode: replace SL with MAE-based ratio
-   if(InpSLTPMode == 0)
+   if(InpSLTPMode == SLTP_DYNAMIC)
    {
       double dynSLRatio = GetDynamicSLRatio() * GetCaseTFSLMultiplier(caseNum, Period());
       double dynSLDist = outATR * dynSLRatio;
@@ -732,13 +732,13 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
    bool measuredApplied = (MathAbs(optTP1 - GetActiveTPRatio()) > 0.01 ||
                            MathAbs(optTP2 - GetActiveTPRatio()*GetActiveTP2Mult()) > 0.01);
 
-   if(measuredApplied && InpSLTPMode != 1)
+   if(measuredApplied && InpSLTPMode != SLTP_FIXED)
    {
       int minSamp = _TPRatioMinSamples(1, tf);
 
       // Dynamic mode: higher credibility (trust data more)
       double credBase = (double)minSamp / (minSamp + k_tf);
-      double credibility = (InpSLTPMode == 0) ? MathMin(1.0, credBase * 1.5) : MathMin(1.0, credBase);
+      double credibility = (InpSLTPMode == SLTP_DYNAMIC) ? MathMin(1.0, credBase * 1.5) : MathMin(1.0, credBase);
 
       double b1 = optTP1 * credibility + GetActiveTPRatio() * (1.0 - credibility);
       double b2 = optTP2 * credibility + GetActiveTPRatio()*GetActiveTP2Mult()*(1.0-credibility);
@@ -752,7 +752,7 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
       double mTP2 = entry + (isBuy ? 1.0 : -1.0) * outATR * b2;
       double mTP3 = entry + (isBuy ? 1.0 : -1.0) * outATR * b3;
 
-      if(InpSLTPMode == 0)
+      if(InpSLTPMode == SLTP_DYNAMIC)
       {
          // Dynamic: use measured TP directly (can widen or tighten)
          outTP1 = mTP1;
