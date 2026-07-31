@@ -11,17 +11,17 @@
 //+------------------------------------------------------------------+
 //| BB Width Percentile (0-100)                                        |
 //+------------------------------------------------------------------+
-double GetBBWidthPercentile(int barIndex, int lookback)
+double GetBBWidthPercentile(int barIndex, int lookback, const double &bbUp[], const double &bbLo[])
 {
-   if(BufferBBUpper[barIndex] == EMPTY_VALUE || BufferBBLower[barIndex] == EMPTY_VALUE) return(50.0);
-   double curWidth = BufferBBUpper[barIndex] - BufferBBLower[barIndex];
+   if(bbUp[barIndex] == EMPTY_VALUE || bbLo[barIndex] == EMPTY_VALUE) return(50.0);
+   double curWidth = bbUp[barIndex] - bbLo[barIndex];
    int countBelow = 0, total = 0;
    for(int j = 1; j <= lookback; j++)
    {
       int idx = barIndex - j;
       if(idx < 0) break;
-      if(BufferBBUpper[idx] == EMPTY_VALUE || BufferBBLower[idx] == EMPTY_VALUE) continue;
-      if((BufferBBUpper[idx] - BufferBBLower[idx]) < curWidth) countBelow++;
+      if(bbUp[idx] == EMPTY_VALUE || bbLo[idx] == EMPTY_VALUE) continue;
+      if((bbUp[idx] - bbLo[idx]) < curWidth) countBelow++;
       total++;
    }
    if(total == 0) return(50.0);
@@ -58,11 +58,11 @@ double GetATRState(int barShift)
 //+------------------------------------------------------------------+
 //| Volatility confirmation score (0.0 - 1.0)                         |
 //+------------------------------------------------------------------+
-double GetVolatilityConfirmation(int caseNum, int barIndex, int totalBars)
+double GetVolatilityConfirmation(int caseNum, int barIndex, int totalBars, const double &bbUp[], const double &bbLo[])
 {
    if(!InpUseVolatFilter) return(0.5);
    int barShift = totalBars - 1 - barIndex;
-   double bbPct = GetBBWidthPercentile(barIndex, 50);
+   double bbPct = GetBBWidthPercentile(barIndex, 50, bbUp, bbLo);
    double atrSt = GetATRState(barShift);
    double score = 0.5;
    switch(caseNum)

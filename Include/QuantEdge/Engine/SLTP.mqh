@@ -564,11 +564,18 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
 //+------------------------------------------------------------------+
 double MeasureOptimalSLRatio(bool isBuy, int caseNum = 0)
 {
+   static int    s_slGen         = -1;
    static int    s_slCachedCount = -1;
    static double s_slCache[20];
    static bool   s_slValid[20];
 
-   if(s_slCachedCount != g_outcomeCount)
+   if(s_slGen != g_tfGeneration)
+   {
+      for(int c = 0; c < 20; c++) s_slValid[c] = false;
+      s_slGen         = g_tfGeneration;
+      s_slCachedCount = g_outcomeCount;
+   }
+   else if(s_slCachedCount != g_outcomeCount)
    {
       for(int c = 0; c < 20; c++) s_slValid[c] = false;
       s_slCachedCount = g_outcomeCount;
@@ -630,12 +637,18 @@ double MeasureOptimalSLRatio(bool isBuy, int caseNum = 0)
 //| Fixed mode: return parametric values from user inputs              |
 //+------------------------------------------------------------------+
 static double s_dynSL = 0, s_dynTP1 = 0, s_dynTP2 = 0, s_dynTP3 = 0;
+static int    s_dynGen = -1;
 static int    s_dynCachedCount = -1;
 static bool   s_dynIsBuy = false;
 static int    s_dynCase = -1;
 
 void _UpdateDynamicCache(bool isBuy, int caseNum)
 {
+   if(s_dynGen != g_tfGeneration)
+   {
+      s_dynGen = g_tfGeneration;
+      s_dynCachedCount = -1;
+   }
    if(s_dynCachedCount == g_outcomeCount && s_dynIsBuy == isBuy && s_dynCase == caseNum)
       return;
    s_dynCachedCount = g_outcomeCount;
@@ -1097,7 +1110,8 @@ void CalculateEntryZones(bool isBuy, int barIndex,
                           double marketEntry, double sl, double tp1,
                           double atr,
                           const double &hi[], const double &lo[],
-                          int totalBars)
+                          int totalBars,
+                          const double &orange[], const double &bbUp[], const double &bbLo[])
 {
    g_validZoneCount = 0;
    g_recommendedZoneCount = 0;
@@ -1175,7 +1189,7 @@ void CalculateEntryZones(bool isBuy, int barIndex,
    }
    adaptiveMax = MathMin(adaptiveMax, maxZones);
 
-   double edge = MeasureEdgeFromHistory(0, isBuy, maxFwd);
+   double edge = MeasureEdgeFromHistory(0, isBuy, maxFwd, orange, bbUp, bbLo);
 
    double shares[];
    CalculateRiskShares(adaptiveMax, shares);

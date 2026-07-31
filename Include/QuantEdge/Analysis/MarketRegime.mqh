@@ -11,16 +11,16 @@
 //+------------------------------------------------------------------+
 //| Detect market regime: 1=uptrend, -1=downtrend, 0=ranging           |
 //+------------------------------------------------------------------+
-int DetectMarketRegime(int barIndex)
+int DetectMarketRegime(int barIndex, const double &orange[], const double &bbUp[], const double &bbLo[])
 {
    if(!InpUseRegimeFilter) return(0);
    if(barIndex < 20) return(0);
-   if(BufferOrange[barIndex] == EMPTY_VALUE || BufferOrange[barIndex-10] == EMPTY_VALUE) return(0);
+   if(orange[barIndex] == EMPTY_VALUE || orange[barIndex-10] == EMPTY_VALUE) return(0);
 
-   double orangeSlope = BufferOrange[barIndex] - BufferOrange[barIndex-10];
+   double orangeSlope = orange[barIndex] - orange[barIndex-10];
    double bbWidth = 0;
-   if(BufferBBUpper[barIndex] != EMPTY_VALUE && BufferBBLower[barIndex] != EMPTY_VALUE)
-      bbWidth = BufferBBUpper[barIndex] - BufferBBLower[barIndex];
+   if(bbUp[barIndex] != EMPTY_VALUE && bbLo[barIndex] != EMPTY_VALUE)
+      bbWidth = bbUp[barIndex] - bbLo[barIndex];
 
    double avgBBWidth = 0;
    int cnt = 0;
@@ -28,9 +28,9 @@ int DetectMarketRegime(int barIndex)
    {
       int idx = barIndex - j;
       if(idx < 0) break;
-      if(BufferBBUpper[idx] != EMPTY_VALUE && BufferBBLower[idx] != EMPTY_VALUE)
+      if(bbUp[idx] != EMPTY_VALUE && bbLo[idx] != EMPTY_VALUE)
       {
-         avgBBWidth += BufferBBUpper[idx] - BufferBBLower[idx];
+         avgBBWidth += bbUp[idx] - bbLo[idx];
          cnt++;
       }
    }
@@ -47,10 +47,12 @@ int DetectMarketRegime(int barIndex)
 //+------------------------------------------------------------------+
 // [PERF-FIX P2-5] Cache per barIndex — called from both CalculateSignalScore()
 // and CalculateAngleStrength(), so 20-bar variance loop ran twice per signal bar.
-double GetAdaptiveAngleThreshold(int barIndex)
+double GetAdaptiveAngleThreshold(int barIndex, const double &green[])
 {
+   static int    s_aatGen     = -1;
    static int    s_aatLastBar = -1;
    static double s_aatResult  = 0;
+   if(s_aatGen != g_tfGeneration) { s_aatGen = g_tfGeneration; s_aatLastBar = -1; }
    if(barIndex == s_aatLastBar) return(s_aatResult);
    s_aatLastBar = barIndex;
 
@@ -60,8 +62,8 @@ double GetAdaptiveAngleThreshold(int barIndex)
    for(int j = 0; j < 20; j++)
    {
       int idx = barIndex - j;
-      if(idx < 1 || BufferGreen[idx] == EMPTY_VALUE || BufferGreen[idx-1] == EMPTY_VALUE) continue;
-      double delta = BufferGreen[idx] - BufferGreen[idx-1];
+      if(idx < 1 || green[idx] == EMPTY_VALUE || green[idx-1] == EMPTY_VALUE) continue;
+      double delta = green[idx] - green[idx-1];
       sum += delta; sumSq += delta * delta; count++;
    }
    if(count < 10) { s_aatResult = InpAngleThreshold; return(s_aatResult); }
@@ -79,17 +81,17 @@ double GetAdaptiveAngleThreshold(int barIndex)
 //| Z < 0.5  = weak/sideway (3h-6h) → low probability                |
 //| Returns 0.0 if insufficient data                                  |
 //+------------------------------------------------------------------+
-double CalculateAngleStrength(int barIndex)
+double CalculateAngleStrength(int barIndex, const double &green[])
 {
    if(barIndex < 3) return(0.0);
-   if(BufferGreen[barIndex]   == EMPTY_VALUE) return(0.0);
-   if(BufferGreen[barIndex-2] == EMPTY_VALUE) return(0.0);
+   if(green[barIndex]   == EMPTY_VALUE) return(0.0);
+   if(green[barIndex-2] == EMPTY_VALUE) return(0.0);
 
    // Momentum over 2 bars — more stable than 1 bar, less lag than 3 bars
-   double greenDelta2 = MathAbs(BufferGreen[barIndex] - BufferGreen[barIndex-2]);
+   double greenDelta2 = MathAbs(green[barIndex] - green[barIndex-2]);
 
    // Adaptive threshold (same denominator as GetAdaptiveAngleThreshold)
-   double adaptiveThresh = GetAdaptiveAngleThreshold(barIndex);
+   double adaptiveThresh = GetAdaptiveAngleThreshold(barIndex, green);
    if(adaptiveThresh <= 0.0) return(0.0);
 
    // Z-score: how many "standard deviations" above the recent average crossover

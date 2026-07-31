@@ -97,8 +97,10 @@ int SL_GetMTFTrendForTF(int targetTF)
 // caching avoids redundant handle lookups when multiple signals fire on same bar.
 double SL_GetATRRatio(int barShift)
 {
+   static int    s_atrGen     = -1;
    static int    s_lastShift = -1;
    static double s_lastRatio = 1.0;
+   if(s_atrGen != g_tfGeneration) { s_atrGen = g_tfGeneration; s_lastShift = -1; }
    if(barShift == s_lastShift) return(s_lastRatio);
    s_lastShift = barShift;
 

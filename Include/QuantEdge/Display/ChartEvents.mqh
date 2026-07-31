@@ -40,7 +40,7 @@ void HandleChartEvent(const int id, const long &lparam,
                g_activeSignalIndex = sigIdx;
                g_userSelectedSignal = true;
                if(InpShowMTF) RefreshMTFData();
-               if(InpShowProbability) CalculateProbability(sigIdx);
+               if(InpShowProbability) CalculateProbability(sigIdx, BufferOrange, BufferBBUpper, BufferBBLower);
                DrawInfoPanel(sigIdx);
                DrawSLTPLines(sigIdx);
                if(InpShowProbability) DrawProbabilityLabels();

@@ -23,7 +23,6 @@
 #include "../Core/Globals.mqh"
 #include "Normalize.mqh"
 #include "IntermarketAnalysis.mqh"
-#include "../Engine/WalkForward.mqh"
 
 //+------------------------------------------------------------------+
 //| Session block definitions (UTC)                                    |
@@ -104,7 +103,9 @@ void InitSessionStats()
 //+------------------------------------------------------------------+
 void UpdateSessionStats()
 {
+   static int s_statsGen           = -1;
    static int s_lastProcessedCount = 0;
+   if(s_statsGen != g_tfGeneration) { s_statsGen = g_tfGeneration; s_lastProcessedCount = -1; }
 
    int resolvedNow = 0;
    for(int i = 0; i < g_outcomeCount; i++)

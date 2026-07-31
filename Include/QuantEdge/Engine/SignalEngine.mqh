@@ -19,26 +19,28 @@
 //+------------------------------------------------------------------+
 SignalScore CalculateSignalScore(int caseNum, bool isBuy, int barIndex,
                                  int totalBars, datetime signalTime,
+                                 const double &green[],
+                                 const double &bbUp[], const double &bbLo[],
                                  double srScoreInput = 50.0)
 {
    SignalScore score;
 
    //--- RSI Base Score - THE MOST IMPORTANT
    double greenDelta = 0;
-   if(barIndex >= 2 && BufferGreen[barIndex-2] != EMPTY_VALUE)
-      greenDelta = MathAbs(BufferGreen[barIndex] - BufferGreen[barIndex-2]);
-   double adaptiveThresh = GetAdaptiveAngleThreshold(barIndex);
+   if(barIndex >= 2 && green[barIndex-2] != EMPTY_VALUE)
+      greenDelta = MathAbs(green[barIndex] - green[barIndex-2]);
+   double adaptiveThresh = GetAdaptiveAngleThreshold(barIndex, green);
    
    // Base: how strong is the crossover relative to threshold
    score.rsiScore = MathMin((greenDelta / MathMax(adaptiveThresh, 0.1)) * 60.0, 85.0);
    
    // Bonus for extreme RSI zones
-   if(BufferGreen[barIndex] != EMPTY_VALUE)
+   if(green[barIndex] != EMPTY_VALUE)
    {
-      if(isBuy && BufferGreen[barIndex] < 30)  score.rsiScore += 15;
-      if(isBuy && BufferGreen[barIndex] < 20)  score.rsiScore += 10;
-      if(!isBuy && BufferGreen[barIndex] > 70) score.rsiScore += 15;
-      if(!isBuy && BufferGreen[barIndex] > 80) score.rsiScore += 10;
+      if(isBuy && green[barIndex] < 30)  score.rsiScore += 15;
+      if(isBuy && green[barIndex] < 20)  score.rsiScore += 10;
+      if(!isBuy && green[barIndex] > 70) score.rsiScore += 15;
+      if(!isBuy && green[barIndex] > 80) score.rsiScore += 10;
    }
    
    // Bonus for specific strong cases
@@ -51,7 +53,7 @@ SignalScore CalculateSignalScore(int caseNum, bool isBuy, int barIndex,
    score.volumeScore = GetVolumeConfirmation(caseNum, isBuy, barIndex, totalBars) * 100.0;
 
    //--- Volatility
-   score.volatilityScore = GetVolatilityConfirmation(caseNum, barIndex, totalBars) * 100.0;
+   score.volatilityScore = GetVolatilityConfirmation(caseNum, barIndex, totalBars, bbUp, bbLo) * 100.0;
 
    //--- Session
    score.sessionScore = GetSessionQuality(caseNum, signalTime) * 100.0;

@@ -687,7 +687,7 @@ double GetVolRegimeEdgeAdjustment()
    return(0.0);
 }
 
-void UpdateMarketState()
+void UpdateMarketState(const double &orange[], const double &bbUp[], const double &bbLo[])
 {
    static datetime s_msLastBar = 0;
    datetime curBar = iTime(NULL, 0, 0);
@@ -695,8 +695,8 @@ void UpdateMarketState()
    s_msLastBar = curBar;
 
    double atr = g_volRegime.atrRatio;
-   int trend = DetectMarketRegime(0);
-   double bbPct = GetBBWidthPercentile(0, 50);
+   int trend = DetectMarketRegime(0, orange, bbUp, bbLo);
+   double bbPct = GetBBWidthPercentile(0, 50, bbUp, bbLo);
    bool spreadBad = (g_spreadRegime.isSpike || g_spreadRegime.isExtreme);
 
    if(atr > 1.5 || spreadBad)
@@ -1035,7 +1035,8 @@ void ScanStoredSignalsBoth(const SignalData &curSig, int maxFwd,
 //+------------------------------------------------------------------+
 //| Main probability calculation                                       |
 //+------------------------------------------------------------------+
-void CalculateProbability(int currentSignalIndex)
+void CalculateProbability(int currentSignalIndex,
+                         const double &orange[], const double &bbUp[], const double &bbLo[])
 {
    static int      s_probCachedSigIdx  = -1;
    static datetime s_probCachedBarTime = 0;
@@ -1247,7 +1248,7 @@ void CalculateProbability(int currentSignalIndex)
    // STEP 2: Measure edge from data
    //=================================================================
    double measuredEdge = MeasureEdgeFromHistory(
-      curSig.caseNumber, curSig.isBuySignal, maxFwd);
+      curSig.caseNumber, curSig.isBuySignal, maxFwd, orange, bbUp, bbLo);
    g_cachedEdge = measuredEdge;
 
    //=================================================================
@@ -1312,7 +1313,7 @@ void CalculateProbability(int currentSignalIndex)
    double adjustedEdge = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + edgeAdjustment));
    double _exEdgeBeforeMktSt = adjustedEdge;
 
-   UpdateMarketState();
+   UpdateMarketState(orange, bbUp, bbLo);
    adjustedEdge = MathMax(0.48, MathMin(edgeCeiling, adjustedEdge * g_marketState.probMultiplier));
 
    //=================================================================
@@ -1389,7 +1390,7 @@ void CalculateProbability(int currentSignalIndex)
    //=================================================================
    if(InpProbMode != PROB_CALIBRATION)
    {
-      double xgbProb = XGBGetPrediction(curSig);
+      double xgbProb = XGBGetPrediction(curSig, orange, bbUp, bbLo);
       g_currentProb.xgbProbTP1 = xgbProb;
       g_xgbProbTP1 = xgbProb;
 
@@ -1474,9 +1475,11 @@ void CalculateProbability(int currentSignalIndex)
    //--- ATR Spike Detection (skip when Vol-regime already penalized as EVENT)
    // [PROB-FIX-4] Cache signal-bar ATR ratio per signal index.
    // Signal bar is a closed historical bar — its avgATR context never changes.
+   static int    s_spikeGen    = -1;
    static int    s_spikeIdx    = -2;
    static double s_spikeCurATR = 0;
    static double s_spikeAvgATR = 0;
+   if(s_spikeGen != g_tfGeneration) { s_spikeGen = g_tfGeneration; s_spikeIdx = -2; }
    if(g_volRegime.regime != VOL_EVENT)
    {
       if(currentSignalIndex != s_spikeIdx)

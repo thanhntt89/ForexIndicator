@@ -96,9 +96,7 @@ double BufferSellSignal[];
 #include <QuantEdge/Core/MathUtils.mqh>
 #include <QuantEdge/Analysis/Normalize.mqh>
 #include <QuantEdge/Signal/CandleNormalize.mqh>
-#include <QuantEdge/Signal/RSICore.mqh>
-#include <QuantEdge/Signal/SwingDetection.mqh>
-#include <QuantEdge/Signal/SignalCases.mqh>
+#include <QuantEdge/Signal/SignalDetector.mqh>
 #include <QuantEdge/Risk/PositionSizing.mqh>
 #include <QuantEdge/Engine/SLTP.mqh>
 #include <QuantEdge/Engine/MTFEngine.mqh>
@@ -277,6 +275,7 @@ int OnCalculate(const int rates_total,
    bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
    if(fullRecalc)
    {
+      g_tfGeneration++;
       ArrayResize(g_rawRSI, rates_total);
       ArrayInitialize(g_rawRSI, EMPTY_VALUE);
       DeleteObjectsByPrefix(PREFIX_ARROW);
@@ -369,7 +368,7 @@ int OnCalculate(const int rates_total,
    }
 
    //--- Calculate RSI lines
-   CalculateRSILines(startBar, rates_total);
+   SignalDetector_Calculate(startBar, rates_total);
 
    //--- Signal detection range
    int sigStart = MathMax(startBar, InpRSIPeriod + InpBBPeriod + 2);
@@ -407,118 +406,30 @@ int OnCalculate(const int rates_total,
       }
       bool isCurrentBar = (i == rates_total - 1);
 
-      if(BufferGreen[i]   == EMPTY_VALUE || BufferGreen[i-1]  == EMPTY_VALUE) continue;
-      if(BufferRed[i]     == EMPTY_VALUE || BufferRed[i-1]    == EMPTY_VALUE) continue;
-      if(BufferOrange[i]  == EMPTY_VALUE) continue;
-      if(BufferBBUpper[i] == EMPTY_VALUE || BufferBBLower[i]  == EMPTY_VALUE) continue;
 
-      bool greenCrossUp   = (BufferGreen[i-1] <= BufferRed[i-1]) && (BufferGreen[i] > BufferRed[i]);
-      bool greenCrossDown = (BufferGreen[i-1] >= BufferRed[i-1]) && (BufferGreen[i] < BufferRed[i]);
-
-      double greenDelta = 0.0;
-      if(i >= 2 && BufferGreen[i-2] != EMPTY_VALUE)
-         greenDelta = BufferGreen[i] - BufferGreen[i-2];
-
-      double adaptiveThresh = GetNormalizedAngleThreshold(i, BufferGreen);
-      bool strongAngleUp    = (greenDelta >= adaptiveThresh);
-      bool strongAngleDown  = (greenDelta <= -adaptiveThresh);
-
-      // [EXPERIMENT] Monitor-only marker: Green x Red inside OB/OS zone (user rule).
-      // Independent of the case pipeline; drawn on closed bars only (anti-repaint).
       if(!isCurrentBar) DrawOSCrossMonitor(i, time, low, high);
 
-      // Cooldown: skip if too close to previous signal
-      int _cooldown = GetActiveCooldownBars();
-      if(_cooldown > 0 && g_signalCount > 0)
-      {
-         int lastBar = g_signals[g_signalCount-1].barIndex;
-         int stableAnchor = rates_total - 500;
-         if(InpMaxBars > 500 && lastBar < stableAnchor && i >= stableAnchor)
-         { /* crossing anchor Ã¢â‚¬â€ don't carry cooldown from deep history */ }
-         else if(i - lastBar < _cooldown)
-            continue;
-      }
+      SignalResult signal = SignalDetector_Detect(i, rates_total, high, low, close, time);
+      if(signal.caseNumber == 0) continue;
 
-      // [SESSION-HARD] Pre-detection: session block for Case 6 filtering
-      int _sb = GetSessionBlock(time[i]);
+      int buySignal  = signal.isBuy  ? signal.caseNumber : 0;
+      int sellSignal = !signal.isBuy ? signal.caseNumber : 0;
 
-      int buySignal  = 0;
-      int sellSignal = 0;
-      // Priority: Case 6Ã¢â€ â€™2Ã¢â€ â€™4Ã¢â€ â€™3Ã¢â€ â€™1Ã¢â€ â€™5Ã¢â€ â€™7 (optimized for M1/M5)
-      if(GetActiveCaseEnabled(6) && buySignal == 0 && sellSignal == 0)
-      {
-         if(CheckCase6_Buy(i))       buySignal  = 6;
-         else if(CheckCase6_Sell(i)) sellSignal = 6;
-      }
-      if(GetActiveCaseEnabled(2) && buySignal == 0 && sellSignal == 0)
-      {
-         if(greenCrossUp && strongAngleUp && CheckCase2_Buy(i, low))          buySignal = 2;
-         else if(greenCrossDown && strongAngleDown && CheckCase2_Sell(i, high)) sellSignal = 2;
-      }
-      if(GetActiveCaseEnabled(4) && buySignal == 0 && sellSignal == 0)
-      {
-         if(CheckCase4_Buy(i))       buySignal  = 4;
-         else if(CheckCase4_Sell(i)) sellSignal = 4;
-      }
-      if(GetActiveCaseEnabled(3) && buySignal == 0 && sellSignal == 0)
-      {
-         if(greenCrossUp && strongAngleUp && CheckCase3_Buy(i, low))          buySignal = 3;
-         else if(greenCrossDown && strongAngleDown && CheckCase3_Sell(i, high)) sellSignal = 3;
-      }
-      if(GetActiveCaseEnabled(1) && buySignal == 0 && sellSignal == 0)
-      {
-         if(CheckCase1_Buy(i))       buySignal  = 1;
-         else if(CheckCase1_Sell(i)) sellSignal = 1;
-      }
-      if(GetActiveCaseEnabled(5) && buySignal == 0 && sellSignal == 0)
-      {
-         if(greenCrossUp && strongAngleUp && CheckCase5_Buy(i))          buySignal = 5;
-         else if(greenCrossDown && strongAngleDown && CheckCase5_Sell(i)) sellSignal = 5;
-      }
-      if(GetActiveCaseEnabled(7) && buySignal == 0 && sellSignal == 0)
-      {
-         if(CheckCase7_Buy(i))       buySignal  = 7;
-         else if(CheckCase7_Sell(i)) sellSignal = 7;
-      }
-      // Case 8: Basic Crossover (lowest priority) Ã¢â‚¬â€ Green x Red + strong angle.
-      // Catches the core RSI rule when no higher-quality pattern fired.
-      if(GetActiveCaseEnabled(8) && buySignal == 0 && sellSignal == 0)
-      {
-         if(greenCrossUp && strongAngleUp && CheckCase8_Buy(i))            buySignal  = 8;
-         else if(greenCrossDown && strongAngleDown && CheckCase8_Sell(i))  sellSignal = 8;
-      }
-      // Case 9: Plain Cross (no zone filter, no angle gate, lowest priority).
-      // Catches weak green x red crossovers that Case 8 rejects (no strong angle).
-      if(GetActiveCaseEnabled(9) && buySignal == 0 && sellSignal == 0)
-      {
-         if(greenCrossUp && CheckCase9_Buy(i))            buySignal  = 9;
-         else if(greenCrossDown && CheckCase9_Sell(i))    sellSignal = 9;
-      }
-
-      // [SESSION-HARD] Post-detection: Case 6 block in Asian/LateNY
-      if(buySignal == 6 || sellSignal == 6)
-      {
-         if((InpHardCase6Asian  && _sb == 0) ||
-            (InpHardCase6LateNY && _sb == 3))
-         { buySignal = 0; sellSignal = 0; }
-      }
-      if(buySignal == 0 && sellSignal == 0) continue;
-
-      //--- Current bar: buffer only
+      //--- Current bar: buffer + alert only
       if(isCurrentBar)
       {
          if(buySignal > 0) BufferBuySignal[i] = (double)buySignal;
          if(sellSignal > 0) BufferSellSignal[i] = (double)sellSignal;
-         if((buySignal > 0 || sellSignal > 0) && time[i] != g_lastAlertTime)
+         if(time[i] != g_lastAlertTime)
          {
             g_lastAlertTime = time[i];
             string alertMsg = Symbol() + " " + GetTimeframeString() + " [FORMING]: ";
             if(buySignal > 0)
                alertMsg += "BUY Case " + IntegerToString(buySignal) +
-                           " (" + GetCaseName(buySignal) + ")";
+                           " (" + SignalDetector_GetCaseName(buySignal) + ")";
             if(sellSignal > 0)
                alertMsg += "SELL Case " + IntegerToString(sellSignal) +
-                           " (" + GetCaseName(sellSignal) + ")";
+                           " (" + SignalDetector_GetCaseName(sellSignal) + ")";
             if(InpAlertPopup) Alert(alertMsg);
             if(InpAlertSound) PlaySound(InpAlertSoundFile);
          }
@@ -555,11 +466,11 @@ int OnCalculate(const int rates_total,
             slDist = MathAbs(entryPrice - sl);
             if(slDist < minSLDist) { sl = entryPrice - minSLDist; slDist = minSLDist; }
          }
-         double angleZ = CalculateAngleStrength(i);
+         double angleZ = signal.angleStrength;
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
-                     curSpread, sigSessBlock, BufferGreen[i]);
+                     curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1, (i >= rates_total - 2));
          if(i >= rates_total - 2 && !_buyBlocked) OnNewSignalAccepted();
          // [PERF] Log signal + pending ONLY for the just-closed bar (forward-only). Re-logging
@@ -574,7 +485,7 @@ int OnCalculate(const int rates_total,
             int    _timeInSess= SL_GetTimeInSessionMin(time[i], sigSessBlock);
             LogSignalEntry(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal,
                            sigSessBlock, angleZ,
-                           BufferGreen[i], _atrRatio, _spreadPips, _d1Trend,
+                           signal.indicatorValue, _atrRatio, _spreadPips, _d1Trend,
                            GetActiveSLTPMethod(), (bool)InpAutoTFConfig, _timeInSess);
             LogOutcomePending(time[i], buySignal, true);
          }
@@ -607,11 +518,11 @@ int OnCalculate(const int rates_total,
             slDist = MathAbs(sl - entryPrice);
             if(slDist < minSLDist) { sl = entryPrice + minSLDist; slDist = minSLDist; }
          }
-         double angleZ = CalculateAngleStrength(i);
+         double angleZ = signal.angleStrength;
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
-                     curSpread, sigSessBlock, BufferGreen[i]);
+                     curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1, (i >= rates_total - 2));
          if(i >= rates_total - 2 && !_sellBlocked) OnNewSignalAccepted();
          // [PERF] Forward-only logging (see buy branch): log once when the bar closes.
@@ -624,7 +535,7 @@ int OnCalculate(const int rates_total,
             int    _timeInSess= SL_GetTimeInSessionMin(time[i], sigSessBlock);
             LogSignalEntry(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal,
                            sigSessBlock, angleZ,
-                           BufferGreen[i], _atrRatio, _spreadPips, _d1Trend,
+                           signal.indicatorValue, _atrRatio, _spreadPips, _d1Trend,
                            GetActiveSLTPMethod(), (bool)InpAutoTFConfig, _timeInSess);
             LogOutcomePending(time[i], sellSignal, false);
          }
@@ -639,10 +550,10 @@ int OnCalculate(const int rates_total,
             string alertMsg = Symbol() + " " + GetTimeframeString() + " QuantEdge: ";
             if(buySignal > 0)
                alertMsg += "BUY Case " + IntegerToString(buySignal) +
-                           " (" + GetCaseName(buySignal) + ")";
+                           " (" + SignalDetector_GetCaseName(buySignal) + ")";
             if(sellSignal > 0)
                alertMsg += "SELL Case " + IntegerToString(sellSignal) +
-                           " (" + GetCaseName(sellSignal) + ")";
+                           " (" + SignalDetector_GetCaseName(sellSignal) + ")";
             if(InpAlertPopup) Alert(alertMsg);
             if(InpAlertSound) PlaySound(InpAlertSoundFile);
          }
@@ -757,7 +668,7 @@ int OnCalculate(const int rates_total,
          s_lastDrawSignalIdx = g_activeSignalIndex;
 
          if(InpShowMTF && (isNewBar || forceRedraw)) RefreshMTFData();
-         if(InpShowProbability) CalculateProbability(g_activeSignalIndex);
+         if(InpShowProbability) CalculateProbability(g_activeSignalIndex, BufferOrange, BufferBBUpper, BufferBBLower);
          if(InpShowProbability && g_activeSignalIndex >= 0 &&
             g_signals[g_activeSignalIndex].predictedProb <= 0 && g_currentProb.probTP1 > 0)
             g_signals[g_activeSignalIndex].predictedProb = g_currentProb.probTP1;
@@ -826,7 +737,8 @@ int OnCalculate(const int rates_total,
             CalculateEntryZones(
                activeSig.isBuySignal, activeSig.barIndex,
                activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
-               activeSig.atrValue, high, low, rates_total);
+               activeSig.atrValue, high, low, rates_total,
+               BufferOrange, BufferBBUpper, BufferBBLower);
             DrawZoneLines(false);
             s_zonesDrawn = true;
          }

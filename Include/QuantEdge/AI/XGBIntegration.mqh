@@ -18,7 +18,8 @@
 //+------------------------------------------------------------------+
 //| XGBGetPrediction — collect features and call XGBPredict()         |
 //+------------------------------------------------------------------+
-double XGBGetPrediction(const SignalData &sig)
+double XGBGetPrediction(const SignalData &sig,
+                        const double &orange[], const double &bbUp[], const double &bbLo[])
 {
    double slDist   = MathAbs(sig.entryPrice - sig.stopLoss);
    double tp1Dist  = MathAbs(sig.takeProfit1 - sig.entryPrice);
@@ -44,7 +45,7 @@ double XGBGetPrediction(const SignalData &sig)
       sig.sessionBlock,
       sigDt.hour,
       sigDt.day_of_week,
-      DetectMarketRegime(Bars - 1),
+      DetectMarketRegime(Bars - 1, orange, bbUp, bbLo),
       (g_mtfCount > 0) ? (int)(100.0 * g_intermarket.correlationScore) : 50,
       g_spreadRegime.spreadRatio,
       g_walkForward.isRobust ? 1 : 0,

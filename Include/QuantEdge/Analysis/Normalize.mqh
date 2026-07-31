@@ -496,19 +496,22 @@ double CalculateRealMarketProbTP(double edge, double slDist, double tpDist, doub
 //+------------------------------------------------------------------+
 //|        SECTION 9: EDGE MEASUREMENT                                 |
 //+------------------------------------------------------------------+
-double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
+double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward,
+                              const double &orange[], const double &bbUp[], const double &bbLo[])
 {
    // [PROB-FIX-1] Cache full result per (caseNum, isBuy, signalCount, maxForward).
    // Phase 2 deep-scans thousands of historical bars outside InpMaxBars — those bars
    // don't change between new bars. Only recompute when g_signalCount increases
    // (new signal detected) or other key inputs change. ~99% cost reduction on M1.
+   static int    s_efhGen    = -1;
    static int    s_efhN      = -1;
    static int    s_efhCase   = -99;
    static bool   s_efhBuy    = false;
    static int    s_efhMaxFwd = -1;
    static int    s_efhRegime = 99;
    static double s_efhResult = 0.51;
-   int curRegime = DetectMarketRegime(Bars - 1);
+   if(s_efhGen != g_tfGeneration) { s_efhGen = g_tfGeneration; s_efhN = -1; }
+   int curRegime = DetectMarketRegime(Bars - 1, orange, bbUp, bbLo);
    if(s_efhN == g_signalCount && s_efhCase == caseNum &&
       s_efhBuy == isBuy && s_efhMaxFwd == maxForward && s_efhRegime == curRegime)
       return(s_efhResult);
@@ -579,7 +582,7 @@ double MeasureEdgeFromHistory(int caseNum, bool isBuy, int maxForward)
       if(outcome!=0)
       {
          totalCount++; if(outcome==1) correctCount++;
-         int sigRegime = DetectMarketRegime(g_signals[s].barIndex);
+         int sigRegime = DetectMarketRegime(g_signals[s].barIndex, orange, bbUp, bbLo);
          if(sigRegime != 0) { totalTrend++; if(outcome==1) correctTrend++; }
          else               { totalRange++; if(outcome==1) correctRange++; }
       }

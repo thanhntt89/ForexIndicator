@@ -18,6 +18,7 @@ double g_rawRSI[];
 int      g_prevRatesTotal  = 0;
 int      g_ratesTotal      = 0;
 datetime g_lastAlertTime   = 0;
+int      g_tfGeneration    = 0;   // Bumped on every fullRecalc (TF switch/history rebuild) — invalidates static caches keyed on bar-local data
 
 //+------------------------------------------------------------------+
 //| Signal storage                                                     |

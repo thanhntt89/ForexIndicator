@@ -64,8 +64,10 @@ void CalculateInformationCoefficient(int splitIdx)
    // [PROB-FIX-6] Cache per (outcomeCount, splitIdx).
    // IC only changes when new outcomes are resolved or the IS/OOS split shifts.
    // Avoids O(outcomeCount × splitIdx) join on every new bar.
+   static int s_icGen          = -1;
    static int s_icOutcomeCount = -1;
    static int s_icSplitIdx    = -1;
+   if(s_icGen != g_tfGeneration) { s_icGen = g_tfGeneration; s_icOutcomeCount = -1; }
    if(s_icOutcomeCount == g_outcomeCount && s_icSplitIdx == splitIdx) return;
    s_icOutcomeCount = g_outcomeCount;
    s_icSplitIdx     = splitIdx;
@@ -294,8 +296,10 @@ void CalculateRollingWalkForward()
 //+------------------------------------------------------------------+
 void CalculatePermutationPValue()
 {
+   static int    s_permGen = -1;
    static int    s_permN   = -1;
    static double s_permRes = 1.0;
+   if(s_permGen != g_tfGeneration) { s_permGen = g_tfGeneration; s_permN = -1; }
    if(s_permN == g_outcomeCount)
    {
       g_walkForward.permPValue = s_permRes;
