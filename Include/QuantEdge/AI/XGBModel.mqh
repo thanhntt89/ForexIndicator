@@ -3,7 +3,7 @@
 //| V12.2: Loads XGBoost model from binary file at runtime.          |
 //| No recompile needed when model is updated by xgb_service.py.     |
 //|                                                                    |
-//| Binary file: Common/Files/RSI_Advanced/XGBModels.bin              |
+//| Binary file: Common/Files/QuantEdge_RSI/XGBModels.bin             |
 //| Auto-reload: every 5 minutes via CheckXGBReload()                 |
 //+------------------------------------------------------------------+
 #ifndef QE_XGBMODEL_MQH
@@ -15,7 +15,7 @@
 #define XGB_MAX_TREES_TOTAL   2000
 #define XGB_MAX_NODES_TOTAL   100000
 #define XGB_NUM_FEATURES      22
-#define XGB_MODEL_FILE        "RSI_Advanced\\XGBModels.bin"
+#define XGB_MODEL_FILE        "QuantEdge_RSI\\XGBModels.bin"
 #define XGB_RELOAD_SECONDS    300
 
 //+------------------------------------------------------------------+

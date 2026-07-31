@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rsi_xgboost_train.py — XGBoost training pipeline for RSI_Advanced V12
+rsi_xgboost_train.py — XGBoost training pipeline for QuantEdge_RSI V12
 
 Reads CSV signal/scoring/outcome data, trains a walk-forward validated
 XGBoost model, and exports the decision tree ensemble as MQL4/5 source code.
@@ -841,7 +841,7 @@ def train_single(data_dirs: list, symbol: str, tf: str, output_path: str,
 
 
 def main():
-    parser = argparse.ArgumentParser(description="XGBoost training for RSI_Advanced V12")
+    parser = argparse.ArgumentParser(description="XGBoost training for QuantEdge_RSI V12")
     parser.add_argument("--data-dir", required=True, nargs="+",
                         help="One or more directories containing signal/scoring/outcome CSVs")
     parser.add_argument("--output", default=None,
@@ -864,9 +864,9 @@ def main():
         script_dir = Path(__file__).parent.parent
         if args.output_format == "bin":
             common_files = Path(os.environ.get("APPDATA", "")) / "MetaQuotes" / "Terminal" / "Common" / "Files"
-            args.output = str(common_files / "RSI_Advanced" / "XGBModels.bin")
+            args.output = str(common_files / "QuantEdge_RSI" / "XGBModels.bin")
         else:
-            args.output = str(script_dir / "Include" / "RSI_Advanced" / "XGBModel.mqh")
+            args.output = str(script_dir / "Include" / "QuantEdge" / "AI" / "XGBModel.mqh")
 
     data_dirs = args.data_dir
 

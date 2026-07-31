@@ -254,7 +254,7 @@ input bool   InpAutoTFConfig     = true;  // Auto-adapt SL/TP/cases per TF (scal
 //+------------------------------------------------------------------+
 input string inp_grp_log        = "========== Signal Logging =========="; // ---
 input bool   InpEnableSignalLog = true;                   // Enable signal logging to CSV (persists actual outcomes across TF switch/restart)
-input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside MQL4/Files/)
+input string InpLogFolder       = "QuantEdge_RSI_Logs";   // Log folder (inside MQL4/Files/)
 
 
 //+------------------------------------------------------------------+
