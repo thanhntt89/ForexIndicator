@@ -46,14 +46,14 @@ PROJECT_DIR = SCRIPT_DIR.parent
 CONFIG_PATH = SCRIPT_DIR / "xgb_config.json"
 STATE_PATH = SCRIPT_DIR / ".xgb_state.json"
 LOG_PATH = SCRIPT_DIR / "xgb_service.log"
-TRAINER_SCRIPT = SCRIPT_DIR / "rsi_xgboost_train.py"
-DEFAULT_OUTPUT_MQL = PROJECT_DIR / "Include" / "RSI_Advanced" / "XGBModel.mqh"
+TRAINER_SCRIPT = SCRIPT_DIR / "quantedge_xgboost_train.py"
+DEFAULT_OUTPUT_MQL = PROJECT_DIR / "Include" / "QuantEdge" / "AI" / "XGBModel.mqh"
 LOCK_PATH = SCRIPT_DIR / ".xgb_service.lock"
 
 APPDATA_PATH = Path(os.environ.get("APPDATA", ""))
 MT_TERMINAL_BASE = APPDATA_PATH / "MetaQuotes" / "Terminal"
 COMMON_FILES_DIR = MT_TERMINAL_BASE / "Common" / "Files"
-DEFAULT_OUTPUT_BIN = COMMON_FILES_DIR / "RSI_Advanced" / "XGBModels.bin"
+DEFAULT_OUTPUT_BIN = COMMON_FILES_DIR / "QuantEdge_RSI" / "XGBModels.bin"
 
 TF_TO_PERIOD = {
     "M1": 1, "M5": 5, "M15": 15, "M30": 30,
@@ -151,9 +151,9 @@ def save_state(state: dict):
 
 # ─── Terminal Discovery ─────────────────────────────────────────────
 def get_data_dirs(config: dict) -> list:
-    """Build list of RSI_Advanced_Logs directories across all configured terminals."""
+    """Build list of QuantEdge_RSI_Logs directories across all configured terminals."""
     dirs = []
-    log_folder = config.get("log_folder_name", "RSI_Advanced_Logs")
+    log_folder = config.get("log_folder_name", "QuantEdge_RSI_Logs")
 
     for tid in config.get("mt4_terminal_ids", []):
         d = MT_TERMINAL_BASE / tid / "MQL4" / "Files" / log_folder
@@ -222,7 +222,7 @@ def should_train(key: str, current_count: int, state: dict, config: dict) -> tup
 
 
 def run_training(symbol: str, tf: str, data_dirs: list, output_path: str) -> dict:
-    """Run rsi_xgboost_train.py as subprocess for one symbol+TF."""
+    """Run quantedge_xgboost_train.py as subprocess for one symbol+TF."""
     cmd = [
         sys.executable, str(TRAINER_SCRIPT),
         "--data-dir", *data_dirs,
@@ -279,16 +279,16 @@ def assemble_multi_model(trained_models: list, output_path: str):
     """Assemble multiple per-symbol+TF .mqh files into one unified XGBModel.mqh.
 
     Each model was already exported as a standalone file. We re-import their
-    rsi_xgboost_train module and use export_multi_model().
+    quantedge_xgboost_train module and use export_multi_model().
     """
-    # Import rsi_xgboost_train for the multi-model assembler
+    # Import quantedge_xgboost_train for the multi-model assembler
     sys.path.insert(0, str(SCRIPT_DIR))
     try:
         import importlib
-        import rsi_xgboost_train as trainer
+        import quantedge_xgboost_train as trainer
         importlib.reload(trainer)
     except ImportError:
-        logger.error("Cannot import rsi_xgboost_train.py for multi-model assembly")
+        logger.error("Cannot import quantedge_xgboost_train.py for multi-model assembly")
         return
 
     logger.info(f"Assembling {len(trained_models)} models into {output_path}")
@@ -325,10 +325,10 @@ def assemble_binary_model(trained_models: list, output_path: str):
     sys.path.insert(0, str(SCRIPT_DIR))
     try:
         import importlib
-        import rsi_xgboost_train as trainer
+        import quantedge_xgboost_train as trainer
         importlib.reload(trainer)
     except ImportError:
-        logger.error("Cannot import rsi_xgboost_train.py for binary assembly")
+        logger.error("Cannot import quantedge_xgboost_train.py for binary assembly")
         return
 
     logger.info(f"Assembling {len(trained_models)} models into binary: {output_path}")

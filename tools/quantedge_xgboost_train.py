@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-rsi_xgboost_train.py — XGBoost training pipeline for QuantEdge_RSI V12
+quantedge_xgboost_train.py — XGBoost training pipeline for QuantEdge_RSI V12
 
 Reads CSV signal/scoring/outcome data, trains a walk-forward validated
 XGBoost model, and exports the decision tree ensemble as MQL4/5 source code.
 
 Usage (standalone):
-    python rsi_xgboost_train.py --data-dir <path_to_csv_folder>
-    python rsi_xgboost_train.py --data-dir <path> --symbol XAUUSD --tf H1
+    python quantedge_xgboost_train.py --data-dir <path_to_csv_folder>
+    python quantedge_xgboost_train.py --data-dir <path> --symbol XAUUSD --tf H1
 
 Usage (called by xgb_service.py):
-    python rsi_xgboost_train.py --data-dir <path> --symbol XAUUSD --tf H1 \
+    python quantedge_xgboost_train.py --data-dir <path> --symbol XAUUSD --tf H1 \
         --model-index 0 --json-output
 
 Requirements:
@@ -479,10 +479,10 @@ def export_single_model(results: dict, output_path: str, symbol: str, tf: str):
 //| Generated: {now_str}                                |
 //| Model: {symbol} {tf} ({n_trees} trees, depth {XGB_PARAMS['max_depth']})                       |
 //| OOS Brier: {results['oos_brier']:.4f} | OOS AUC: {results['oos_auc']:.4f}             |
-//| DO NOT EDIT - regenerate using tools/rsi_xgboost_train.py        |
+//| DO NOT EDIT - regenerate using tools/quantedge_xgboost_train.py  |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_XGBMODEL_MQH
-#define RSI_ADV_XGBMODEL_MQH
+#ifndef QE_XGBMODEL_MQH
+#define QE_XGBMODEL_MQH
 
 #define XGB_MODEL_COUNT     1
 #define XGB_MODEL_TREES     {n_trees}
@@ -543,8 +543,8 @@ def export_multi_model(model_list: list, output_path: str):
 //| Models: {len(model_list)} | Best Brier: {best_brier:.4f}                          |
 //| DO NOT EDIT - regenerate using tools/xgb_service.py               |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_XGBMODEL_MQH
-#define RSI_ADV_XGBMODEL_MQH
+#ifndef QE_XGBMODEL_MQH
+#define QE_XGBMODEL_MQH
 
 #define XGB_MODEL_COUNT     {len(model_list)}
 #define XGB_MODEL_DEPTH     {XGB_PARAMS['max_depth']}

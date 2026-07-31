@@ -49,7 +49,7 @@ hoac chua train model), tu dong fallback ve CALIBRATION va hien warning tren pan
 CSV data (signals+scoring+outcomes)
     |                              XGBModel.mqh (50 if/else trees)
     v                                   |
-rsi_xgboost_train.py               CalculateProbability()
+quantedge_xgboost_train.py         CalculateProbability()
 (walk-forward CV,                  Step 1-5: Bayesian (existing)
  XGBoost train,                    Step 5.1: XGB inject (NEW)
  export to MQL)                      CALIBRATION → skip
@@ -123,7 +123,7 @@ No model:     XGB:no model                    (gray)
 - Chay indicator voi `InpProbMode = PROB_CALIBRATION` (mac dinh)
 - Bat `InpEnableSignalLog = true` (da default-on tu V11.31)
 - Thu thap toi thieu 150 resolved signals (khuyen nghi 300+)
-- Data tu dong luu vao: `MQL4/Files/RSI_Advanced_Logs/` (hoac MQL5)
+- Data tu dong luu vao: `MQL4/Files/QuantEdge_RSI_Logs/` (hoac MQL5)
   ```
   signals_XAUUSD_H1_2026.csv
   scoring_XAUUSD_H1_2026.csv
@@ -138,14 +138,14 @@ pip install xgboost pandas numpy scikit-learn matplotlib
 **Buoc 3: Chay training**
 ```bash
 cd RSI_Advanced/tools
-python rsi_xgboost_train.py --data-dir "C:/path/to/MQL4/Files/RSI_Advanced_Logs"
+python quantedge_xgboost_train.py --data-dir "C:/path/to/MQL4/Files/QuantEdge_RSI_Logs"
 ```
 
 Output:
 - Walk-forward validation report (5 folds, Brier + AUC per fold)
 - Feature importance ranking
 - Calibration plot: `xgb_calibration.png`
-- Neu PASS validation → tu dong gen `Include/RSI_Advanced/XGBModel.mqh`
+- Neu PASS validation → tu dong gen `Include/QuantEdge/AI/XGBModel.mqh`
 - Neu FAIL → khong export (dung `--force` de override, khong khuyen nghi)
 
 **Buoc 4: Recompile + doi mode**
@@ -158,7 +158,7 @@ Output:
 - Theo doi Brier score cua XGB tren panel (xanh < 0.20, vang 0.20-0.25, cam > 0.25)
 - Khi co them data moi (100+ signals moi), retrain:
   ```bash
-  python rsi_xgboost_train.py --data-dir "..." --output "Include/RSI_Advanced/XGBModel.mqh"
+  python quantedge_xgboost_train.py --data-dir "..." --output "Include/QuantEdge/AI/XGBModel.mqh"
   ```
 - Recompile de cap nhat model
 
@@ -167,7 +167,7 @@ Output:
 | Flag | Mo ta | Mac dinh |
 |------|-------|----------|
 | `--data-dir` | Thu muc chua 3 file CSV | *bat buoc* |
-| `--output` | Duong dan output XGBModel.mqh | `Include/RSI_Advanced/XGBModel.mqh` |
+| `--output` | Duong dan output XGBModel.mqh | `Include/QuantEdge/AI/XGBModel.mqh` |
 | `--force` | Export du validation fail | `false` |
 
 **Validation gates (phai pass de export):**
@@ -198,8 +198,8 @@ User chi can cau hinh terminal ID + chon timeframe.
    - Open Config: mo `xgb_config.json` de chinh sua
    - Exit: tat service
 2. **Multi-terminal data aggregation** — nhieu MT4/MT5 terminal cung symbol+TF → gop data:
-   - MT4: `%APPDATA%\MetaQuotes\Terminal\<ID>\MQL4\Files\RSI_Advanced_Logs\`
-   - MT5: `%APPDATA%\MetaQuotes\Terminal\<ID>\MQL5\Files\RSI_Advanced_Logs\`
+   - MT4: `%APPDATA%\MetaQuotes\Terminal\<ID>\MQL4\Files\QuantEdge_RSI_Logs\`
+   - MT5: `%APPDATA%\MetaQuotes\Terminal\<ID>\MQL5\Files\QuantEdge_RSI_Logs\`
    - Dedup by SIGNAL_ID (cung broker = trung; khac broker = tu dong tach)
 3. **Per-symbol+TF model** — moi symbol+TF co model rieng (vd: XAUUSD_H1, EURUSD_M15)
 4. **Auto-train + notify**: tu dong train khi du signal, gui Windows toast notification
@@ -253,7 +253,7 @@ double XGBPredict(features...) {
   "min_signals": 150,
   "min_new_signals_retrain": 50,
   "auto_train": true,
-  "log_folder_name": "RSI_Advanced_Logs",
+  "log_folder_name": "QuantEdge_RSI_Logs",
   "output_dir": "auto"
 }
 ```
@@ -325,7 +325,7 @@ Tao shortcut `python xgb_service.py` vao:
 | `--data-dir` | Thu muc CSV (nhieu dir cach nhau) | *bat buoc* |
 | `--symbol` | Filter symbol (phai dung voi --tf) | tat ca |
 | `--tf` | Filter timeframe (phai dung voi --symbol) | tat ca |
-| `--output` | Duong dan output XGBModel.mqh | `Include/RSI_Advanced/XGBModel.mqh` |
+| `--output` | Duong dan output XGBModel.mqh | `Include/QuantEdge/AI/XGBModel.mqh` |
 | `--inventory` | Chi scan bao cao signal counts | `false` |
 | `--json-output` | Output JSON summary (cho service) | `false` |
 | `--force` | Export du validation fail | `false` |
@@ -333,11 +333,11 @@ Tao shortcut `python xgb_service.py` vao:
 
 Vi du chay standalone:
 ```bash
-python rsi_xgboost_train.py --data-dir "C:/path/MQL4/Files/RSI_Advanced_Logs" \
+python quantedge_xgboost_train.py --data-dir "C:/path/MQL4/Files/QuantEdge_RSI_Logs" \
     --symbol XAUUSD --tf H1
-python rsi_xgboost_train.py --data-dir dir1 dir2 dir3 --inventory
+python quantedge_xgboost_train.py --data-dir dir1 dir2 dir3 --inventory
 # Binary export (V12.2 runtime loading):
-python rsi_xgboost_train.py --data-dir dir1 --symbol XAUUSD --tf H1 --output-format bin
+python quantedge_xgboost_train.py --data-dir dir1 --symbol XAUUSD --tf H1 --output-format bin
 ```
 
 ---
@@ -486,7 +486,7 @@ rule "green cat red duoi 32" va yeu cau dua vao he thong de tu theo doi.
      sell>68 / mid) — TU CHOI vi fragment data + trung Case 1/5 (priority). Thay vao do: `RSI_AT_SIGNAL` da
      log tren MOI tin hieu → tool **`tools/zone_edge.py`** join signals+outcomes qua SIGNAL_ID, xuat
      Win%/AvgPL(pip)/MFE-MAE per (case × vung OS/MID/OB × huong) + rollup pure-zone. Do duoc zone-edge NGAY
-     tu data cu, khong can them case. Chay: `python tools/zone_edge.py --dir <Files/RSI_Advanced_Logs> --symbol XAUUSD --tf H1`.
+     tu data cu, khong can them case. Chay: `python tools/zone_edge.py --dir <Files/QuantEdge_RSI_Logs> --symbol XAUUSD --tf H1`.
    - **Nhom REVERSAL** (khong phai trend): giong Case 1 (fires o RSI extreme). SL tight (nhom 1/5),
      RSI band reversal, session-quality nhom 1/5/9. (Workflow map ban dau de xuat trend group — da
      **override** sang reversal vi ban chat OB/OS.)
@@ -979,7 +979,7 @@ fullRecalc → BuildNormalizedH4Candles → MTF_InitRamBuffers
 
 **Hệ thống log 3 file:**
 ```
-MQL4/Files/RSI_Advanced_Logs/
+MQL4/Files/QuantEdge_RSI_Logs/
 ├── signals_XAUUSD_M1_2026.csv    — signal facts (entry, SL/TP, ATR, session, angleZ, hour, dow)
 ├── scoring_XAUUSD_M1_2026.csv    — decision context (score, rec, prob, EV, MTF, spread)
 └── outcomes_XAUUSD_M1_2026.csv   — results (TP/SL hit, bars held, MFE/MAE)

@@ -13,7 +13,7 @@
   "min_signals": 100,
   "min_new_signals_retrain": 50,
   "auto_train": true,
-  "log_folder_name": "RSI_Advanced_Logs",
+  "log_folder_name": "QuantEdge_RSI_Logs",
   "output_format": "bin",
   "output_dir": "auto"
 }
