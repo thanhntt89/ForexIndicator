@@ -281,11 +281,14 @@ struct PortfolioRisk
    double   maxExposurePct;
    double   dailyPnLPips;
    double   dailyDrawdownPct;
-   double   maxDailyDD;
    bool     circuitBreakerActive;
    int      dailyTradeCount;
    int      maxDailyTrades;
    datetime lastResetDate;
+   double   ddScale;
+   int      cbLevel;
+   double   equityHWM;
+   double   rollingMaxDD;
 };
 
 #endif

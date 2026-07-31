@@ -26,8 +26,8 @@ Sprint 6 ── Backtest Engine (optional) ───────── 2 tuần
 | Phase | Status | Start | End | Plan File |
 |---|---|---|---|---|
 | Phase 0: Project Restructure | `DONE` | 2026-07-30 | 2026-07-30 | [PHASE_0_RESTRUCTURE.md](PHASE_0_RESTRUCTURE.md) |
-| Sprint 0: PositionSizing | `NOT STARTED` | — | — | [SPRINT_0_POSITION_SIZING.md](SPRINT_0_POSITION_SIZING.md) |
-| Sprint 1: Risk Budget | `NOT STARTED` | — | — | [SPRINT_1_RISK_BUDGET.md](SPRINT_1_RISK_BUDGET.md) |
+| Sprint 0: PositionSizing | `DONE` | 2026-07-30 | 2026-07-30 | [SPRINT_0_POSITION_SIZING.md](SPRINT_0_POSITION_SIZING.md) |
+| Sprint 1: Risk Budget | `DONE` | 2026-07-31 | 2026-07-31 | [SPRINT_1_RISK_BUDGET.md](SPRINT_1_RISK_BUDGET.md) |
 | Sprint 2: Signal Interface | `NOT STARTED` | — | — | [SPRINT_2_SIGNAL_INTERFACE.md](SPRINT_2_SIGNAL_INTERFACE.md) |
 | Sprint 3: Export API | `NOT STARTED` | — | — | [SPRINT_3_EXPORT_API.md](SPRINT_3_EXPORT_API.md) |
 | Sprint 4: XGB Auto-Train | `NOT STARTED` | — | — | [SPRINT_4_XGB_AUTOTRAIN.md](SPRINT_4_XGB_AUTOTRAIN.md) |

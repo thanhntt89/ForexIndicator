@@ -7,7 +7,7 @@
 
 ---
 
-## Status: `NOT STARTED`
+## Status: `DONE` (2026-07-30)
 
 ---
 
@@ -33,7 +33,7 @@
 ---
 
 ## Acceptance Criteria
-- [ ] MQ4 compile 0 errors
-- [ ] MQ5 compile 0 errors
-- [ ] Panel shows lot size recommendation
-- [ ] Kelly fraction matches manual calculation
+- [x] MQ4 compile 0 errors
+- [x] MQ5 compile 0 errors
+- [x] Panel shows lot size recommendation
+- [x] Kelly fraction matches manual calculation

@@ -263,8 +263,12 @@ input string InpLogFolder       = "RSI_Advanced_Logs";    // Log folder (inside 
 input string inp_grp_risk       = "========== Risk Manager =========="; // ---
 input int    InpMaxOpenSignals   = 3;      // Max concurrent signals
 input double InpMaxDailyRiskPct  = 2.0;    // Max total risk %
-input double InpMaxDailyDrawdown = 3.0;    // Circuit breaker DD %
 input int    InpMaxDailyTrades   = 15;     // Max trades per day
+input double InpDDYellowPct     = 1.5;    // DD % -> Scale lot 50% (Yellow)
+input double InpDDOrangePct     = 2.5;    // DD % -> Scale lot 25% (Orange)
+input double InpDDRedPct        = 3.0;    // DD % -> Full STOP (Red)
+input double InpMinRiskPct      = 0.25;   // Min risk % per trade (floor)
+input bool   InpUseQualityAlloc = true;   // Scale risk by signal quality (probTP1)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Position Sizing                                       |

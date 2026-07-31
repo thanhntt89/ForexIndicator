@@ -405,7 +405,8 @@ void DrawInfoPanel(int signalIndex)
       // Compare against 240 (minutes) for cross-platform compatibility.
       if(Period() >= TF_H4) calcY += lh;
       if(g_brierMetrics.samples >= 5) calcY += lh;
-      calcY += lh;  // portfolio risk (always shown)
+      calcY += lh;  // portfolio risk line 1
+      calcY += lh;  // portfolio risk line 2 (DD scale)
    }
    calcY += lh + 4;
    int totalH = calcY;
@@ -898,8 +899,9 @@ void DrawInfoPanel(int signalIndex)
       if(InpUseKellyLot)
       {
          string psLine1 = " Kelly:" + DoubleToString(g_positionSize.kellyPct, 1) + "%"
-                        + " | Vol:" + DoubleToString(g_positionSize.volScale, 1) + "x"
-                        + " | Brier:" + DoubleToString(g_positionSize.brierScale, 1) + "x";
+                        + " Vol:" + DoubleToString(g_positionSize.volScale, 1) + "x"
+                        + " Brier:" + DoubleToString(g_positionSize.brierScale, 1) + "x"
+                        + " DD:" + DoubleToString(g_positionSize.ddScale * 100, 0) + "%";
          color psClr1 = (g_positionSize.kellyPct > 1.0) ? clrLime
                       : (g_positionSize.kellyPct > 0)   ? clrYellow
                       : clrOrange;
@@ -1119,23 +1121,38 @@ void DrawInfoPanel(int signalIndex)
          double riskPct = g_portfolioRisk.totalExposurePct;
          double maxRisk = g_portfolioRisk.maxExposurePct;
          double ddPct   = g_portfolioRisk.dailyDrawdownPct;
-         double maxDD   = g_portfolioRisk.maxDailyDD;
          int    trades  = g_portfolioRisk.dailyTradeCount;
          int    maxTr   = g_portfolioRisk.maxDailyTrades;
-         color rkClr = clrLime;
-         double usage = (maxRisk > 0) ? riskPct / maxRisk : 0;
-         if(usage >= 1.0)      rkClr = clrRed;
-         else if(usage >= 0.8) rkClr = clrOrange;
-         else if(usage >= 0.5) rkClr = clrYellow;
-         string rkText = "Risk:" + DoubleToString(riskPct, 1) + "/" + DoubleToString(maxRisk, 1) + "%"
-                       + " DD:" + DoubleToString(ddPct, 1) + "/" + DoubleToString(maxDD, 1) + "%"
-                       + " T:" + IntegerToString(trades) + "/" + IntegerToString(maxTr);
+         int    cbLvl   = g_portfolioRisk.cbLevel;
+
+         string cbTag = "GREEN";
+         color  cbClr = clrLime;
+         if(cbLvl == 1)      { cbTag = "YELLOW"; cbClr = clrYellow; }
+         else if(cbLvl == 2) { cbTag = "ORANGE"; cbClr = clrOrange; }
+         else if(cbLvl == 3) { cbTag = "RED";    cbClr = clrRed;    }
+
+         string rkLine1 = "Risk:" + DoubleToString(riskPct, 1) + "/" + DoubleToString(maxRisk, 1) + "%"
+                        + " T:" + IntegerToString(trades) + "/" + IntegerToString(maxTr)
+                        + " [" + cbTag + "]";
          if(g_portfolioRisk.circuitBreakerActive)
          {
-            rkText = "CIRCUIT BREAKER - signals blocked";
-            rkClr = clrRed;
+            rkLine1 = "CIRCUIT BREAKER - signals blocked [RED]";
+            cbClr = clrRed;
          }
-         CreateTextLabel(PREFIX_PANEL+"V_RK", px+pad+3, cy, rkText, rkClr, fs-2, false);
+         CreateTextLabel(PREFIX_PANEL+"V_RK", px+pad+3, cy, rkLine1, cbClr, fs-2, false);
+         cy += lh;
+
+         double ddScl = g_portfolioRisk.ddScale;
+         string rkLine2 = "DD:" + DoubleToString(ddPct, 1) + "%"
+                        + " Scale:" + DoubleToString(ddScl * 100, 0) + "%";
+         if(g_positionSize.recommendedLot > 0)
+            rkLine2 += " Lot:" + DoubleToString(g_positionSize.recommendedLot, 2);
+         if(InpUseQualityAlloc && g_positionSize.qualityScale != 1.0)
+            rkLine2 += " Q:" + DoubleToString(g_positionSize.qualityScale, 2) + "x";
+         color ddClr = cbClr;
+         if(!g_portfolioRisk.circuitBreakerActive && ddPct < InpDDYellowPct)
+            ddClr = InpPanelTextColor;
+         CreateTextLabel(PREFIX_PANEL+"V_RK2", px+pad+3, cy, rkLine2, ddClr, fs-2, false);
          cy += lh;
       }
    }

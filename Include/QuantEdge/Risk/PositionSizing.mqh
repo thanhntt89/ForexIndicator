@@ -9,6 +9,8 @@ struct PositionSizeData
    double kellyPct;
    double volScale;
    double brierScale;
+   double ddScale;
+   double qualityScale;
    double adjustedRiskPct;
    double recommendedLot;
    double maxLot;
@@ -33,6 +35,8 @@ void CalculatePositionSize()
    g_positionSize.kellyPct = 0;
    g_positionSize.volScale = 1.0;
    g_positionSize.brierScale = 1.0;
+   g_positionSize.ddScale = 1.0;
+   g_positionSize.qualityScale = 1.0;
    g_positionSize.adjustedRiskPct = GetActiveRiskPct();
    g_positionSize.recommendedLot = 0;
    g_positionSize.minLot = MarketInfo(Symbol(), MODE_MINLOT);
@@ -114,10 +118,32 @@ void CalculatePositionSize()
    }
    g_positionSize.brierScale = brierScale;
 
+   // --- DD scaling (from RiskManager multi-level CB) ---
+   double ddScl = g_portfolioRisk.ddScale;
+   if(ddScl <= 0) ddScl = 0.0;
+   g_positionSize.ddScale = ddScl;
+
+   // --- Signal quality allocation ---
+   double qualityScale = 1.0;
+   if(InpUseQualityAlloc && g_activeSignalIndex >= 0
+      && g_activeSignalIndex < g_signalCount)
+   {
+      double prob = g_currentProb.probTP1;
+      if(prob > 0 && prob < 100)
+      {
+         double edge = (prob / 100.0 - 0.5) * 2.0;
+         qualityScale = 1.0 + edge;
+         if(qualityScale < 0.5) qualityScale = 0.5;
+         if(qualityScale > 2.0) qualityScale = 2.0;
+      }
+   }
+   g_positionSize.qualityScale = qualityScale;
+
    // --- Final adjusted risk ---
-   double adjusted = kellyRisk * volScale * brierScale;
-   adjusted = MathMax(adjusted, 0.1);
+   double adjusted = kellyRisk * volScale * brierScale * ddScl * qualityScale;
+   adjusted = MathMax(adjusted, InpMinRiskPct);
    adjusted = MathMin(adjusted, InpMaxRiskPct);
+   if(ddScl <= 0) adjusted = 0;
    g_positionSize.adjustedRiskPct = adjusted;
 
    // --- Recommended lot for market entry ---
@@ -125,7 +151,7 @@ void CalculatePositionSize()
    {
       double slDist = MathAbs(g_signals[g_activeSignalIndex].entryPrice
                             - g_signals[g_activeSignalIndex].stopLoss);
-      if(slDist > 0)
+      if(slDist > 0 && adjusted > 0)
       {
          double accountBalance = AccountBalance();
          if(accountBalance <= 0) accountBalance = 1000;
