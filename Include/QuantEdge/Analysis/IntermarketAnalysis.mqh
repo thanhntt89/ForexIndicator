@@ -6,8 +6,8 @@
 //| Gold inverse correlation with USD: -0.85                           |
 //| EURUSD proxy for inverse DXY: correlation +0.80 with Gold          |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_INTERMARKET_MQH
-#define RSI_ADV_INTERMARKET_MQH
+#ifndef QE_INTERMARKET_MQH
+#define QE_INTERMARKET_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"

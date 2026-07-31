@@ -1,5 +1,5 @@
-#ifndef RSI_ADV_TFCONFIG_MQH
-#define RSI_ADV_TFCONFIG_MQH
+#ifndef QE_TFCONFIG_MQH
+#define QE_TFCONFIG_MQH
 
 #include "Config.mqh"
 #include "Globals.mqh"

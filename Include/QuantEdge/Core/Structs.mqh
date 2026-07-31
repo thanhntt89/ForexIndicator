@@ -1,5 +1,5 @@
-#ifndef RSI_ADV_STRUCTS_MQH
-#define RSI_ADV_STRUCTS_MQH
+#ifndef QE_STRUCTS_MQH
+#define QE_STRUCTS_MQH
 #define SESSION_BLOCKS 4
 #define CASE_COUNT     9
 

@@ -10,8 +10,8 @@
 //| Reference: Wilder (1978) RSI divergence uses "most recent swing"  |
 //| without specifying timeframe-dependent depth                       |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_SWINGDETECTION_MQH
-#define RSI_ADV_SWINGDETECTION_MQH
+#ifndef QE_SWINGDETECTION_MQH
+#define QE_SWINGDETECTION_MQH
 
 void FindTwoSwingLows(const double &price[], const double &rsiData[],
                       int barIndex, int lookback, int depth,

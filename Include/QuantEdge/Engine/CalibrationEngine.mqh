@@ -12,8 +12,8 @@
 //|   negative = overconfident (predicts higher than reality)         |
 //|   positive = underconfident (predicts lower than reality)         |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_CALIBRATION_MQH
-#define RSI_ADV_CALIBRATION_MQH
+#ifndef QE_CALIBRATION_MQH
+#define QE_CALIBRATION_MQH
 
 void UpdateBrierMetrics()
 {

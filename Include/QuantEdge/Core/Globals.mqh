@@ -2,8 +2,8 @@
 //|                                                   Globals.mqh      |
 //|                         QuantEdge - Global Variables             |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_GLOBALS_MQH
-#define RSI_ADV_GLOBALS_MQH
+#ifndef QE_GLOBALS_MQH
+#define QE_GLOBALS_MQH
 
 #include "Structs.mqh"
 
@@ -91,8 +91,8 @@ bool g_panelUserMoved = false;   // User đã drag panel → don't auto-adjust
 //+------------------------------------------------------------------+
 //| Panel position persistence                                         |
 //+------------------------------------------------------------------+
-string PanelGVName_X() { return("RSIAdv_PanelX_" + Symbol()); }
-string PanelGVName_Y() { return("RSIAdv_PanelY_" + Symbol()); }
+string PanelGVName_X() { return("QE_PanelX_" + Symbol()); }
+string PanelGVName_Y() { return("QE_PanelY_" + Symbol()); }
 
 void SavePanelPosition()
 {

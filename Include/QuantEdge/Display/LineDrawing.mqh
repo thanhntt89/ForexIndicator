@@ -2,8 +2,8 @@
 //|                                             LineDrawing.mqh        |
 //|                         QuantEdge - SL/TP Lines & Labels        |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_LINEDRAWING_MQH
-#define RSI_ADV_LINEDRAWING_MQH
+#ifndef QE_LINEDRAWING_MQH
+#define QE_LINEDRAWING_MQH
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"
 #include "../Core/Globals.mqh"

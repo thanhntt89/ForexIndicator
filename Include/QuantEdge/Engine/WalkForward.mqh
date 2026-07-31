@@ -9,8 +9,8 @@
 //| Rolling performance: Track actual outcomes over time                |
 //| Stability check: Detect regime changes                              |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_WALKFORWARD_MQH
-#define RSI_ADV_WALKFORWARD_MQH
+#ifndef QE_WALKFORWARD_MQH
+#define QE_WALKFORWARD_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"

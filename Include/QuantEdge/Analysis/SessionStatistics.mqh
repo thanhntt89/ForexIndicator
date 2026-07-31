@@ -6,8 +6,8 @@
 //| Market behavior differs by session                                 |
 //| Win rate MEASURED from actual signal outcomes, not hardcoded        |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_SESSIONSTATS_MQH
-#define RSI_ADV_SESSIONSTATS_MQH
+#ifndef QE_SESSIONSTATS_MQH
+#define QE_SESSIONSTATS_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"

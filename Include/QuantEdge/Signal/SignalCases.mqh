@@ -2,8 +2,8 @@
 //|                                              SignalCases.mqh       |
 //|                         QuantEdge - 7 Case Detection Functions  |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_SIGNALCASES_MQH
-#define RSI_ADV_SIGNALCASES_MQH
+#ifndef QE_SIGNALCASES_MQH
+#define QE_SIGNALCASES_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"

@@ -8,8 +8,8 @@
 //|   Buffers built once on fullRecalc, updated O(BBPeriod) per       |
 //|   new HTF bar. Zero iRSI() calls per tick on same HTF bar.         |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_MTFENGINE_MQH
-#define RSI_ADV_MTFENGINE_MQH
+#ifndef QE_MTFENGINE_MQH
+#define QE_MTFENGINE_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"

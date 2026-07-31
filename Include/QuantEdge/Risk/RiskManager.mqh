@@ -6,8 +6,8 @@
 //| Green(100%) -> Yellow(50%) -> Orange(25%) -> Red(STOP).           |
 //| Only gates LIVE signals (recent bars), not historical arrows.     |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_RISKMANAGER_MQH
-#define RSI_ADV_RISKMANAGER_MQH
+#ifndef QE_RISKMANAGER_MQH
+#define QE_RISKMANAGER_MQH
 
 void InitPortfolioRisk()
 {

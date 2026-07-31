@@ -2,8 +2,8 @@
 //|                                            ChartEvents.mqh         |
 //|                         QuantEdge - Chart Event Handling         |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_CHARTEVENTS_MQH
-#define RSI_ADV_CHARTEVENTS_MQH
+#ifndef QE_CHARTEVENTS_MQH
+#define QE_CHARTEVENTS_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"

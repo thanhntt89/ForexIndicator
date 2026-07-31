@@ -215,8 +215,8 @@
 //| - Edge TF-adaptive clamp [0.48, 0.56-0.65] per timeframe          |
 //|                                                                    |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_PROBABILITYENGINE_MQH
-#define RSI_ADV_PROBABILITYENGINE_MQH
+#ifndef QE_PROBABILITYENGINE_MQH
+#define QE_PROBABILITYENGINE_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"

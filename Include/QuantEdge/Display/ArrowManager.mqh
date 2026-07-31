@@ -2,8 +2,8 @@
 //|                                            ArrowManager.mqh        |
 //|                         QuantEdge - Arrow Object Management     |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_ARROWMANAGER_MQH
-#define RSI_ADV_ARROWMANAGER_MQH
+#ifndef QE_ARROWMANAGER_MQH
+#define QE_ARROWMANAGER_MQH
 
 #include "../Core/Config.mqh"
 #include "../Signal/SignalCases.mqh"

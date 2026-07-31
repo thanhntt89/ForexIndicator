@@ -2,8 +2,8 @@
 //|                                                 MathUtils.mqh      |
 //|                         QuantEdge - Math Helper Functions        |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_MATHUTILS_MQH
-#define RSI_ADV_MATHUTILS_MQH
+#ifndef QE_MATHUTILS_MQH
+#define QE_MATHUTILS_MQH
 
 //+------------------------------------------------------------------+
 //| TFPeriod — map TF_* minute constant to the platform-correct        |

@@ -2,8 +2,8 @@
 //|                                            PanelDrawing.mqh       |
 //|                         QuantEdge - Info Panel Drawing         |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_PANELDRAWING_MQH
-#define RSI_ADV_PANELDRAWING_MQH
+#ifndef QE_PANELDRAWING_MQH
+#define QE_PANELDRAWING_MQH
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"
 #include "../Core/Globals.mqh"

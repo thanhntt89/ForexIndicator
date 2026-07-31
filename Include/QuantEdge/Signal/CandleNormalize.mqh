@@ -10,8 +10,8 @@
 //| GMT+2 H4 boundaries: 02:00, 06:00, 10:00, 14:00, 18:00, 22:00  |
 //| Without normalization, these produce completely different RSI.    |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_CANDLENORMALIZE_MQH
-#define RSI_ADV_CANDLENORMALIZE_MQH
+#ifndef QE_CANDLENORMALIZE_MQH
+#define QE_CANDLENORMALIZE_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"

@@ -2,8 +2,8 @@
 //|                                                    Config.mqh      |
 //|                         QuantEdge - Configuration & Inputs      |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_CONFIG_MQH
-#define RSI_ADV_CONFIG_MQH
+#ifndef QE_CONFIG_MQH
+#define QE_CONFIG_MQH
 #define VERSION "10.20"
 
 //+------------------------------------------------------------------+
@@ -25,13 +25,13 @@
 //+------------------------------------------------------------------+
 //| Object name prefixes                                               |
 //+------------------------------------------------------------------+
-#define PREFIX_ARROW  "RSIAdv_Arrow_"
-#define PREFIX_PANEL  "RSIAdv_Panel_"
-#define PREFIX_LINE   "RSIAdv_Line_"
-#define PREFIX_PROB   "RSIAdv_Prob_"
-#define PREFIX_ZONE   "RSIAdv_Zone_"
-#define PREFIX_OSMON  "RSIAdv_OSMon_"   // [EXPERIMENT] Green x Red inside OB/OS zone (monitor-only marker)
-#define PREFIX_EXPLAIN "RSIAdv_Expl_"
+#define PREFIX_ARROW  "QE_Arrow_"
+#define PREFIX_PANEL  "QE_Panel_"
+#define PREFIX_LINE   "QE_Line_"
+#define PREFIX_PROB   "QE_Prob_"
+#define PREFIX_ZONE   "QE_Zone_"
+#define PREFIX_OSMON  "QE_OSMon_"
+#define PREFIX_EXPLAIN "QE_Expl_"
 
 enum ENUM_SLTP_METHOD
 {

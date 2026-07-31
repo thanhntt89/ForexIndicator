@@ -2,8 +2,8 @@
 //|                                            VolumeAnalysis.mqh      |
 //|                         QuantEdge - Volume Confirmation         |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_VOLUMEANALYSIS_MQH
-#define RSI_ADV_VOLUMEANALYSIS_MQH
+#ifndef QE_VOLUMEANALYSIS_MQH
+#define QE_VOLUMEANALYSIS_MQH
 
 #include "../Core/Config.mqh"
 

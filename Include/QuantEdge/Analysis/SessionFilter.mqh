@@ -1,8 +1,8 @@
 ﻿//+------------------------------------------------------------------+
 //|                                            SessionFilter.mqh       |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_SESSIONFILTER_MQH
-#define RSI_ADV_SESSIONFILTER_MQH
+#ifndef QE_SESSIONFILTER_MQH
+#define QE_SESSIONFILTER_MQH
 
 #include "../Core/Config.mqh"
 #include "Normalize.mqh"

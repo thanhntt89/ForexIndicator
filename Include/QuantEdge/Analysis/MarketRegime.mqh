@@ -2,8 +2,8 @@
 //|                                            MarketRegime.mqh        |
 //|                         QuantEdge - Market Regime Detection      |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_MARKETREGIME_MQH
-#define RSI_ADV_MARKETREGIME_MQH
+#ifndef QE_MARKETREGIME_MQH
+#define QE_MARKETREGIME_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"

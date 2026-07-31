@@ -6,8 +6,8 @@
 //| Method 1: Fibonacci (Gaucan 2011 + Osler 2000)                    |
 //| Method 2: Hybrid ATR + Fibonacci                                   |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_SLTP_MQH
-#define RSI_ADV_SLTP_MQH
+#ifndef QE_SLTP_MQH
+#define QE_SLTP_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"

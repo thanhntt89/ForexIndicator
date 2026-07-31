@@ -2,8 +2,8 @@
 //|                                                   RSICore.mqh      |
 //|                         QuantEdge - Core RSI Line Calculation    |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_RSICORE_MQH
-#define RSI_ADV_RSICORE_MQH
+#ifndef QE_RSICORE_MQH
+#define QE_RSICORE_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/MathUtils.mqh"

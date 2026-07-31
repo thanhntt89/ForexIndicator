@@ -6,8 +6,8 @@
 //| Binary file: Common/Files/RSI_Advanced/XGBModels.bin              |
 //| Auto-reload: every 5 minutes via CheckXGBReload()                 |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_XGBMODEL_MQH
-#define RSI_ADV_XGBMODEL_MQH
+#ifndef QE_XGBMODEL_MQH
+#define QE_XGBMODEL_MQH
 
 #define XGB_BIN_MAGIC         0x58474231
 #define XGB_BIN_VERSION       1

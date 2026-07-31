@@ -10,8 +10,8 @@
 //| Model with lower Brier (better calibration) gets higher weight.   |
 //| Auto-fallback to CALIBRATION when XGB Brier not ready.            |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_XGBINTEGRATION_MQH
-#define RSI_ADV_XGBINTEGRATION_MQH
+#ifndef QE_XGBINTEGRATION_MQH
+#define QE_XGBINTEGRATION_MQH
 
 #include "XGBModel.mqh"
 

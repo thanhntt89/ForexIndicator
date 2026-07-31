@@ -2,8 +2,8 @@
 //|                                        VolatilityAnalysis.mqh      |
 //|                         QuantEdge - Volatility Structure         |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_VOLATILITYANALYSIS_MQH
-#define RSI_ADV_VOLATILITYANALYSIS_MQH
+#ifndef QE_VOLATILITYANALYSIS_MQH
+#define QE_VOLATILITYANALYSIS_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"

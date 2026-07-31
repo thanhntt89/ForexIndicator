@@ -9,8 +9,8 @@
 //|                                                                    |
 //| JOIN: signals ← scoring ← outcomes on SIGNAL_ID                    |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_SIGNALLOGGER_MQH
-#define RSI_ADV_SIGNALLOGGER_MQH
+#ifndef QE_SIGNALLOGGER_MQH
+#define QE_SIGNALLOGGER_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"

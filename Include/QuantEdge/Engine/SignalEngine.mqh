@@ -2,8 +2,8 @@
 //|                                            SignalEngine.mqh        |
 //|                         QuantEdge - Composite Signal Scoring     |
 //+------------------------------------------------------------------+
-#ifndef RSI_ADV_SIGNALENGINE_MQH
-#define RSI_ADV_SIGNALENGINE_MQH
+#ifndef QE_SIGNALENGINE_MQH
+#define QE_SIGNALENGINE_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Structs.mqh"

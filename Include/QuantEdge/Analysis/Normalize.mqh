@@ -1,5 +1,5 @@
-#ifndef RSI_ADV_NORMALIZE_MQH
-#define RSI_ADV_NORMALIZE_MQH
+#ifndef QE_NORMALIZE_MQH
+#define QE_NORMALIZE_MQH
 
 #include "../Core/Config.mqh"
 #include "../Core/Globals.mqh"
