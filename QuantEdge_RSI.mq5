@@ -23,8 +23,8 @@
 #property indicator_separate_window
 #property indicator_minimum    0
 #property indicator_maximum    100
-#property indicator_buffers    7
-#property indicator_plots      7
+#property indicator_buffers    25
+#property indicator_plots      25
 
 //--- Plot 1: RSI Fast (Green)
 #property indicator_label1     "RSI Fast"
@@ -69,6 +69,51 @@
 #property indicator_label7     "SellSignal"
 #property indicator_type7      DRAW_NONE
 
+//--- Plots 8-11: SLTP output buffers (hidden, readable by EA via iCustom)
+#property indicator_label8     "Entry"
+#property indicator_type8      DRAW_NONE
+#property indicator_label9     "SL"
+#property indicator_type9      DRAW_NONE
+#property indicator_label10    "TP1"
+#property indicator_type10     DRAW_NONE
+#property indicator_label11    "TP2"
+#property indicator_type11     DRAW_NONE
+
+//--- Plots 12-25: Probability/Recommendation output buffers (hidden, readable by
+//--- EA via iCustom). Valid ONLY at closed bars where a signal fired; EMPTY_VALUE
+//--- elsewhere (including the current forming bar, shift=0).
+//--- EA usage: read at shift=1 (last closed bar) when a new bar is detected
+//--- (Time[0] changed). Do not poll every tick — CalculateProbability() is only
+//--- invoked when a new signal bar closes, so intra-bar reads return cached values.
+#property indicator_label12    "ProbTP1"
+#property indicator_type12     DRAW_NONE
+#property indicator_label13    "ProbTP2"
+#property indicator_type13     DRAW_NONE
+#property indicator_label14    "ProbTP3"
+#property indicator_type14     DRAW_NONE
+#property indicator_label15    "ProbSL"
+#property indicator_type15     DRAW_NONE
+#property indicator_label16    "ProbSamples"
+#property indicator_type16     DRAW_NONE
+#property indicator_label17    "ProbDecayedTP1"
+#property indicator_type17     DRAW_NONE
+#property indicator_label18    "ProbSurvivalRatio"
+#property indicator_type18     DRAW_NONE
+#property indicator_label19    "ProbExpiresMin"
+#property indicator_type19     DRAW_NONE
+#property indicator_label20    "XGBProbTP1"
+#property indicator_type20     DRAW_NONE
+#property indicator_label21    "XGBActive"
+#property indicator_type21     DRAW_NONE
+#property indicator_label22    "RecLevel"
+#property indicator_type22     DRAW_NONE
+#property indicator_label23    "RecConfidence"
+#property indicator_type23     DRAW_NONE
+#property indicator_label24    "RecEV"
+#property indicator_type24     DRAW_NONE
+#property indicator_label25    "RecSuggestedRisk"
+#property indicator_type25     DRAW_NONE
+
 //--- Level lines
 #property indicator_level1     20
 #property indicator_level2     32
@@ -87,6 +132,26 @@ double BufferBBLower[];
 double BufferOrange[];
 double BufferBuySignal[];
 double BufferSellSignal[];
+//--- SLTP output buffers (readable by EA via iCustom)
+double BufferEntry[];  // 7: entry price at signal bar
+double BufferSL[];     // 8: stop loss price
+double BufferTP1[];    // 9: take profit 1 price
+double BufferTP2[];    // 10: take profit 2 price
+//--- Probability/Recommendation output buffers (readable by EA via iCustom)
+double BufferProbTP1[];            // 11
+double BufferProbTP2[];            // 12
+double BufferProbTP3[];            // 13
+double BufferProbSL[];             // 14
+double BufferProbSamples[];        // 15
+double BufferProbDecayedTP1[];     // 16
+double BufferProbSurvivalRatio[];  // 17
+double BufferProbExpiresMin[];     // 18
+double BufferXGBProbTP1[];         // 19
+double BufferXGBActive[];          // 20
+double BufferRecLevel[];           // 21
+double BufferRecConfidence[];      // 22
+double BufferRecEV[];              // 23
+double BufferRecSuggestedRisk[];   // 24
 
 //--- Includes: MQLCompat MUST be first (wraps MQL4 functions)
 #include <QuantEdge/Core/MQLCompat.mqh>
@@ -129,6 +194,24 @@ int OnInit()
    SetIndexBuffer(4, BufferOrange,    INDICATOR_DATA);
    SetIndexBuffer(5, BufferBuySignal, INDICATOR_DATA);
    SetIndexBuffer(6, BufferSellSignal,INDICATOR_DATA);
+   SetIndexBuffer(7,  BufferEntry,    INDICATOR_DATA);
+   SetIndexBuffer(8,  BufferSL,       INDICATOR_DATA);
+   SetIndexBuffer(9,  BufferTP1,      INDICATOR_DATA);
+   SetIndexBuffer(10, BufferTP2,      INDICATOR_DATA);
+   SetIndexBuffer(11, BufferProbTP1,           INDICATOR_DATA);
+   SetIndexBuffer(12, BufferProbTP2,           INDICATOR_DATA);
+   SetIndexBuffer(13, BufferProbTP3,           INDICATOR_DATA);
+   SetIndexBuffer(14, BufferProbSL,            INDICATOR_DATA);
+   SetIndexBuffer(15, BufferProbSamples,       INDICATOR_DATA);
+   SetIndexBuffer(16, BufferProbDecayedTP1,    INDICATOR_DATA);
+   SetIndexBuffer(17, BufferProbSurvivalRatio, INDICATOR_DATA);
+   SetIndexBuffer(18, BufferProbExpiresMin,    INDICATOR_DATA);
+   SetIndexBuffer(19, BufferXGBProbTP1,        INDICATOR_DATA);
+   SetIndexBuffer(20, BufferXGBActive,         INDICATOR_DATA);
+   SetIndexBuffer(21, BufferRecLevel,          INDICATOR_DATA);
+   SetIndexBuffer(22, BufferRecConfidence,     INDICATOR_DATA);
+   SetIndexBuffer(23, BufferRecEV,             INDICATOR_DATA);
+   SetIndexBuffer(24, BufferRecSuggestedRisk,  INDICATOR_DATA);
 
    //--- MQL5: arrays are non-series by default in indicators
    //--- Match MQL4 behavior (non-series)
@@ -139,9 +222,27 @@ int OnInit()
    ArraySetAsSeries(BufferOrange, false);
    ArraySetAsSeries(BufferBuySignal, false);
    ArraySetAsSeries(BufferSellSignal, false);
+   ArraySetAsSeries(BufferEntry, false);
+   ArraySetAsSeries(BufferSL, false);
+   ArraySetAsSeries(BufferTP1, false);
+   ArraySetAsSeries(BufferTP2, false);
+   ArraySetAsSeries(BufferProbTP1, false);
+   ArraySetAsSeries(BufferProbTP2, false);
+   ArraySetAsSeries(BufferProbTP3, false);
+   ArraySetAsSeries(BufferProbSL, false);
+   ArraySetAsSeries(BufferProbSamples, false);
+   ArraySetAsSeries(BufferProbDecayedTP1, false);
+   ArraySetAsSeries(BufferProbSurvivalRatio, false);
+   ArraySetAsSeries(BufferProbExpiresMin, false);
+   ArraySetAsSeries(BufferXGBProbTP1, false);
+   ArraySetAsSeries(BufferXGBActive, false);
+   ArraySetAsSeries(BufferRecLevel, false);
+   ArraySetAsSeries(BufferRecConfidence, false);
+   ArraySetAsSeries(BufferRecEV, false);
+   ArraySetAsSeries(BufferRecSuggestedRisk, false);
 
    int mb = GetMinBarsRequired();
-   for(int i = 0; i < 7; i++)
+   for(int i = 0; i < 25; i++)
    {
       SetIndexEmptyValue(i, EMPTY_VALUE);
       SetIndexDrawBegin(i, mb);
@@ -320,6 +421,24 @@ int OnCalculate(const int rates_total,
       ArrayInitialize(BufferOrange, EMPTY_VALUE);
       ArrayInitialize(BufferBuySignal, EMPTY_VALUE);
       ArrayInitialize(BufferSellSignal, EMPTY_VALUE);
+      ArrayInitialize(BufferEntry, EMPTY_VALUE);
+      ArrayInitialize(BufferSL, EMPTY_VALUE);
+      ArrayInitialize(BufferTP1, EMPTY_VALUE);
+      ArrayInitialize(BufferTP2, EMPTY_VALUE);
+      ArrayInitialize(BufferProbTP1, EMPTY_VALUE);
+      ArrayInitialize(BufferProbTP2, EMPTY_VALUE);
+      ArrayInitialize(BufferProbTP3, EMPTY_VALUE);
+      ArrayInitialize(BufferProbSL, EMPTY_VALUE);
+      ArrayInitialize(BufferProbSamples, EMPTY_VALUE);
+      ArrayInitialize(BufferProbDecayedTP1, EMPTY_VALUE);
+      ArrayInitialize(BufferProbSurvivalRatio, EMPTY_VALUE);
+      ArrayInitialize(BufferProbExpiresMin, EMPTY_VALUE);
+      ArrayInitialize(BufferXGBProbTP1, EMPTY_VALUE);
+      ArrayInitialize(BufferXGBActive, EMPTY_VALUE);
+      ArrayInitialize(BufferRecLevel, EMPTY_VALUE);
+      ArrayInitialize(BufferRecConfidence, EMPTY_VALUE);
+      ArrayInitialize(BufferRecEV, EMPTY_VALUE);
+      ArrayInitialize(BufferRecSuggestedRisk, EMPTY_VALUE);
    }
    else
    {
@@ -392,6 +511,24 @@ int OnCalculate(const int rates_total,
    {
       BufferBuySignal[i]  = EMPTY_VALUE;
       BufferSellSignal[i] = EMPTY_VALUE;
+      BufferEntry[i]      = EMPTY_VALUE;
+      BufferSL[i]         = EMPTY_VALUE;
+      BufferTP1[i]        = EMPTY_VALUE;
+      BufferTP2[i]        = EMPTY_VALUE;
+      BufferProbTP1[i]           = EMPTY_VALUE;
+      BufferProbTP2[i]           = EMPTY_VALUE;
+      BufferProbTP3[i]           = EMPTY_VALUE;
+      BufferProbSL[i]            = EMPTY_VALUE;
+      BufferProbSamples[i]       = EMPTY_VALUE;
+      BufferProbDecayedTP1[i]    = EMPTY_VALUE;
+      BufferProbSurvivalRatio[i] = EMPTY_VALUE;
+      BufferProbExpiresMin[i]    = EMPTY_VALUE;
+      BufferXGBProbTP1[i]        = EMPTY_VALUE;
+      BufferXGBActive[i]         = EMPTY_VALUE;
+      BufferRecLevel[i]          = EMPTY_VALUE;
+      BufferRecConfidence[i]     = EMPTY_VALUE;
+      BufferRecEV[i]             = EMPTY_VALUE;
+      BufferRecSuggestedRisk[i]  = EMPTY_VALUE;
       if(_storedIdx < g_signalCount && g_signals[_storedIdx].barIndex == i)
       {
          while(_storedIdx < g_signalCount && g_signals[_storedIdx].barIndex == i)
@@ -400,6 +537,10 @@ int OnCalculate(const int rates_total,
                BufferBuySignal[i] = (double)g_signals[_storedIdx].caseNumber;
             else
                BufferSellSignal[i] = (double)g_signals[_storedIdx].caseNumber;
+            BufferEntry[i] = g_signals[_storedIdx].entryPrice;
+            BufferSL[i]    = g_signals[_storedIdx].stopLoss;
+            BufferTP1[i]   = g_signals[_storedIdx].takeProfit1;
+            BufferTP2[i]   = g_signals[_storedIdx].takeProfit2;
             _storedIdx++;
          }
          continue;
@@ -473,6 +614,37 @@ int OnCalculate(const int rates_total,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1, (i >= rates_total - 2));
          if(i >= rates_total - 2 && !_buyBlocked) OnNewSignalAccepted();
+         BufferEntry[i] = entryPrice;
+         BufferSL[i]    = sl;
+         BufferTP1[i]   = tp1;
+         BufferTP2[i]   = tp2;
+         // [PERF] Probability/recommendation ONLY for the just-closed bar (forward-only,
+         // same rationale as CSV logging below): avoids recomputing the ensemble for every
+         // historical bar on fullRecalc. Buffers stay EMPTY_VALUE everywhere else.
+         if(i >= rates_total - 2)
+         {
+            int newSigIdx = g_signalCount - 1;
+            CalculateProbability(newSigIdx, BufferOrange, BufferBBUpper, BufferBBLower);
+            int mtfAgreeBuy = 0;
+            if(InpShowMTF && g_mtfCount > 0) mtfAgreeBuy = CalculateMTFAgreement();
+            TradeRecommendation recBuy = GetTradeRecommendation(
+               buySignal, true, g_currentProb.probTP1, g_currentProb.probSL,
+               g_currentProb.totalSamples, mtfAgreeBuy, slDist, tp1Dist, atrVal, time[i]);
+            BufferProbTP1[i]            = g_currentProb.probTP1;
+            BufferProbTP2[i]            = g_currentProb.probTP2;
+            BufferProbTP3[i]            = g_currentProb.probTP3;
+            BufferProbSL[i]             = g_currentProb.probSL;
+            BufferProbSamples[i]        = g_currentProb.totalSamples;
+            BufferProbDecayedTP1[i]     = g_currentProb.decayedProbTP1;
+            BufferProbSurvivalRatio[i]  = g_currentProb.survivalRatio;
+            BufferProbExpiresMin[i]     = g_currentProb.expiresMinutes;
+            BufferXGBProbTP1[i]         = g_currentProb.xgbProbTP1;
+            BufferXGBActive[i]          = g_currentProb.xgbActive ? 1.0 : 0.0;
+            BufferRecLevel[i]           = (double)recBuy.level;
+            BufferRecConfidence[i]      = recBuy.confidence;
+            BufferRecEV[i]              = recBuy.ev;
+            BufferRecSuggestedRisk[i]   = recBuy.suggestedRisk;
+         }
          // [PERF] Log signal + pending ONLY for the just-closed bar (forward-only). Re-logging
          // every historical signal on each fullRecalc is what forced the slow CSV wipe in
          // LoggerInit(true); logging once (when the bar closes) removes both cost and dup rows.
@@ -525,6 +697,35 @@ int OnCalculate(const int rates_total,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1, (i >= rates_total - 2));
          if(i >= rates_total - 2 && !_sellBlocked) OnNewSignalAccepted();
+         BufferEntry[i] = entryPrice;
+         BufferSL[i]    = sl;
+         BufferTP1[i]   = tp1;
+         BufferTP2[i]   = tp2;
+         // [PERF] Probability/recommendation ONLY for the just-closed bar (see buy branch).
+         if(i >= rates_total - 2)
+         {
+            int newSigIdx = g_signalCount - 1;
+            CalculateProbability(newSigIdx, BufferOrange, BufferBBUpper, BufferBBLower);
+            int mtfAgreeSell = 0;
+            if(InpShowMTF && g_mtfCount > 0) mtfAgreeSell = CalculateMTFAgreement();
+            TradeRecommendation recSell = GetTradeRecommendation(
+               sellSignal, false, g_currentProb.probTP1, g_currentProb.probSL,
+               g_currentProb.totalSamples, mtfAgreeSell, slDist, tp1Dist, atrVal, time[i]);
+            BufferProbTP1[i]            = g_currentProb.probTP1;
+            BufferProbTP2[i]            = g_currentProb.probTP2;
+            BufferProbTP3[i]            = g_currentProb.probTP3;
+            BufferProbSL[i]             = g_currentProb.probSL;
+            BufferProbSamples[i]        = g_currentProb.totalSamples;
+            BufferProbDecayedTP1[i]     = g_currentProb.decayedProbTP1;
+            BufferProbSurvivalRatio[i]  = g_currentProb.survivalRatio;
+            BufferProbExpiresMin[i]     = g_currentProb.expiresMinutes;
+            BufferXGBProbTP1[i]         = g_currentProb.xgbProbTP1;
+            BufferXGBActive[i]          = g_currentProb.xgbActive ? 1.0 : 0.0;
+            BufferRecLevel[i]           = (double)recSell.level;
+            BufferRecConfidence[i]      = recSell.confidence;
+            BufferRecEV[i]              = recSell.ev;
+            BufferRecSuggestedRisk[i]   = recSell.suggestedRisk;
+         }
          // [PERF] Forward-only logging (see buy branch): log once when the bar closes.
          if(i >= rates_total - 2)
          {
