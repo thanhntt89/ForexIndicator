@@ -720,7 +720,7 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
    }
 
    // Dynamic mode: replace SL with MAE-based ratio
-   if(InpSLTPMode == SLTP_DYNAMIC)
+   if(InpSLTPMode == SLTP_DYNAMIC || InpSLTPMode == SLTP_EV_OPTIMIZED)
    {
       double dynSLRatio = GetDynamicSLRatio() * GetCaseTFSLMultiplier(caseNum, Period());
       double dynSLDist = outATR * dynSLRatio;

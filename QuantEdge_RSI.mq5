@@ -164,6 +164,7 @@ double BufferRecSuggestedRisk[];   // 24
 #include <QuantEdge/Signal/SignalDetector.mqh>
 #include <QuantEdge/Risk/PositionSizing.mqh>
 #include <QuantEdge/Engine/SLTP.mqh>
+#include <QuantEdge/Engine/SLTPOptimizer.mqh>
 #include <QuantEdge/Engine/MTFEngine.mqh>
 #include <QuantEdge/Analysis/IntermarketAnalysis.mqh>
 #include <QuantEdge/Analysis/SessionStatistics.mqh>
@@ -607,6 +608,22 @@ int OnCalculate(const int rates_total,
             slDist = MathAbs(entryPrice - sl);
             if(slDist < minSLDist) { sl = entryPrice - minSLDist; slDist = minSLDist; }
          }
+         if(InpSLTPMode == SLTP_EV_OPTIMIZED)
+         {
+            int maxFwd = GetMaxForwardBarsForTimeframe();
+            double edgeBuy = MeasureEdgeFromHistory(buySignal, true, maxFwd,
+                                                     BufferOrange, BufferBBUpper, BufferBBLower);
+            int slLB = GetNormalizedSLLookback();
+            double swSL = FindNearestSwingLow(low, i, slLB, rates_total)
+                          - GetNormalizedSpreadBuffer() - atrVal * 0.1;
+            double vSL = ValidateSLAgainstVolume(true, sl, entryPrice,
+                                                  high, low, i, GetActivePriceDistLB(), atrVal);
+            SLTPOptResult optRes;
+            OptimizeSLTP_EV(true, entryPrice, sl, tp1, tp2, tp3, atrVal, edgeBuy, buySignal,
+                            swSL, vSL, sl, tp1, tp2, tp3, optRes);
+            slDist  = MathAbs(entryPrice - sl);
+            tp1Dist = MathAbs(tp1 - entryPrice);
+         }
          double angleZ = signal.angleStrength;
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -689,6 +706,22 @@ int OnCalculate(const int rates_total,
             double minSLDist = curATR * InpSLRatio * 0.3;
             slDist = MathAbs(sl - entryPrice);
             if(slDist < minSLDist) { sl = entryPrice + minSLDist; slDist = minSLDist; }
+         }
+         if(InpSLTPMode == SLTP_EV_OPTIMIZED)
+         {
+            int maxFwd = GetMaxForwardBarsForTimeframe();
+            double edgeSell = MeasureEdgeFromHistory(sellSignal, false, maxFwd,
+                                                      BufferOrange, BufferBBUpper, BufferBBLower);
+            int slLB = GetNormalizedSLLookback();
+            double swSL = FindNearestSwingHigh(high, i, slLB, rates_total)
+                          + GetNormalizedSpreadBuffer() + atrVal * 0.1;
+            double vSL = ValidateSLAgainstVolume(false, sl, entryPrice,
+                                                  high, low, i, GetActivePriceDistLB(), atrVal);
+            SLTPOptResult optRes;
+            OptimizeSLTP_EV(false, entryPrice, sl, tp1, tp2, tp3, atrVal, edgeSell, sellSignal,
+                            swSL, vSL, sl, tp1, tp2, tp3, optRes);
+            slDist  = MathAbs(sl - entryPrice);
+            tp1Dist = MathAbs(entryPrice - tp1);
          }
          double angleZ = signal.angleStrength;
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;

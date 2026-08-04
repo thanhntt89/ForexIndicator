@@ -42,8 +42,9 @@ enum ENUM_SLTP_METHOD
 
 enum ENUM_SLTP_MODE
 {
-   SLTP_DYNAMIC = 0,  // Dynamic (probability-based)
-   SLTP_FIXED   = 1   // Fixed (user input values)
+   SLTP_DYNAMIC      = 0,  // Dynamic (MAE/MFE percentile)
+   SLTP_FIXED         = 1,  // Fixed (user input values)
+   SLTP_EV_OPTIMIZED  = 2   // EV-Optimized (probability feedback)
 };
 
 enum ENUM_PROB_MODE
@@ -124,7 +125,7 @@ input color  InpSellArrowColor= clrRed;    // Sell arrow color
 //+------------------------------------------------------------------+
 input string inp_grp_sltp       = "========== SL/TP Config =========="; // ---
 input ENUM_SLTP_METHOD InpSLTPMethod = SLTP_HYBRID;  // SL/TP Method
-input ENUM_SLTP_MODE InpSLTPMode = SLTP_DYNAMIC; // SL/TP Mode
+input ENUM_SLTP_MODE InpSLTPMode = SLTP_EV_OPTIMIZED; // SL/TP Mode
 input bool   InpShowSLTPLines   = true;         // Show SL/TP lines
 input bool   InpShowEntryLine   = true;         // Show Entry line
 input int    InpATRPeriod       = 14;           // ATR Period
@@ -132,6 +133,8 @@ input double InpSLRatio         = 2.0;          // SL = ATR x this
 input double InpTPRatio         = 4.0;          // TP1 = ATR x this
 input double InpTP2Multiplier   = 1.5;          // TP2 = TP1 x this
 input double InpTP3Multiplier   = 2.0;          // TP3 = TP1 x this
+input double InpOptSLDeviation  = 0.5;          // EV-Opt: SL search range (0=none, 1=full)
+input double InpOptTPDeviation  = 0.5;          // EV-Opt: TP search range (0=none, 1=full)
 input int    InpSLSwingLookback = 20;           // Bars lookback for swing SL
 input color  InpEntryLineColor  = clrWhite;     // Entry line color
 input color  InpSLLineColor     = clrRed;       // SL line color
