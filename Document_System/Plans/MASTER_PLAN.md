@@ -29,7 +29,7 @@ Sprint 6 ── Backtest Engine (optional) ───────── 2 tuần
 | Sprint 0: PositionSizing | `DONE` | 2026-07-30 | 2026-07-30 | [SPRINT_0_POSITION_SIZING.md](SPRINT_0_POSITION_SIZING.md) |
 | Sprint 1: Risk Budget | `DONE` | 2026-07-31 | 2026-07-31 | [SPRINT_1_RISK_BUDGET.md](SPRINT_1_RISK_BUDGET.md) |
 | Sprint 2: Signal Interface | `DONE` | 2026-07-31 | 2026-07-31 | [SPRINT_2_SIGNAL_INTERFACE.md](SPRINT_2_SIGNAL_INTERFACE.md) |
-| Sprint 3: Export API | `NOT STARTED` | — | — | [SPRINT_3_EXPORT_API.md](SPRINT_3_EXPORT_API.md) |
+| Sprint 3: Export API | `DONE` | 2026-08-05 | 2026-08-05 | [SPRINT_3_EXPORT_API.md](SPRINT_3_EXPORT_API.md) |
 | Sprint 4: XGB Auto-Train | `NOT STARTED` | — | — | [SPRINT_4_XGB_AUTOTRAIN.md](SPRINT_4_XGB_AUTOTRAIN.md) |
 | Sprint 5: Enhanced UX | `NOT STARTED` | — | — | [SPRINT_5_ENHANCED_UX.md](SPRINT_5_ENHANCED_UX.md) |
 | Sprint 6: Backtest | `NOT STARTED` | — | — | [SPRINT_6_BACKTEST.md](SPRINT_6_BACKTEST.md) |
@@ -44,8 +44,8 @@ Sprint 6 ── Backtest Engine (optional) ───────── 2 tuần
 | Extensible | 7/10 | 9/10 | 9/10 |
 | Maintainable | 6/10 | 8/10 | 8/10 |
 | AI Training | 7/10 | 9/10 | 7/10 |
-| EA Output | 0/10 | 7/10 | 0/10 |
-| **Total** | **29/50** | **42/50** | **33/50** |
+| EA Output | 0/10 | 7/10 | 5/10 |
+| **Total** | **29/50** | **42/50** | **38/50** |
 
 ---
 
@@ -83,3 +83,4 @@ Phase 0 ──→ Sprint 0 ──→ Sprint 1
 | 2026-07-30 | Created master plan with Phase 0 + 7 sprints |
 | 2026-07-31 | Sprint 2 DONE — 2-tier signal platform (SignalDetector + RSIStrategy), buffer parameterization, layer violations fixed |
 | 2026-07-31 | Post-Sprint-2 audit fix — `g_tfGeneration` guard added to 8 static caches (MarketRegime, ProbabilityEngine, SLTP×2, WalkForward×2, SignalLogger, SessionStatistics, Normalize) to prevent stale data returned after timeframe switch |
+| 2026-08-05 | Sprint 3 DONE — EA Export Contract doc (`12_EA_EXPORT_CONTRACT.md`), reference EA templates for MQ4 (iCustom) and MQ5 (handle+CopyBuffer+CTrade), 5-gate decision chain, lot-from-risk helper. Zero indicator-side changes (buffer export already complete via `7ce9b6f`). EA defaults to skeleton mode (`InpEnableAutoTrading=false`). |
