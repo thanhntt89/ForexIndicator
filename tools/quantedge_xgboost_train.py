@@ -928,7 +928,7 @@ def main():
             else:
                 export_single_model(results, args.output, sym, tf_str)
                 print(f"\nDone. Recompile the indicator to use the new model.")
-                print(f"Remember to delete RSI_SESS_*.bin files after recompiling.")
+                print(f"Remember to delete QuantEdge_SESS_*.bin files after recompiling.")
         else:
             print("\nModel NOT exported — validation failed.")
             sys.exit(1)
