@@ -246,6 +246,8 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   // Signals binary: always save (accumulates history across restarts).
+   SaveSignalsBinary();
    // [PERF] Session stats binary: save on RECOMPILE/PARAMETERS/CHARTCHANGE for fast warm
    // restart. Binary paths are TF-specific so no cross-TF contamination.
    if(reason == REASON_RECOMPILE || reason == REASON_PARAMETERS ||
@@ -699,6 +701,12 @@ int OnCalculate(const int rates_total,
    {
       FlushLogQueues(); // Bulk flush all historical log rows to CSV
    }
+
+   // After fullRecalc scan: load old signals from binary and merge.
+   // These signals predate the current InpMaxBars window and give Tier 1/2
+   // access to historical data without rescanning the entire price history.
+   if(fullRecalc)
+      LoadAndMergeSignalsBinary();
 
    //=================================================================
    // V11: Update multi-source data

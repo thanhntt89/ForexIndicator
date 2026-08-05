@@ -15,6 +15,8 @@
 #ifndef QE_CALIBRATION_MQH
 #define QE_CALIBRATION_MQH
 
+#define MIN_BRIER_SAMPLES  20
+
 void UpdateBrierMetrics()
 {
    double sumSqErr   = 0;
@@ -74,7 +76,7 @@ void UpdateBrierMetrics()
 
    g_brierMetrics.brierScore     = sumSqErr / matched;
    g_brierMetrics.calibrationGap = (sumPred / matched) - (sumActual / matched);
-   g_brierMetrics.isReliable     = (g_brierMetrics.brierScore < 0.25 && matched >= 20);
+   g_brierMetrics.isReliable     = (g_brierMetrics.brierScore < 0.25 && matched >= MIN_BRIER_SAMPLES);
 }
 
 #endif

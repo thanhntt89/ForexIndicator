@@ -815,10 +815,10 @@ void DrawInfoPanel(int signalIndex)
                   + " Brier:" + DoubleToString(g_xgbBrierScore, 3);
             xClr  = clrLime;
          }
-         else if(g_xgbBrierSamples < 20)
+         else if(g_xgbBrierSamples < MIN_XGB_BRIER_SAMPLES)
          {
             xLine = " XGB:" + DoubleToString(g_currentProb.xgbProbTP1, 1) + "%"
-                  + " [shadow " + IntegerToString(g_xgbBrierSamples) + "/20]";
+                  + " [shadow " + IntegerToString(g_xgbBrierSamples) + "/" + IntegerToString(MIN_XGB_BRIER_SAMPLES) + "]";
             xClr  = clrYellow;
          }
          else

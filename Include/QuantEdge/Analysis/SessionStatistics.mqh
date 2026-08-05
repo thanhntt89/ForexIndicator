@@ -565,12 +565,12 @@ void LoadSessionStatsFromOutcomesCSV()
 //+------------------------------------------------------------------+
 string SS_GetBinaryPath()
 {
-   return(InpLogFolder + "\\RSI_SESS_" + Symbol() + "_" + SS_GetTFName() + ".bin");
+   return(InpLogFolder + "\\QuantEdge_SESS_" + Symbol() + "_" + SS_GetTFName() + ".bin");
 }
 
 string SIG_GetBinaryPath()
 {
-   return(InpLogFolder + "\\RSI_SIG_" + Symbol() + "_" + SS_GetTFName() + ".bin");
+   return(InpLogFolder + "\\QuantEdge_SIG_" + Symbol() + "_" + SS_GetTFName() + ".bin");
 }
 
 //+------------------------------------------------------------------+
@@ -703,6 +703,30 @@ void LoadAndMergeSignalsBinary()
       }
    }
    g_signalCount = newTotal;
+
+   // Patch predictedProb/xgbPredictedProb from binary into freshly-scanned signals
+   // that overlap the current window (signalTime >= cutoff, so skipped by the
+   // prepend loop above). fullRecalc rebuilds these via StoreSignal() with both
+   // fields zeroed — CalculateProbability only runs for the just-closed bar, so
+   // historical rebuilt signals never get a value. The binary snapshot still has
+   // it from the previous session; without this patch, Bayesian/XGB Brier sample
+   // counts collapse to 0 on every TF switch even for signals already resolved.
+   for(int i = 0; i < readOk; i++)
+   {
+      if(saved[i].signalTime < cutoff) continue;
+      if(saved[i].predictedProb <= 0 && saved[i].xgbPredictedProb <= 0) continue;
+
+      for(int si = oldCount; si < g_signalCount; si++)
+      {
+         if(g_signals[si].signalTime != saved[i].signalTime)   continue;
+         if(g_signals[si].isBuySignal != saved[i].isBuySignal) continue;
+         if(g_signals[si].predictedProb <= 0 && saved[i].predictedProb > 0)
+            g_signals[si].predictedProb = saved[i].predictedProb;
+         if(g_signals[si].xgbPredictedProb <= 0 && saved[i].xgbPredictedProb > 0)
+            g_signals[si].xgbPredictedProb = saved[i].xgbPredictedProb;
+         break;
+      }
+   }
 }
 
 #endif

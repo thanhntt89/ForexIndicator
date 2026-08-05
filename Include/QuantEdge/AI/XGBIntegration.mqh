@@ -15,6 +15,8 @@
 
 #include "XGBModel.mqh"
 
+#define MIN_XGB_BRIER_SAMPLES  20
+
 //+------------------------------------------------------------------+
 //| XGBGetPrediction — collect features and call XGBPredict()         |
 //+------------------------------------------------------------------+
@@ -85,7 +87,7 @@ bool XGBIsReady()
 {
    if(!g_xgbLoaded) return false;
    if(XGBFindModel(Symbol(), Period()) < 0) return false;
-   if(g_xgbBrierSamples < 20) return false;
+   if(g_xgbBrierSamples < MIN_XGB_BRIER_SAMPLES) return false;
    if(g_xgbBrierScore > 0.25) return false;
    return true;
 }
