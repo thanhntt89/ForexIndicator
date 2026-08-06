@@ -48,17 +48,15 @@ void HandleChartEvent(const int id, const long &lparam,
          return;
       }
 
-      // Manual panel collapse toggle
-      if(sparam == PREFIX_PANEL+"1_C" || sparam == PREFIX_PANEL+"1_T")
+      // Manual panel collapse toggle (click on header area)
+      if(sparam == PREFIX_PANEL+"1_C" || sparam == PREFIX_PANEL+"1_T"
+         || sparam == PREFIX_PANEL+"1_B")
       {
-         if(StringFind(sparam, "1_C") >= 0)
-         {
-            g_manualPanelCollapsed = !g_manualPanelCollapsed;
-            DeleteObjectsByPrefix(PREFIX_PANEL);
-            DeleteObjectsByPrefix(PREFIX_CLOSE);
-            DrawManualPanel(g_activeSignalIndex);
-            return;
-         }
+         g_manualPanelCollapsed = !g_manualPanelCollapsed;
+         DeleteObjectsByPrefix(PREFIX_PANEL);
+         DeleteObjectsByPrefix(PREFIX_CLOSE);
+         DrawManualPanel(g_activeSignalIndex);
+         return;
       }
    }
 
@@ -120,7 +118,10 @@ void HandleChartEvent(const int id, const long &lparam,
                if(now - s_lastDrag > 40)
                {
                   s_lastDrag = now;
-                  DrawInfoPanel(g_activeSignalIndex);
+                  if(InpDashboardMode == DASHBOARD_MANUAL)
+                     DrawManualPanel(g_activeSignalIndex);
+                  else
+                     DrawInfoPanel(g_activeSignalIndex);
                }
             }
          }         
@@ -129,8 +130,11 @@ void HandleChartEvent(const int id, const long &lparam,
             g_panelDragging = false;
             ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
             SavePanelPosition();
-            g_panelUserMoved = true;  // ← THÊM DÒNG NÀY
-            DrawInfoPanel(g_activeSignalIndex);
+            g_panelUserMoved = true;
+            if(InpDashboardMode == DASHBOARD_MANUAL)
+               DrawManualPanel(g_activeSignalIndex);
+            else
+               DrawInfoPanel(g_activeSignalIndex);
          }
       }
       else if(leftDown)
