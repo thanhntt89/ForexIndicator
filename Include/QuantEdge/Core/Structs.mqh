@@ -42,6 +42,7 @@ struct SignalData
    double   rsiAtSignal;       // BufferGreen[i] — exact RSI value at signal bar
    double   predictedProb;    // probTP1 at signal creation time (for Brier Score calibration)
    double   xgbPredictedProb; // XGBoost probTP1 at signal creation (for XGB Brier tracking)
+   double   xgbShadowPredictedProb; // Shadow model probTP1 at signal creation (for A/B shadow Brier tracking)
    double   optimizedEV;      // EV at optimized SL/TP (0 = not optimized)
    double   initialEV;        // EV at original SL/TP before optimization
    bool     wasOptimized;     // true if EV optimization was applied

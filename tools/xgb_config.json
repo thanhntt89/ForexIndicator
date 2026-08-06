@@ -15,5 +15,6 @@
   "auto_train": true,
   "log_folder_name": "QuantEdge_RSI_Logs",
   "output_format": "bin",
-  "output_dir": "auto"
+  "output_dir": "auto",
+  "auto_promote": false
 }

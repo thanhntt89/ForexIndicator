@@ -6,3 +6,4 @@ matplotlib>=3.7
 pystray>=0.19
 Pillow>=9.0
 plyer>=2.1
+shap>=0.44

@@ -14,6 +14,7 @@
 #define QE_XGBINTEGRATION_MQH
 
 #include "XGBModel.mqh"
+#include "XGBModelShadow.mqh"
 
 #define MIN_XGB_BRIER_SAMPLES  20
 
@@ -34,6 +35,48 @@ double XGBGetPrediction(const SignalData &sig,
    TimeToStruct(sig.signalTime, sigDt);
 
    return XGBPredict(
+      sig.rsiAtSignal,
+      sig.angleStrength,
+      g_volRegime.atrRatio,
+      slATR,
+      tp1ATR,
+      rrRatio,
+      sig.spreadAtSignal / MarketInfo(Symbol(), MODE_POINT),
+      SL_GetTimeInSessionMin(sig.signalTime, sig.sessionBlock),
+      sig.caseNumber,
+      sig.isBuySignal ? 1 : 0,
+      sig.sessionBlock,
+      sigDt.hour,
+      sigDt.day_of_week,
+      DetectMarketRegime(Bars - 1, orange, bbUp, bbLo),
+      (g_mtfCount > 0) ? (int)(100.0 * g_intermarket.correlationScore) : 50,
+      g_spreadRegime.spreadRatio,
+      g_walkForward.isRobust ? 1 : 0,
+      SL_GetMTFTrendForTF(TF_H4),
+      SL_GetMTFTrendForTF(TF_H1)
+   );
+}
+
+//+------------------------------------------------------------------+
+//| XGBGetShadowPrediction — mirrors XGBGetPrediction() but calls     |
+//| XGBPredictShadow(). Purely observational: never feeds             |
+//| CombineXGBWithBayesian() / XGBIsReady() / any EA-facing buffer.   |
+//| Gated by InpEnableXGBShadow at the call site.                     |
+//+------------------------------------------------------------------+
+double XGBGetShadowPrediction(const SignalData &sig,
+                              const double &orange[], const double &bbUp[], const double &bbLo[])
+{
+   double slDist   = MathAbs(sig.entryPrice - sig.stopLoss);
+   double tp1Dist  = MathAbs(sig.takeProfit1 - sig.entryPrice);
+   double atrSafe  = MathMax(sig.atrValue, 0.0001);
+   double slATR    = slDist / atrSafe;
+   double tp1ATR   = tp1Dist / atrSafe;
+   double rrRatio  = (slDist > 0) ? tp1Dist / slDist : 0;
+
+   MqlDateTime sigDt;
+   TimeToStruct(sig.signalTime, sigDt);
+
+   return XGBPredictShadow(
       sig.rsiAtSignal,
       sig.angleStrength,
       g_volRegime.atrRatio,
@@ -143,6 +186,44 @@ void UpdateXGBBrierMetrics()
 
    g_xgbBrierSamples = matched;
    g_xgbBrierScore   = (matched >= 5) ? sumSqErr / matched : 0.25;
+}
+
+//+------------------------------------------------------------------+
+//| UpdateXGBShadowBrierMetrics — track shadow model accuracy         |
+//| Mirrors UpdateXGBBrierMetrics() but uses xgbShadowPredictedProb.  |
+//| Purely observational — never affects XGBIsReady() or the combined |
+//| decision. Gated by InpEnableXGBShadow at the call site.            |
+//+------------------------------------------------------------------+
+void UpdateXGBShadowBrierMetrics()
+{
+   if(InpProbMode == PROB_CALIBRATION) return;
+
+   double sumSqErr = 0;
+   int    matched  = 0;
+
+   for(int oi = 0; oi < g_outcomeCount; oi++)
+   {
+      if(g_outcomes[oi].outcome == 0) continue;
+
+      datetime oTime  = g_outcomes[oi].signalTime;
+      bool     oIsBuy = g_outcomes[oi].isBuy;
+
+      for(int si = g_signalCount - 1; si >= 0; si--)
+      {
+         if(g_signals[si].signalTime != oTime) continue;
+         if(g_signals[si].isBuySignal != oIsBuy) continue;
+         if(g_signals[si].xgbShadowPredictedProb <= 0) break;
+
+         double predicted = g_signals[si].xgbShadowPredictedProb / 100.0;
+         double actual    = (g_outcomes[oi].outcome > 0) ? 1.0 : 0.0;
+         sumSqErr += (predicted - actual) * (predicted - actual);
+         matched++;
+         break;
+      }
+   }
+
+   g_xgbShadowBrierSamples = matched;
+   g_xgbShadowBrierScore   = (matched >= 5) ? sumSqErr / matched : 0.25;
 }
 
 #endif

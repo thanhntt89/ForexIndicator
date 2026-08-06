@@ -200,6 +200,7 @@ input int    InpProbMaxBars       = 1000;          // Max bars for probability s
 input color  InpProbTextColor     = clrWhite;      // Probability text color
 input int    InpProbFontSize      = 8;             // Probability font size
 input bool   InpShowProbExplain  = false;         // Show probability attribution panel (debug)
+input bool   InpEnableXGBShadow  = false;         // Enable A/B shadow model (loads XGBModels_shadow.bin, observational only)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Alerts                                                |

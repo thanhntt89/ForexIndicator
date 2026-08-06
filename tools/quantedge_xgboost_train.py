@@ -48,6 +48,12 @@ try:
 except ImportError:
     HAS_MATPLOTLIB = False
 
+try:
+    import shap
+    HAS_SHAP = True
+except ImportError:
+    HAS_SHAP = False
+
 
 # ─── Configuration ──────────────────────────────────────────────────
 XGB_PARAMS = {
@@ -289,6 +295,7 @@ def train_and_validate(df: pd.DataFrame, feature_cols: list) -> dict:
         "oos_true": oos_true,
         "fold_metrics": fold_metrics,
         "feature_importance": fi_df,
+        "X_train_full": X,
     }
 
 
@@ -664,6 +671,49 @@ def build_tree_nodes(booster, tree_index: int, feature_cols: list) -> list:
     return flat_nodes
 
 
+def serialize_model_block(results: dict, symbol: str, tf: str) -> tuple:
+    """Serialize one trained model to its binary block (V12.2 runtime format).
+
+    Block layout: symbol(16B) + period/n_trees/n_features(int x3) +
+    oos_brier/oos_auc(double x2) + per-tree [n_nodes(int) + nodes(28B each)].
+    This is the same byte layout written inline into the merged multi-model
+    file by export_model_binary() — factored out so model_registry.py can
+    reuse identical packing for single-version archive snapshots without
+    re-training.
+
+    Returns (block_bytes, n_trees, n_nodes).
+    """
+    model = results["model"]
+    feature_cols = results["feature_cols"]
+    booster = model.get_booster()
+    n_trees = booster.num_boosted_rounds()
+    period = TF_TO_PERIOD.get(tf, 0)
+
+    chunks = []
+    total_nodes = 0
+
+    # Symbol: 16 bytes null-padded ASCII
+    sym_bytes = symbol.encode("ascii")[:16].ljust(16, b"\x00")
+    chunks.append(sym_bytes)
+
+    chunks.append(struct.pack("<iii", period, n_trees, len(feature_cols)))
+    chunks.append(struct.pack("<dd", results["oos_brier"], results["oos_auc"]))
+
+    for t in range(n_trees):
+        nodes = build_tree_nodes(booster, t, feature_cols)
+        chunks.append(struct.pack("<i", len(nodes)))
+        for nd in nodes:
+            chunks.append(struct.pack("<idii d",
+                nd["feature_index"],
+                nd["threshold"],
+                nd["left_child"],
+                nd["right_child"],
+                nd["leaf_value"]))
+        total_nodes += len(nodes)
+
+    return b"".join(chunks), n_trees, total_nodes
+
+
 def export_model_binary(model_list: list, output_path: str):
     """Export multiple models to a single binary file (V12.2 runtime format).
 
@@ -671,7 +721,6 @@ def export_model_binary(model_list: list, output_path: str):
     Writes to a temp file then atomically renames (prevents MQL from reading partial writes).
     """
     timestamp = int(time.time())
-    best_brier = min(r["oos_brier"] for r, _, _ in model_list)
 
     output_dir = os.path.dirname(output_path)
     if output_dir and not os.path.isdir(output_dir):
@@ -690,32 +739,10 @@ def export_model_binary(model_list: list, output_path: str):
             total_nodes = 0
 
             for results, symbol, tf in model_list:
-                model = results["model"]
-                feature_cols = results["feature_cols"]
-                booster = model.get_booster()
-                n_trees = booster.num_boosted_rounds()
-                period = TF_TO_PERIOD.get(tf, 0)
-
-                # Symbol: 16 bytes null-padded ASCII
-                sym_bytes = symbol.encode("ascii")[:16].ljust(16, b"\x00")
-                f.write(sym_bytes)
-
-                f.write(struct.pack("<iii", period, n_trees, len(feature_cols)))
-                f.write(struct.pack("<dd", results["oos_brier"], results["oos_auc"]))
-
-                for t in range(n_trees):
-                    nodes = build_tree_nodes(booster, t, feature_cols)
-                    f.write(struct.pack("<i", len(nodes)))
-                    for nd in nodes:
-                        f.write(struct.pack("<idii d",
-                            nd["feature_index"],
-                            nd["threshold"],
-                            nd["left_child"],
-                            nd["right_child"],
-                            nd["leaf_value"]))
-                    total_nodes += len(nodes)
-
+                block, n_trees, n_nodes = serialize_model_block(results, symbol, tf)
+                f.write(block)
                 total_trees += n_trees
+                total_nodes += n_nodes
 
         os.replace(tmp_path, output_path)
         print(f"\n[BIN] Exported {len(model_list)} models, {total_trees} trees, "
@@ -763,6 +790,63 @@ def save_calibration_plot(results: dict, output_dir: str, label: str = ""):
     plt.savefig(plot_path, dpi=100)
     plt.close()
     print(f"  Saved calibration plot: {plot_path}")
+
+
+# ─── SHAP Feature Importance Report ──────────────────────────────────
+def save_shap_report(results: dict, output_dir: str, label: str = ""):
+    """Compute SHAP feature importance and write a JSON report (+ PNG if available).
+
+    Purely additive reporting — does not affect the trained model, the
+    exported binary, or any runtime prediction path.
+    """
+    if not HAS_SHAP:
+        return
+
+    try:
+        model = results["model"]
+        feature_cols = results["feature_cols"]
+        X = results["X_train_full"]
+
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X)
+
+        mean_abs_shap = np.abs(shap_values).mean(axis=0)
+        mean_shap = shap_values.mean(axis=0)
+
+        report = []
+        for i, feat in enumerate(feature_cols):
+            report.append({
+                "feature": feat,
+                "mean_abs_shap": float(mean_abs_shap[i]),
+                "mean_shap": float(mean_shap[i]),
+            })
+        report.sort(key=lambda r: r["mean_abs_shap"], reverse=True)
+        for rank, row in enumerate(report, start=1):
+            row["rank"] = rank
+
+        os.makedirs(output_dir, exist_ok=True)
+        suffix = f"_{label}" if label else ""
+        json_path = os.path.join(output_dir, f"shap_report{suffix}.json")
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        print(f"  Saved SHAP report: {json_path}")
+
+        if HAS_MATPLOTLIB:
+            top = report[:15]
+            fig, ax = plt.subplots(figsize=(8, max(4, 0.35 * len(top))))
+            names = [r["feature"] for r in reversed(top)]
+            vals = [r["mean_abs_shap"] for r in reversed(top)]
+            ax.barh(names, vals, color="steelblue")
+            ax.set_xlabel("Mean |SHAP value|")
+            ax.set_title(f"SHAP Feature Importance {label}")
+            plt.tight_layout()
+            png_path = os.path.join(output_dir, f"shap_importance{suffix}.png")
+            plt.savefig(png_path, dpi=100)
+            plt.close()
+            print(f"  Saved SHAP plot: {png_path}")
+
+    except Exception as e:
+        print(f"  WARNING: SHAP report failed: {e}")
 
 
 # ─── Inventory (for service) ────────────────────────────────────────
@@ -821,6 +905,8 @@ def train_single(data_dirs: list, symbol: str, tf: str, output_path: str,
 
     plot_dir = os.path.dirname(output_path) or "."
     save_calibration_plot(results, plot_dir, label)
+    shap_dir = str(Path(__file__).parent / "shap_reports")
+    save_shap_report(results, shap_dir, label)
 
     if passed or force:
         if not passed:

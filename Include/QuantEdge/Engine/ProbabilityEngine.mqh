@@ -1394,6 +1394,12 @@ void CalculateProbability(int currentSignalIndex,
       g_currentProb.xgbProbTP1 = xgbProb;
       g_xgbProbTP1 = xgbProb;
 
+      // A/B shadow (candidate) model — Sprint 4, purely observational.
+      // Never read below this point: does not participate in PROB_XGBOOST
+      // or PROB_ENSEMBLE branching, CombineXGBWithBayesian(), or XGBIsReady().
+      if(InpEnableXGBShadow)
+         g_xgbShadowProbTP1 = XGBGetShadowPrediction(curSig, orange, bbUp, bbLo);
+
       if(InpProbMode == PROB_XGBOOST)
       {
          if(XGBIsReady())

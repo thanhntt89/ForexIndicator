@@ -54,6 +54,7 @@ APPDATA_PATH = Path(os.environ.get("APPDATA", ""))
 MT_TERMINAL_BASE = APPDATA_PATH / "MetaQuotes" / "Terminal"
 COMMON_FILES_DIR = MT_TERMINAL_BASE / "Common" / "Files"
 DEFAULT_OUTPUT_BIN = COMMON_FILES_DIR / "QuantEdge_RSI" / "XGBModels.bin"
+DEFAULT_OUTPUT_BIN_SHADOW = COMMON_FILES_DIR / "QuantEdge_RSI" / "XGBModels_shadow.bin"
 
 TF_TO_PERIOD = {
     "M1": 1, "M5": 5, "M15": 15, "M30": 30,
@@ -320,25 +321,34 @@ def assemble_multi_model(trained_models: list, output_path: str):
     sys.path.pop(0)
 
 
-def assemble_binary_model(trained_models: list, output_path: str):
-    """Assemble multiple models into one binary file for runtime loading (V12.2)."""
+def archive_newly_trained(trained_models: list, auto_promote: bool) -> int:
+    """Re-fit each newly-passing key once (in-process, to get a live model object —
+    the training subprocess already validated it but didn't cross the process
+    boundary) and archive it into model_registry. role="champion" if auto_promote
+    (restores old V12.1/V12.2 direct-overwrite behavior), else role="shadow"
+    (gated — champion untouched until a manual promotion).
+
+    Returns the number of keys successfully archived.
+    """
     sys.path.insert(0, str(SCRIPT_DIR))
     try:
         import importlib
         import quantedge_xgboost_train as trainer
         importlib.reload(trainer)
-    except ImportError:
-        logger.error("Cannot import quantedge_xgboost_train.py for binary assembly")
-        return
+        import model_registry
+        importlib.reload(model_registry)
+    except ImportError as e:
+        logger.error(f"Cannot import trainer/model_registry for archival: {e}")
+        sys.path.pop(0)
+        return 0
 
-    logger.info(f"Assembling {len(trained_models)} models into binary: {output_path}")
-
-    data_dirs = trained_models[0]["data_dirs"]
-    model_list = []
+    archived = 0
+    role = "champion" if auto_promote else "shadow"
 
     for tm in trained_models:
         symbol = tm["symbol"]
         tf = tm["tf"]
+        data_dirs = tm["data_dirs"]
         df = trainer.load_and_merge(data_dirs, symbol, tf)
         if df.empty:
             continue
@@ -348,18 +358,38 @@ def assemble_binary_model(trained_models: list, output_path: str):
         results = trainer.train_and_validate(df, feature_cols)
         if results is None:
             continue
-        model_list.append((results, symbol, tf))
-
-    if model_list:
-        out_dir = os.path.dirname(output_path)
-        if out_dir and not os.path.isdir(out_dir):
-            os.makedirs(out_dir, exist_ok=True)
-        trainer.export_model_binary(model_list, output_path)
-        logger.info(f"Binary model assembly complete: {len(model_list)} models")
-    else:
-        logger.warning("No models assembled — all re-training failed")
+        version_id = model_registry.archive_version(symbol, tf, results, role=role)
+        logger.info(f"  {symbol}_{tf}: archived as {role} ({version_id})")
+        archived += 1
 
     sys.path.pop(0)
+    return archived
+
+
+def rebuild_merged_binaries(champion_path: str, shadow_path: str):
+    """Splice every key's champion/shadow version into their merged binary files,
+    purely from already-archived bytes — no re-training. Champion file is only
+    rewritten when its content actually changes (new archival with role=champion,
+    or an explicit promote/rollback), matching the gated-promotion design.
+    """
+    sys.path.insert(0, str(SCRIPT_DIR))
+    try:
+        import importlib
+        import model_registry
+        importlib.reload(model_registry)
+    except ImportError as e:
+        logger.error(f"Cannot import model_registry for binary assembly: {e}")
+        sys.path.pop(0)
+        return
+
+    wrote_champion = model_registry.assemble_role_binary("champion", champion_path)
+    wrote_shadow = model_registry.assemble_role_binary("shadow", shadow_path)
+    sys.path.pop(0)
+
+    if wrote_champion:
+        logger.info(f"XGBModels.bin rebuilt from registry: {champion_path}")
+    if wrote_shadow:
+        logger.info(f"XGBModels_shadow.bin rebuilt from registry: {shadow_path}")
 
 
 # ─── Notifications ───────────────────────────────────────────────────
@@ -459,52 +489,54 @@ def scan_and_train(config: dict, state: dict, force: bool = False) -> dict:
                 "message": msg,
             }
 
-    # Assemble all passing models into one XGBModel.mqh
-    all_passing = []
-    for key, ms in state.get("models", {}).items():
-        if ms.get("status") == "pass":
-            parts = key.rsplit("_", 1)
-            if len(parts) == 2:
-                all_passing.append({"symbol": parts[0], "tf": parts[1], "data_dirs": data_dirs})
-
-    if trained_this_round and all_passing:
+    # Archive only keys that trained this round (registry already holds bytes
+    # for every previously-passing key — no need to re-train those every cycle).
+    if trained_this_round and output_format == "bin":
         try:
-            if output_format == "bin":
-                assemble_binary_model(all_passing, output_path)
-                logger.info(f"XGBModels.bin updated with {len(all_passing)} models")
-            else:
-                assemble_multi_model(all_passing, output_path)
-                logger.info(f"XGBModel.mqh updated with {len(all_passing)} models")
+            auto_promote = config.get("auto_promote", False)
+            n_archived = archive_newly_trained(trained_this_round, auto_promote)
+            rebuild_merged_binaries(output_path, str(DEFAULT_OUTPUT_BIN_SHADOW))
 
             passed = [t for t in trained_this_round]
             summary_parts = [f"{t['symbol']} {t['tf']} Brier={t['brier']}" for t in passed]
             summary = ", ".join(summary_parts)
-            if output_format == "bin":
+            if auto_promote:
                 notify(
-                    f"XGB: {len(passed)} model(s) updated",
+                    f"XGB: {n_archived} model(s) promoted to champion",
                     f"{summary}\nModels auto-loaded, no recompile needed."
                 )
             else:
                 notify(
-                    f"XGB: {len(passed)} model(s) updated - Compile F7",
-                    f"{summary}\nOpen MetaEditor > F7 to apply."
+                    f"XGB: {n_archived} model(s) archived as shadow",
+                    f"{summary}\nUse tray > Promote Shadow -> Champion to go live."
                 )
         except Exception as e:
+            logger.error(f"Model archival/assembly failed: {e}")
+    elif trained_this_round and output_format != "bin":
+        try:
+            all_passing = []
+            for key, ms in state.get("models", {}).items():
+                if ms.get("status") == "pass":
+                    parts = key.rsplit("_", 1)
+                    if len(parts) == 2:
+                        all_passing.append({"symbol": parts[0], "tf": parts[1], "data_dirs": data_dirs})
+            assemble_multi_model(all_passing, output_path)
+            logger.info(f"XGBModel.mqh updated with {len(all_passing)} models")
+            notify(
+                f"XGB: {len(trained_this_round)} model(s) updated - Compile F7",
+                "Open MetaEditor > F7 to apply."
+            )
+        except Exception as e:
             logger.error(f"Model assembly failed: {e}")
-    elif trained_this_round:
-        # Models trained but none passed validation
-        failed = [t for t in trained_this_round]
-        names = ", ".join(f"{t['symbol']} {t['tf']}" for t in failed)
-        notify("XGB: Training failed", f"{names} - validation not passed")
 
-        # Cleanup temp files
-        for tm in trained_this_round:
-            temp = tm.get("temp_file", "")
-            if os.path.exists(temp):
-                try:
-                    os.remove(temp)
-                except OSError:
-                    pass
+    # Temp per-key files from run_training() are superseded by registry archival
+    for tm in trained_this_round:
+        temp = tm.get("temp_file", "")
+        if os.path.exists(temp):
+            try:
+                os.remove(temp)
+            except OSError:
+                pass
 
     state["last_scan"] = datetime.now().isoformat()
     save_state(state)
@@ -582,6 +614,10 @@ class TrayService:
             pystray.MenuItem("Train Now", self.on_train_now),
             pystray.MenuItem("Status", self.on_status),
             pystray.Menu.SEPARATOR,
+            pystray.MenuItem("Promote Shadow -> Champion", self.on_promote_shadow),
+            pystray.MenuItem("Rollback Champion...", self.on_rollback_champion),
+            pystray.MenuItem("View Model History", self.on_view_history),
+            pystray.Menu.SEPARATOR,
             pystray.MenuItem("Open Log", self.on_open_log),
             pystray.MenuItem("Open Config", self.on_open_config),
             pystray.Menu.SEPARATOR,
@@ -639,6 +675,113 @@ class TrayService:
             except Exception as e:
                 logger.error(f"Manual train error: {e}", exc_info=True)
         threading.Thread(target=do_train, daemon=True).start()
+
+    @staticmethod
+    def _load_model_registry():
+        """Import (or reload) model_registry the same way archive_newly_trained() /
+        rebuild_merged_binaries() do, so tray actions see live-edited registry code
+        without a service restart. Caller must sys.path.pop(0) when done."""
+        sys.path.insert(0, str(SCRIPT_DIR))
+        import importlib
+        import model_registry
+        importlib.reload(model_registry)
+        return model_registry
+
+    def _champion_output_path(self) -> str:
+        """Mirror scan_and_train()'s output_path resolution (bin format only —
+        tray promote/rollback only make sense when output_format=="bin")."""
+        output_dir = self.config.get("output_dir", "auto")
+        return str(DEFAULT_OUTPUT_BIN) if output_dir == "auto" else output_dir
+
+    def on_promote_shadow(self, icon, item):
+        def do_promote():
+            logger.info("Promote shadow -> champion triggered")
+            try:
+                model_registry = self._load_model_registry()
+                try:
+                    promoted = []
+                    for symbol, tf in model_registry.all_keys():
+                        if model_registry.get_shadow(symbol, tf) is None:
+                            continue
+                        version_id = model_registry.promote_shadow_to_champion(symbol, tf)
+                        promoted.append(f"{symbol}_{tf}->{version_id}")
+
+                    if not promoted:
+                        notify("Promote Shadow", "No pending shadow versions to promote.")
+                        return
+
+                    champion_path = self._champion_output_path()
+                    model_registry.assemble_role_binary("champion", champion_path)
+                    model_registry.assemble_role_binary("shadow", str(DEFAULT_OUTPUT_BIN_SHADOW))
+                    self.update_icon()
+                    notify("Promote Shadow", f"Promoted {len(promoted)} model(s):\n" + "\n".join(promoted))
+                finally:
+                    sys.path.pop(0)
+            except Exception as e:
+                logger.error(f"Promote shadow error: {e}", exc_info=True)
+                notify("Promote Shadow Error", str(e))
+        threading.Thread(target=do_promote, daemon=True).start()
+
+    def on_rollback_champion(self, icon, item):
+        def do_rollback():
+            logger.info("Rollback champion triggered")
+            try:
+                model_registry = self._load_model_registry()
+                try:
+                    rolled_back = []
+                    for symbol, tf in model_registry.all_keys():
+                        versions = model_registry.list_versions(symbol, tf)
+                        champion = model_registry.get_champion(symbol, tf)
+                        candidates = [v for v in versions
+                                      if v["role"] == "archived"
+                                      and (champion is None or v["timestamp"] < champion["timestamp"])]
+                        if not candidates:
+                            continue
+                        target = candidates[0]  # most recent archived, older than current champion
+                        model_registry.rollback_champion(symbol, tf, target["version_id"])
+                        rolled_back.append(f"{symbol}_{tf}->{target['version_id']}")
+
+                    if not rolled_back:
+                        notify("Rollback Champion", "No older archived version available to roll back to.")
+                        return
+
+                    champion_path = self._champion_output_path()
+                    model_registry.assemble_role_binary("champion", champion_path)
+                    self.update_icon()
+                    notify("Rollback Champion", f"Rolled back {len(rolled_back)} model(s):\n" + "\n".join(rolled_back))
+                finally:
+                    sys.path.pop(0)
+            except Exception as e:
+                logger.error(f"Rollback champion error: {e}", exc_info=True)
+                notify("Rollback Champion Error", str(e))
+        threading.Thread(target=do_rollback, daemon=True).start()
+
+    def on_view_history(self, icon, item):
+        try:
+            model_registry = self._load_model_registry()
+            try:
+                keys = model_registry.all_keys()
+                if not keys:
+                    notify("Model History", "No model history recorded yet.")
+                    return
+
+                lines = []
+                for symbol, tf in sorted(keys):
+                    versions = model_registry.list_versions(symbol, tf)
+                    champion = next((v for v in versions if v["role"] == "champion"), None)
+                    shadow = next((v for v in versions if v["role"] == "shadow"), None)
+                    champ_txt = f"champ={champion['version_id']}(brier={champion['brier']})" if champion else "champ=none"
+                    shadow_txt = f"shadow={shadow['version_id']}(brier={shadow['brier']})" if shadow else "shadow=none"
+                    lines.append(f"{symbol}_{tf}: {champ_txt} {shadow_txt} [{len(versions)} versions]")
+
+                text = "\n".join(lines)
+                logger.info(f"Model history:\n{text}")
+                notify("Model History", text[:250])
+            finally:
+                sys.path.pop(0)
+        except Exception as e:
+            logger.error(f"View history error: {e}", exc_info=True)
+            notify("View History Error", str(e))
 
     def on_status(self, icon, item):
         text = get_status_text(self.state)

@@ -70,6 +70,11 @@ double          g_xgbProbTP1       = 0.0;    // Latest XGBoost prediction (0-100
 double          g_xgbBrierScore    = 0.25;   // XGBoost Brier score (starts at random baseline)
 int             g_xgbBrierSamples  = 0;      // Resolved outcomes with XGB prediction stored
 
+// XGBoost shadow (A/B candidate) state — Sprint 4, observational only
+double          g_xgbShadowProbTP1      = 0.0;    // Latest shadow model prediction (0-100)
+double          g_xgbShadowBrierScore   = 0.25;   // Shadow model Brier score (starts at random baseline)
+int             g_xgbShadowBrierSamples = 0;      // Resolved outcomes with shadow prediction stored
+
 //+------------------------------------------------------------------+
 //| Entry Zone data                                                    |
 //+------------------------------------------------------------------+

@@ -831,6 +831,20 @@ void DrawInfoPanel(int signalIndex)
          string modeLabel = " Mode:" + XGBModeLabel();
          CreateTextLabel(PREFIX_PANEL+"P_XGB", px+pad, cy, modeLabel + xLine, xClr, fs-2, false);
          cy += lh;
+
+         // A/B shadow (candidate) model line — Sprint 4, observational only.
+         // Distinct from the "[shadow N/20]" warm-up tag above (that's the
+         // champion's own Brier-qualification state, unrelated to this feature).
+         if(InpEnableXGBShadow && g_xgbShadowLoaded)
+         {
+            string sLine = " Candidate:" + DoubleToString(g_xgbShadowProbTP1, 1) + "%"
+                         + " Brier:" + DoubleToString(g_xgbShadowBrierScore, 3)
+                         + " [n=" + IntegerToString(g_xgbShadowBrierSamples) + "]";
+            color  sClr  = (g_xgbShadowBrierSamples >= MIN_XGB_BRIER_SAMPLES
+                            && g_xgbShadowBrierScore < g_xgbBrierScore) ? clrLime : InpPanelDimColor;
+            CreateTextLabel(PREFIX_PANEL+"P_XGBSHADOW", px+pad, cy, sLine, sClr, fs-2, false);
+            cy += lh;
+         }
       }
 
       // Data quality breakdown (V11.30)

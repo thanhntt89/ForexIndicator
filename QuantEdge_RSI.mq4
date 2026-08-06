@@ -240,6 +240,7 @@ int OnInit()
          LoadSessionStatsFromOutcomesCSV();
    }
    LoadXGBModels();
+   if(InpEnableXGBShadow) LoadXGBShadowModel();
 
    return(INIT_SUCCEEDED);
 }
@@ -302,6 +303,7 @@ int OnCalculate(const int rates_total,
 {
    g_ratesTotal = rates_total;
    CheckXGBReload();
+   if(InpEnableXGBShadow) CheckXGBShadowReload();
    ArraySetAsSeries(time, false);
    ArraySetAsSeries(open, false);
    ArraySetAsSeries(high, false);
@@ -730,6 +732,7 @@ int OnCalculate(const int rates_total,
       CalculateWalkForwardMetrics();
       UpdateBrierMetrics();
       UpdateXGBBrierMetrics();
+      if(InpEnableXGBShadow) UpdateXGBShadowBrierMetrics();
       UpdatePortfolioRisk();
       // Memory management: cap outcomes at 500
       if(g_outcomeCount > 500)
@@ -806,6 +809,9 @@ int OnCalculate(const int rates_total,
          if(InpProbMode != PROB_CALIBRATION && g_activeSignalIndex >= 0 &&
             g_signals[g_activeSignalIndex].xgbPredictedProb <= 0 && g_currentProb.xgbProbTP1 > 0)
             g_signals[g_activeSignalIndex].xgbPredictedProb = g_currentProb.xgbProbTP1;
+         if(InpEnableXGBShadow && g_activeSignalIndex >= 0 &&
+            g_signals[g_activeSignalIndex].xgbShadowPredictedProb <= 0 && g_xgbShadowProbTP1 > 0)
+            g_signals[g_activeSignalIndex].xgbShadowPredictedProb = g_xgbShadowProbTP1;
          if(g_intermarket.isAvailable)
             GetIntermarketScore(activeSig.isBuySignal);
 
