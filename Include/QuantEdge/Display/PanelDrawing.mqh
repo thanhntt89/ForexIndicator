@@ -1178,6 +1178,352 @@ void DrawInfoPanel(int signalIndex)
 }
 
 //+------------------------------------------------------------------+
+//| Close button helper (OBJ_BUTTON for indicator panel)              |
+//+------------------------------------------------------------------+
+void CreateCloseButton(string name, int x, int y, int w, int h, string text, color bg, color brd)
+{
+   if(ObjectFind(name) < 0)
+   {
+      ObjectCreate(name, OBJ_BUTTON, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, brd);
+      ObjectSetInteger(0, name, OBJPROP_STATE, false);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+}
+
+//+------------------------------------------------------------------+
+//| Manual Trading Dashboard — compact panel + close buttons          |
+//+------------------------------------------------------------------+
+void DrawManualPanel(int signalIndex)
+{
+   if(InpEAMode || !InpShowPanel) return;
+
+   int px = g_panelPosX, py = g_panelPosY;
+   int pw = InpPanelWidth, fs = InpPanelFontSize;
+   int lh = fs + 6, pad = 8, titleBarH = lh + 6;
+
+   // --- Collapsed state ---
+   if(g_manualPanelCollapsed)
+   {
+      DeleteObjectsByPrefix(PREFIX_PANEL);
+      DeleteObjectsByPrefix(PREFIX_CLOSE);
+      int collW = pw, collH = titleBarH;
+      CreateRectangleLabel(PREFIX_PANEL+"0_BG", px, py, collW, collH, InpPanelBgColor, InpPanelBorderColor);
+      string collText = "QuantEdge";
+      if(signalIndex >= 0 && signalIndex < g_signalCount)
+      {
+         SignalData cs = g_signals[signalIndex];
+         collText += cs.isBuySignal ? "  BUY" : "  SELL";
+         bool hasP = (InpShowProbability && g_currentProb.probTP1 > 0);
+         if(hasP)
+            collText += "  " + DoubleToString(g_currentProb.probTP1, 0) + "%";
+      }
+      else
+         collText += "  -- no signal --";
+      collText += "  [+]";
+      CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, py+3, collText, InpPanelTitleColor, fs, true);
+      ChartRedraw();
+      return;
+   }
+
+   // --- Height calculation ---
+   int calcY = titleBarH + 2;
+
+   bool hasSig = (signalIndex >= 0 && signalIndex < g_signalCount);
+   bool hasProb = hasSig && (InpShowProbability && (g_currentProb.totalSamples >= GetMinSamplesForTimeframe() || g_currentProb.probTP1 > 0));
+   bool hasMTF = (InpShowMTF && g_mtfCount > 0);
+   bool hasZones = false;
+   int visibleZones = 0;
+   TradeRecommendation rec;
+   bool isInvalidated = false;
+   bool isBuy = false;
+
+   if(hasSig)
+   {
+      SignalData sig = g_signals[signalIndex];
+      isBuy = sig.isBuySignal;
+      double curPrice = iClose(NULL, 0, 0);
+      double slDist = MathAbs(sig.entryPrice - sig.stopLoss);
+
+      if(isBuy && curPrice <= sig.stopLoss) isInvalidated = true;
+      if(!isBuy && curPrice >= sig.stopLoss) isInvalidated = true;
+
+      int mtfAgree = 0;
+      if(hasMTF) mtfAgree = CalculateMTFAgreement();
+      double tp1Dist = MathAbs(sig.takeProfit1 - sig.entryPrice);
+
+      if(!isInvalidated)
+      {
+         int recN = (int)MathRound(g_currentProb.nEffT1 + g_currentProb.nEffT2);
+         rec = GetTradeRecommendation(
+            sig.caseNumber, isBuy, g_currentProb.probTP1, g_currentProb.probSL,
+            recN, mtfAgree, slDist, tp1Dist, sig.atrValue, sig.signalTime);
+      }
+
+      hasZones = (InpEntryZoneCount >= 2 && g_validZoneCount >= 1 && !isInvalidated);
+      if(hasZones)
+         for(int z = 0; z < 5; z++)
+            if(g_entryZones[z].isValid) visibleZones++;
+
+      calcY += lh;      // signal banner
+      calcY += lh;      // recommendation + confidence
+      calcY += 3;
+      calcY += lh;      // Entry
+      calcY += lh;      // SL
+      calcY += lh;      // TP1
+      calcY += lh;      // TP2
+      calcY += lh;      // TP3
+      if(hasZones && visibleZones > 0)
+      {
+         calcY += 3;
+         calcY += visibleZones * lh;
+      }
+   }
+   else
+   {
+      calcY += lh * 2;  // no signal text
+   }
+
+   if(hasMTF)
+   {
+      calcY += 3;
+      calcY += lh;      // MTF title
+      calcY += lh;      // alignment blocks (single row)
+   }
+
+   if(hasSig && hasProb && g_currentProb.elapsedBars > 0)
+      calcY += lh;      // expiry line
+
+   // Close buttons
+   int btnH = 22, btnGap = 3;
+   calcY += 3;
+   calcY += btnH + btnGap;  // row 1: 4 buttons
+   calcY += btnH;            // row 2: CLOSE ALL
+   calcY += 4;               // bottom padding
+
+   int totalH = calcY;
+
+   if(!g_panelUserMoved)
+   {
+      int chartH = (int)ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS);
+      int chartW = (int)ChartGetInteger(0, CHART_WIDTH_IN_PIXELS);
+      if(chartH > 100 && chartW > 100)
+      {
+         if(py + totalH > chartH - 10) { py = MathMax(0, chartH - totalH - 10); g_panelPosY = py; }
+         if(px + pw > chartW - 10)     { px = MathMax(0, chartW - pw - 10);     g_panelPosX = px; }
+      }
+   }
+
+   // --- Background ---
+   color borderClr = isInvalidated ? clrRed : InpPanelBorderColor;
+   CreateRectangleLabel(PREFIX_PANEL+"0_BG", px, py, pw, totalH, InpPanelBgColor, borderClr);
+   CreateRectangleLabel(PREFIX_PANEL+"0_TB", px, py, pw, titleBarH, InpPanelBorderColor, InpPanelBorderColor);
+
+   int cy = py + 3;
+
+   // --- Title bar ---
+   string titleText = "QuantEdge";
+   color titleClr = InpPanelTitleColor;
+   CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText, titleClr, fs, true);
+   CreateTextLabel(PREFIX_PANEL+"1_M", px+pw-65, cy, "MANUAL", C'120,160,200', fs-2, false);
+   CreateTextLabel(PREFIX_PANEL+"1_C", px+pw-18, cy, "[-]", InpPanelDimColor, fs, false);
+   cy += titleBarH + 2 - 3;
+
+   // --- Signal content ---
+   if(hasSig)
+   {
+      SignalData sig = g_signals[signalIndex];
+      string dir = isBuy ? "BUY SIGNAL" : "SELL SIGNAL";
+      color dirClr = isBuy ? InpPanelBuyColor : InpPanelSellColor;
+      string caseName = "Case " + IntegerToString(sig.caseNumber) + ": " + GetCaseName(sig.caseNumber);
+
+      if(isInvalidated)
+      {
+         dir = (isBuy ? "BUY" : "SELL") + " [INVALID]";
+         dirClr = clrRed;
+      }
+
+      // Signal banner
+      CreateTextLabel(PREFIX_PANEL+"2_SIG", px+pad, cy, dir + "  " + caseName, dirClr, fs, true);
+      cy += lh;
+
+      // Recommendation + confidence
+      if(isInvalidated)
+      {
+         CreateTextLabel(PREFIX_PANEL+"2_REC", px+pad, cy,
+            "SL BREACHED - Do NOT trade", clrRed, fs, true);
+      }
+      else
+      {
+         string confBar = "";
+         int barLen = rec.confidence / 10;
+         for(int b = 0; b < 10; b++)
+            confBar += (b < barLen) ? "|" : ".";
+         CreateTextLabel(PREFIX_PANEL+"2_REC", px+pad, cy,
+            rec.label + "  [" + confBar + "] " + IntegerToString(rec.confidence) + "%",
+            rec.labelColor, fs, true);
+      }
+      cy += lh;
+
+      // Price levels
+      cy += 3;
+      double slDist = MathAbs(sig.entryPrice - sig.stopLoss);
+      double tp1Dist = MathAbs(sig.takeProfit1 - sig.entryPrice);
+      double tp2Dist = MathAbs(sig.takeProfit2 - sig.entryPrice);
+      double tp3Dist = MathAbs(sig.takeProfit3 - sig.entryPrice);
+      double slPips = PriceToNormalizedPips(slDist);
+      double tp1Pips = PriceToNormalizedPips(tp1Dist);
+      double tp1R = PriceToRMultiple(tp1Dist, slDist);
+      double tp2R = PriceToRMultiple(tp2Dist, slDist);
+      double tp3R = PriceToRMultiple(tp3Dist, slDist);
+
+      CreateTextLabel(PREFIX_PANEL+"3_EN", px+pad, cy,
+         "Entry  " + DoubleToString(sig.entryPrice, _Digits), InpPanelTextColor, fs, true);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"3_SL", px+pad, cy,
+         "SL     " + DoubleToString(sig.stopLoss, _Digits) + "  " +
+         DoubleToString(slPips, 0) + "p", clrRed, fs-1, false);
+      cy += lh;
+
+      string tp1prob = hasProb ? ("  P:" + DoubleToString(g_currentProb.probTP1, 0) + "%") : "";
+      CreateTextLabel(PREFIX_PANEL+"3_T1", px+pad, cy,
+         "TP1    " + DoubleToString(sig.takeProfit1, _Digits) +
+         tp1prob + "  R:R 1:" + DoubleToString(tp1R, 1), clrLime, fs-1, false);
+      cy += lh;
+
+      string tp2prob = hasProb ? ("  P:" + DoubleToString(g_currentProb.probTP2, 0) + "%") : "";
+      CreateTextLabel(PREFIX_PANEL+"3_T2", px+pad, cy,
+         "TP2    " + DoubleToString(sig.takeProfit2, _Digits) +
+         tp2prob + "  1:" + DoubleToString(tp2R, 1), C'70,200,110', fs-1, false);
+      cy += lh;
+
+      string tp3prob = hasProb ? ("  P:" + DoubleToString(g_currentProb.probTP3, 0) + "%") : "";
+      CreateTextLabel(PREFIX_PANEL+"3_T3", px+pad, cy,
+         "TP3    " + DoubleToString(sig.takeProfit3, _Digits) +
+         tp3prob + "  1:" + DoubleToString(tp3R, 1), C'70,200,110', fs-1, false);
+      cy += lh;
+
+      // Entry zones (compact)
+      if(hasZones && visibleZones > 0)
+      {
+         cy += 3;
+         for(int z = 0; z < 5; z++)
+         {
+            if(!g_entryZones[z].isValid) continue;
+            color zClr = g_entryZones[z].isRecommended ? GetZoneColor(z) : InpPanelDimColor;
+            string evStar = (g_entryZones[z].expectedValue > 0) ? "*" : "";
+            CreateTextLabel(PREFIX_PANEL+"EZ_"+IntegerToString(z), px+pad, cy,
+               "Z" + IntegerToString(z+1) + " " +
+               g_entryZones[z].zoneName + ":" + DoubleToString(g_entryZones[z].price, _Digits) +
+               "  Reach:" + DoubleToString(g_entryZones[z].probReach*100, 0) + "%" +
+               "  EV:" + DoubleToString(g_entryZones[z].expectedValue, 2) + "R" + evStar,
+               zClr, fs-2, false);
+            cy += lh;
+         }
+      }
+   }
+   else
+   {
+      // No signal state
+      CreateTextLabel(PREFIX_PANEL+"2_NS", px+pad, cy,
+         GetCleanSymbolName() + " | " + GetTimeframeString() + " | Waiting...",
+         InpPanelDimColor, fs, false);
+      cy += lh;
+      CreateTextLabel(PREFIX_PANEL+"2_NS2", px+pad, cy,
+         "Panel auto-updates when signal fires", InpPanelDimColor, fs-2, false);
+      cy += lh;
+   }
+
+   // MTF alignment (single visual row)
+   if(hasMTF)
+   {
+      cy += 3;
+      int agreeCount = 0;
+      string mtfLine = "MTF ";
+      for(int t = 0; t < g_mtfCount; t++)
+      {
+         string tfTag = g_mtfData[t].tfName;
+         if(g_mtfData[t].trend == 1)
+         {
+            mtfLine += "[" + tfTag + "+] ";
+            if(hasSig && isBuy) agreeCount++;
+         }
+         else if(g_mtfData[t].trend == -1)
+         {
+            mtfLine += "[" + tfTag + "-] ";
+            if(hasSig && !isBuy) agreeCount++;
+         }
+         else
+            mtfLine += "[" + tfTag + " ] ";
+      }
+      string alignStr = IntegerToString(agreeCount) + "/" + IntegerToString(g_mtfCount) + " ALIGNED";
+      color mtfClr = (agreeCount >= 3) ? clrLime : (agreeCount >= 2) ? clrYellow : InpPanelDimColor;
+      CreateTextLabel(PREFIX_PANEL+"M_T", px+pad, cy, mtfLine, InpPanelDimColor, fs-2, false);
+      cy += lh;
+      CreateTextLabel(PREFIX_PANEL+"M_AG", px+pad, cy, alignStr, mtfClr, fs-1, true);
+      cy += lh;
+   }
+
+   // Signal expiry
+   if(hasSig && hasProb && g_currentProb.elapsedBars > 0)
+   {
+      int barsAgo = iBarShift(NULL, 0, g_signals[signalIndex].signalTime, false);
+      if(barsAgo < 0) barsAgo = 0;
+      int minsAgo = barsAgo * Period();
+      string ageStr;
+      if(minsAgo >= 60) ageStr = IntegerToString(minsAgo/60) + "h" + IntegerToString(minsAgo%60) + "m";
+      else              ageStr = IntegerToString(minsAgo) + "m";
+
+      string expLine = "Age:" + ageStr;
+      if(g_currentProb.expiresMinutes > 0)
+      {
+         if(g_currentProb.expiresMinutes >= 60)
+            expLine += "  Exp:~" + IntegerToString(g_currentProb.expiresMinutes/60) + "h" +
+                       IntegerToString(g_currentProb.expiresMinutes%60) + "m";
+         else
+            expLine += "  Exp:~" + IntegerToString(g_currentProb.expiresMinutes) + "m";
+      }
+      double survPct = g_currentProb.survivalRatio * 100.0;
+      expLine += "  Edge:" + DoubleToString(survPct, 0) + "%";
+      color expClr = (survPct > 70) ? clrLime : (survPct > 40) ? clrYellow : (survPct > 20) ? clrOrange : clrRed;
+      CreateTextLabel(PREFIX_PANEL+"P_EX", px+pad, cy, expLine, expClr, fs-2, false);
+      cy += lh;
+   }
+
+   // --- Close buttons (horizontal layout) ---
+   cy += 3;
+   int btnW = (pw - 2*pad - 3*btnGap) / 4;  // 4 buttons per row
+   int bx = px + pad;
+
+   CreateCloseButton(PREFIX_CLOSE+"Profit", bx, cy, btnW, btnH,
+      "Close Profit", C'22,110,66', C'56,196,122');
+   CreateCloseButton(PREFIX_CLOSE+"Loss", bx+btnW+btnGap, cy, btnW, btnH,
+      "Close Loss", C'120,40,48', C'214,84,92');
+   CreateCloseButton(PREFIX_CLOSE+"BuyP", bx+2*(btnW+btnGap), cy, btnW, btnH,
+      "Close Buy+", C'20,92,158', C'64,158,232');
+   CreateCloseButton(PREFIX_CLOSE+"SellP", bx+3*(btnW+btnGap), cy, btnW, btnH,
+      "Close Sell+", C'20,92,158', C'64,158,232');
+   cy += btnH + btnGap;
+
+   int allW = pw - 2*pad;
+   CreateCloseButton(PREFIX_CLOSE+"All", bx, cy, allW, btnH,
+      "CLOSE ALL", C'168,32,32', C'232,72,72');
+
+   ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
 //| Explainability / Attribution Debug Panel                          |
 //| Shows per-layer contribution to final probTP1.                    |
 //| Activated by InpShowProbExplain. Zero logic change to pipeline.   |

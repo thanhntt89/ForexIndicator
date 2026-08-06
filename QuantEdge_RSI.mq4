@@ -274,6 +274,7 @@ void OnDeinit(const int reason)
    DeleteObjectsByPrefix(PREFIX_LINE);
    DeleteObjectsByPrefix(PREFIX_PROB);
    DeleteObjectsByPrefix(PREFIX_ZONE);
+   DeleteObjectsByPrefix(PREFIX_CLOSE);
    Comment("");
    ArrayFree(g_rawRSI);
    ArrayResize(g_signals, 0);
@@ -851,9 +852,14 @@ int OnCalculate(const int rates_total,
          }
 
          CalculatePositionSize();
-         DrawInfoPanel(g_activeSignalIndex);
-         if(InpShowProbExplain && g_activeSignalIndex >= 0)
-            DrawExplainPanel();
+         if(InpDashboardMode == DASHBOARD_MANUAL)
+            DrawManualPanel(g_activeSignalIndex);
+         else
+         {
+            DrawInfoPanel(g_activeSignalIndex);
+            if(InpShowProbExplain && g_activeSignalIndex >= 0)
+               DrawExplainPanel();
+         }
 
          bool modeChanged = (suppressDisplay != s_lastSuppressMode);
          s_lastSuppressMode = suppressDisplay;
@@ -892,9 +898,14 @@ int OnCalculate(const int rates_total,
    else
    {
       if(InpShowMTF) RefreshMTFData();
-      DrawInfoPanel(-1);
-      if(InpShowProbExplain)
-         DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+      if(InpDashboardMode == DASHBOARD_MANUAL)
+         DrawManualPanel(-1);
+      else
+      {
+         DrawInfoPanel(-1);
+         if(InpShowProbExplain)
+            DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+      }
    }
 
    // Flush scoring queue immediately Ã¢â‚¬â€ LogScoringSnapshot() runs after both new-bar

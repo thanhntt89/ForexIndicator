@@ -32,6 +32,13 @@
 #define PREFIX_ZONE   "QE_Zone_"
 #define PREFIX_OSMON  "QE_OSMon_"
 #define PREFIX_EXPLAIN "QE_Expl_"
+#define PREFIX_CLOSE   "QE_Cls_"
+
+enum ENUM_DASHBOARD_MODE
+{
+   DASHBOARD_FULL    = 0,  // Full Panel (all metrics)
+   DASHBOARD_MANUAL  = 1   // Manual Trading (compact + close buttons)
+};
 
 enum ENUM_SLTP_METHOD
 {
@@ -162,6 +169,7 @@ input color  InpZone5Color       = clrHotPink; // Zone 5 color
 //+------------------------------------------------------------------+
 input string inp_grp_panel      = "========== Info Panel =========="; // ---
 input bool   InpShowPanel       = true;           // Show info panel
+input ENUM_DASHBOARD_MODE InpDashboardMode = DASHBOARD_FULL; // Dashboard mode (Full / Manual Trading)
 input int    InpPanelDefaultX   = 20;             // Panel default X
 input int    InpPanelDefaultY   = 60;             // Panel default Y
 input int    InpPanelWidth      = 330;            // Panel width

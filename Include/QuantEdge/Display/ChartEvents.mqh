@@ -18,6 +18,50 @@
 void HandleChartEvent(const int id, const long &lparam,
                       const double &dparam, const string &sparam)
 {
+   // Close button click (Manual Trading panel)
+   if(id == CHARTEVENT_OBJECT_CLICK && InpDashboardMode == DASHBOARD_MANUAL)
+   {
+      if(StringFind(sparam, PREFIX_CLOSE) == 0)
+      {
+         int criteria = -1;
+         string btnLabel = "";
+         if(sparam == PREFIX_CLOSE+"Profit")    { criteria = 0; btnLabel = "all profitable"; }
+         else if(sparam == PREFIX_CLOSE+"Loss")  { criteria = 1; btnLabel = "all losing"; }
+         else if(sparam == PREFIX_CLOSE+"BuyP")  { criteria = 2; btnLabel = "Buy profitable"; }
+         else if(sparam == PREFIX_CLOSE+"SellP") { criteria = 3; btnLabel = "Sell profitable"; }
+         else if(sparam == PREFIX_CLOSE+"All")   { criteria = 4; btnLabel = "ALL"; }
+
+         if(criteria >= 0)
+         {
+            ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+            string msg = "Close " + btnLabel + " positions on " + Symbol() + "?\n\n"
+                       + "This action cannot be undone.\n"
+                       + "(Requires QuantEdge EA running on this chart)";
+            int result = MessageBox(msg, "QuantEdge - Close Positions", 0x01 | 0x20);
+            if(result == 1)
+            {
+               string gvName = "QE_CloseCmd_" + Symbol();
+               GlobalVariableSet(gvName, (double)(criteria + 1));
+               Print("[ManualPanel] Close command sent: criteria=", criteria, " (", btnLabel, ")");
+            }
+         }
+         return;
+      }
+
+      // Manual panel collapse toggle
+      if(sparam == PREFIX_PANEL+"1_C" || sparam == PREFIX_PANEL+"1_T")
+      {
+         if(StringFind(sparam, "1_C") >= 0)
+         {
+            g_manualPanelCollapsed = !g_manualPanelCollapsed;
+            DeleteObjectsByPrefix(PREFIX_PANEL);
+            DeleteObjectsByPrefix(PREFIX_CLOSE);
+            DrawManualPanel(g_activeSignalIndex);
+            return;
+         }
+      }
+   }
+
    // Arrow click
    if(id == CHARTEVENT_OBJECT_CLICK)
    {

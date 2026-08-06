@@ -448,6 +448,19 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   // Poll for close commands from indicator's Manual Trading panel
+   string closeGV = "QE_CloseCmd_" + Symbol();
+   if(GlobalVariableCheck(closeGV))
+   {
+      int cmd = (int)GlobalVariableGet(closeGV) - 1;
+      GlobalVariableDel(closeGV);
+      if(cmd >= 0 && cmd <= 4)
+      {
+         Print("[QuantEdge EA] Close command received from indicator: criteria=", cmd);
+         ClosePositionsByCriteria(cmd);
+      }
+   }
+
    datetime currentBarTime = iTime(Symbol(), Period(), 0);
    if(currentBarTime == g_lastBarTime)
       return;

@@ -93,6 +93,7 @@ int  g_dragOffsetX   = 0;
 int  g_dragOffsetY   = 0;
 
 bool g_panelUserMoved = false;   // User đã drag panel → don't auto-adjust
+bool g_manualPanelCollapsed = false;  // Manual Trading panel collapsed state
 
 //+------------------------------------------------------------------+
 //| Panel position persistence                                         |
