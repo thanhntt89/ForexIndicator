@@ -852,14 +852,9 @@ int OnCalculate(const int rates_total,
          }
 
          CalculatePositionSize();
-         if(InpDashboardMode == DASHBOARD_MANUAL)
-            DrawManualPanel(g_activeSignalIndex);
-         else
-         {
-            DrawInfoPanel(g_activeSignalIndex);
-            if(InpShowProbExplain && g_activeSignalIndex >= 0)
-               DrawExplainPanel();
-         }
+         DrawDashboard(g_activeSignalIndex);
+         if(InpDashboardMode != DASHBOARD_MANUAL && InpShowProbExplain && g_activeSignalIndex >= 0)
+            DrawExplainPanel();
 
          bool modeChanged = (suppressDisplay != s_lastSuppressMode);
          s_lastSuppressMode = suppressDisplay;
@@ -898,14 +893,9 @@ int OnCalculate(const int rates_total,
    else
    {
       if(InpShowMTF) RefreshMTFData();
-      if(InpDashboardMode == DASHBOARD_MANUAL)
-         DrawManualPanel(-1);
-      else
-      {
-         DrawInfoPanel(-1);
-         if(InpShowProbExplain)
-            DeleteObjectsByPrefix(PREFIX_EXPLAIN);
-      }
+      DrawDashboard(-1);
+      if(InpDashboardMode != DASHBOARD_MANUAL && InpShowProbExplain)
+         DeleteObjectsByPrefix(PREFIX_EXPLAIN);
    }
 
    // Flush scoring queue immediately Ã¢â‚¬â€ LogScoringSnapshot() runs after both new-bar

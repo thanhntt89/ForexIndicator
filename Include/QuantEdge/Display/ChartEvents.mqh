@@ -53,9 +53,7 @@ void HandleChartEvent(const int id, const long &lparam,
          || sparam == PREFIX_PANEL+"1_B")
       {
          g_manualPanelCollapsed = !g_manualPanelCollapsed;
-         DeleteObjectsByPrefix(PREFIX_PANEL);
-         DeleteObjectsByPrefix(PREFIX_CLOSE);
-         DrawManualPanel(g_activeSignalIndex);
+         DrawDashboard(g_activeSignalIndex, true);
          return;
       }
    }
@@ -83,7 +81,7 @@ void HandleChartEvent(const int id, const long &lparam,
                g_userSelectedSignal = true;
                if(InpShowMTF) RefreshMTFData();
                if(InpShowProbability) CalculateProbability(sigIdx, BufferOrange, BufferBBUpper, BufferBBLower);
-               DrawInfoPanel(sigIdx);
+               DrawDashboard(sigIdx, true);
                DrawSLTPLines(sigIdx);
                if(InpShowProbability) DrawProbabilityLabels();
             }
@@ -118,14 +116,7 @@ void HandleChartEvent(const int id, const long &lparam,
                if(now - s_lastDrag > 40)
                {
                   s_lastDrag = now;
-                  DeleteObjectsByPrefix(PREFIX_PANEL);
-                  if(InpDashboardMode == DASHBOARD_MANUAL)
-                  {
-                     DeleteObjectsByPrefix(PREFIX_CLOSE);
-                     DrawManualPanel(g_activeSignalIndex);
-                  }
-                  else
-                     DrawInfoPanel(g_activeSignalIndex);
+                  DrawDashboard(g_activeSignalIndex, true);
                }
             }
          }         
@@ -135,14 +126,7 @@ void HandleChartEvent(const int id, const long &lparam,
             ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
             SavePanelPosition();
             g_panelUserMoved = true;
-            DeleteObjectsByPrefix(PREFIX_PANEL);
-            if(InpDashboardMode == DASHBOARD_MANUAL)
-            {
-               DeleteObjectsByPrefix(PREFIX_CLOSE);
-               DrawManualPanel(g_activeSignalIndex);
-            }
-            else
-               DrawInfoPanel(g_activeSignalIndex);
+            DrawDashboard(g_activeSignalIndex, true);
          }
       }
       else if(leftDown)

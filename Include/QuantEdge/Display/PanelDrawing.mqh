@@ -1202,6 +1202,27 @@ void CreateCloseButton(string name, int x, int y, int w, int h, string text, col
 }
 
 //+------------------------------------------------------------------+
+//| Dashboard dispatcher — routes to Full or Manual panel by mode.    |
+//| clearStale=true forces a delete-before-draw (needed while         |
+//| dragging, where position changes but layout doesn't so the        |
+//| normal layout-change detection inside each draw fn won't fire).   |
+//+------------------------------------------------------------------+
+void DrawDashboard(int signalIndex, bool clearStale = false)
+{
+   if(clearStale)
+   {
+      DeleteObjectsByPrefix(PREFIX_PANEL);
+      if(InpDashboardMode == DASHBOARD_MANUAL)
+         DeleteObjectsByPrefix(PREFIX_CLOSE);
+   }
+
+   if(InpDashboardMode == DASHBOARD_MANUAL)
+      DrawManualPanel(signalIndex);
+   else
+      DrawInfoPanel(signalIndex);
+}
+
+//+------------------------------------------------------------------+
 //| Manual Trading Dashboard — compact panel + close buttons          |
 //+------------------------------------------------------------------+
 void DrawManualPanel(int signalIndex)
