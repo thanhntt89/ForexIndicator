@@ -118,8 +118,12 @@ void HandleChartEvent(const int id, const long &lparam,
                if(now - s_lastDrag > 40)
                {
                   s_lastDrag = now;
+                  DeleteObjectsByPrefix(PREFIX_PANEL);
                   if(InpDashboardMode == DASHBOARD_MANUAL)
+                  {
+                     DeleteObjectsByPrefix(PREFIX_CLOSE);
                      DrawManualPanel(g_activeSignalIndex);
+                  }
                   else
                      DrawInfoPanel(g_activeSignalIndex);
                }
@@ -131,8 +135,12 @@ void HandleChartEvent(const int id, const long &lparam,
             ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
             SavePanelPosition();
             g_panelUserMoved = true;
+            DeleteObjectsByPrefix(PREFIX_PANEL);
             if(InpDashboardMode == DASHBOARD_MANUAL)
+            {
+               DeleteObjectsByPrefix(PREFIX_CLOSE);
                DrawManualPanel(g_activeSignalIndex);
+            }
             else
                DrawInfoPanel(g_activeSignalIndex);
          }
