@@ -260,7 +260,6 @@ void QEEA_CreateButton(string name, int x, int y, int w, int h, string text, col
       ObjectSetString(0, name, OBJPROP_FONT, "Arial");
       ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
       ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
-      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
       ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, brd);
       ObjectSetInteger(0, name, OBJPROP_STATE, false);
@@ -335,23 +334,23 @@ void QEEA_CreatePanel()
    int bx = g_panelPosX + QEEA_PAD;
 
    QEEA_CreateButton(QEEA_BTN_PROFIT_ALL, bx, by, bw, QEEA_BTN_H,
-                      "Close All Profit", C'27,58,46', C'47,107,79');
+                      "Close All Profit", C'22,110,66', C'56,196,122');
    by += QEEA_BTN_H + QEEA_BTN_GAP;
 
    QEEA_CreateButton(QEEA_BTN_LOSS_ALL, bx, by, bw, QEEA_BTN_H,
-                      "Close All Loss", C'58,27,30', C'107,47,54');
+                      "Close All Loss", C'120,40,46', C'214,84,92');
    by += QEEA_BTN_H + QEEA_BTN_GAP;
 
    QEEA_CreateButton(QEEA_BTN_BUY_PROFIT, bx, by, bw, QEEA_BTN_H,
-                      "Close Buy Profit", C'22,50,74', C'47,93,138');
+                      "Close Buy Profit", C'20,92,158', C'64,158,232');
    by += QEEA_BTN_H + QEEA_BTN_GAP;
 
    QEEA_CreateButton(QEEA_BTN_SELL_PROFIT, bx, by, bw, QEEA_BTN_H,
-                      "Close Sell Profit", C'22,50,74', C'47,93,138');
+                      "Close Sell Profit", C'20,92,158', C'64,158,232');
    by += QEEA_BTN_H + QEEA_BTN_GAP;
 
    QEEA_CreateButton(QEEA_BTN_CLOSE_ALL, bx, by, bw, QEEA_BTN_H,
-                      "CLOSE ALL", C'90,26,26', C'163,58,58');
+                      "CLOSE ALL", C'168,32,32', C'232,72,72');
 
    ChartRedraw(0);
 }

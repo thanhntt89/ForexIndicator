@@ -251,7 +251,6 @@ void QEEA_CreateButton(string name, int x, int y, int w, int h, string text, col
    {
       ObjectCreate(name, OBJ_BUTTON, 0, 0, 0);
       ObjectSet(name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-      ObjectSet(name, OBJPROP_SELECTABLE, false);
       ObjectSet(name, OBJPROP_HIDDEN, true);
       ObjectSet(name, OBJPROP_BACK, false);
       ObjectSet(name, OBJPROP_STATE, false);
@@ -322,11 +321,11 @@ void QEEA_CreatePanel()
    int btnW = QEEA_PANEL_WIDTH - QEEA_PAD * 2;
    int y0   = g_panelPosY + QEEA_HEADER_H + QEEA_PAD;
 
-   QEEA_CreateButton(QEEA_BTN_PROFIT_ALL,  btnX, y0,                                       btnW, QEEA_BTN_H, "Close All Profit",  C'27,58,46',  C'47,107,79');
-   QEEA_CreateButton(QEEA_BTN_LOSS_ALL,    btnX, y0 + 1*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "Close All Loss",    C'58,27,30',  C'107,47,54');
-   QEEA_CreateButton(QEEA_BTN_BUY_PROFIT,  btnX, y0 + 2*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "Close Buy Profit",  C'22,50,74',  C'47,93,138');
-   QEEA_CreateButton(QEEA_BTN_SELL_PROFIT, btnX, y0 + 3*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "Close Sell Profit", C'22,50,74',  C'47,93,138');
-   QEEA_CreateButton(QEEA_BTN_CLOSE_ALL,   btnX, y0 + 4*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "CLOSE ALL",         C'90,26,26',  C'163,58,58');
+   QEEA_CreateButton(QEEA_BTN_PROFIT_ALL,  btnX, y0,                                       btnW, QEEA_BTN_H, "Close All Profit",  C'22,110,66', C'56,196,122');
+   QEEA_CreateButton(QEEA_BTN_LOSS_ALL,    btnX, y0 + 1*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "Close All Loss",    C'120,40,46', C'214,84,92');
+   QEEA_CreateButton(QEEA_BTN_BUY_PROFIT,  btnX, y0 + 2*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "Close Buy Profit",  C'20,92,158', C'64,158,232');
+   QEEA_CreateButton(QEEA_BTN_SELL_PROFIT, btnX, y0 + 3*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "Close Sell Profit", C'20,92,158', C'64,158,232');
+   QEEA_CreateButton(QEEA_BTN_CLOSE_ALL,   btnX, y0 + 4*(QEEA_BTN_H + QEEA_BTN_GAP),        btnW, QEEA_BTN_H, "CLOSE ALL",         C'168,32,32', C'232,72,72');
 
    ChartRedraw();
 }
