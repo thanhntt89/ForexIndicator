@@ -351,8 +351,6 @@ void ClosePositionsByCriteria(int criteria)
          continue;
       if(OrderSymbol() != Symbol())
          continue;
-      if(OrderMagicNumber() != InpMagicNumber)
-         continue;
 
       int    orderType = OrderType();
       if(orderType != OP_BUY && orderType != OP_SELL)

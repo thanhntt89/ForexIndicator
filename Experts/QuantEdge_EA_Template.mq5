@@ -378,8 +378,6 @@ void ClosePositionsByCriteria(int criteria)
          continue;
       if(PositionGetString(POSITION_SYMBOL) != Symbol())
          continue;
-      if(PositionGetInteger(POSITION_MAGIC) != (long)InpMagicNumber)
-         continue;
 
       ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
       double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
