@@ -85,11 +85,52 @@ input double Ind_BBDeviation     = 1.685;
 input bool   Ind_EAMode          = true;  // Always true — suppresses indicator visuals
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Close Panel                                          |
+//+------------------------------------------------------------------+
+input string inp_grp_panel       = "========== Close Panel =========="; // ---
+input bool   InpShowClosePanel   = true;                // Show close-order panel on chart
+
+//+------------------------------------------------------------------+
+//| Close panel object name prefix + constants                        |
+//+------------------------------------------------------------------+
+#define QEEA_PREFIX        "QEEA_"
+#define QEEA_HEADER         QEEA_PREFIX + "Header"
+#define QEEA_HEADER_TXT      QEEA_PREFIX + "HeaderTxt"
+#define QEEA_BG              QEEA_PREFIX + "Bg"
+#define QEEA_BTN_PROFIT_ALL   QEEA_PREFIX + "BtnProfitAll"
+#define QEEA_BTN_LOSS_ALL     QEEA_PREFIX + "BtnLossAll"
+#define QEEA_BTN_BUY_PROFIT    QEEA_PREFIX + "BtnBuyProfit"
+#define QEEA_BTN_SELL_PROFIT   QEEA_PREFIX + "BtnSellProfit"
+#define QEEA_BTN_CLOSE_ALL      QEEA_PREFIX + "BtnCloseAll"
+
+#define QEEA_PANEL_WIDTH    150
+#define QEEA_HEADER_H       20
+#define QEEA_BTN_H          24
+#define QEEA_BTN_GAP        4
+#define QEEA_PAD            5
+
+//+------------------------------------------------------------------+
+//| Close criteria ordinals                                           |
+//+------------------------------------------------------------------+
+#define CRIT_ALL_PROFIT   0
+#define CRIT_ALL_LOSS     1
+#define CRIT_BUY_PROFIT   2
+#define CRIT_SELL_PROFIT  3
+#define CRIT_CLOSE_ALL    4
+
+//+------------------------------------------------------------------+
 //| Globals                                                           |
 //+------------------------------------------------------------------+
 int      g_hIndicator = INVALID_HANDLE;
 datetime g_lastBarTime = 0;
 CTrade   g_trade;
+
+int      g_panelPosX = 20;
+int      g_panelPosY = 20;
+bool     g_panelDragging = false;
+int      g_dragOffsetX = 0;
+int      g_dragOffsetY = 0;
+bool     g_panelCollapsed = false;
 
 //+------------------------------------------------------------------+
 //| Read one indicator buffer value at shift=1                        |
@@ -171,6 +212,234 @@ bool HasOpenPosition(int direction)
 }
 
 //+------------------------------------------------------------------+
+//| Close panel: object creation helpers (local, minimal)              |
+//+------------------------------------------------------------------+
+void QEEA_CreateRect(string name, int x, int y, int w, int h, color bg, color brd)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetInteger(0, name, OBJPROP_BORDER_TYPE, BORDER_FLAT);
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+   ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, brd);
+}
+
+void QEEA_CreateLabel(string name, int x, int y, string text, color clr, int fontSize = 9)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+      ObjectSetInteger(0, name, OBJPROP_BACK, false);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, fontSize);
+}
+
+void QEEA_CreateButton(string name, int x, int y, int w, int h, string text, color bg, color brd)
+{
+   if(ObjectFind(0, name) < 0)
+   {
+      ObjectCreate(0, name, OBJ_BUTTON, 0, 0, 0);
+      ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+      ObjectSetString(0, name, OBJPROP_FONT, "Arial");
+      ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+      ObjectSetInteger(0, name, OBJPROP_COLOR, clrWhite);
+      ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+      ObjectSetInteger(0, name, OBJPROP_BORDER_COLOR, brd);
+      ObjectSetInteger(0, name, OBJPROP_STATE, false);
+   }
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_XSIZE, w);
+   ObjectSetInteger(0, name, OBJPROP_YSIZE, h);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_BGCOLOR, bg);
+}
+
+//+------------------------------------------------------------------+
+//| Close panel: position persistence (per-symbol, per-magic keys)    |
+//+------------------------------------------------------------------+
+string QEEA_PanelGVName_X() { return "QE_EA_PanelX_" + Symbol() + "_" + IntegerToString(InpMagicNumber); }
+string QEEA_PanelGVName_Y() { return "QE_EA_PanelY_" + Symbol() + "_" + IntegerToString(InpMagicNumber); }
+
+void QEEA_SavePanelPosition()
+{
+   GlobalVariableSet(QEEA_PanelGVName_X(), (double)g_panelPosX);
+   GlobalVariableSet(QEEA_PanelGVName_Y(), (double)g_panelPosY);
+}
+
+void QEEA_LoadPanelPosition()
+{
+   if(GlobalVariableCheck(QEEA_PanelGVName_X()) && GlobalVariableCheck(QEEA_PanelGVName_Y()))
+   {
+      g_panelPosX = (int)GlobalVariableGet(QEEA_PanelGVName_X());
+      g_panelPosY = (int)GlobalVariableGet(QEEA_PanelGVName_Y());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Close panel: draw (expanded or collapsed)                         |
+//+------------------------------------------------------------------+
+void QEEA_CreatePanel()
+{
+   if(!InpShowClosePanel)
+   {
+      ObjectsDeleteAll(0, QEEA_PREFIX);
+      return;
+   }
+
+   if(g_panelCollapsed)
+   {
+      ObjectDelete(0, QEEA_BG);
+      ObjectDelete(0, QEEA_BTN_PROFIT_ALL);
+      ObjectDelete(0, QEEA_BTN_LOSS_ALL);
+      ObjectDelete(0, QEEA_BTN_BUY_PROFIT);
+      ObjectDelete(0, QEEA_BTN_SELL_PROFIT);
+      ObjectDelete(0, QEEA_BTN_CLOSE_ALL);
+
+      QEEA_CreateRect(QEEA_HEADER, g_panelPosX, g_panelPosY, QEEA_PANEL_WIDTH, QEEA_HEADER_H,
+                       C'40,44,53', C'67,70,81');
+      QEEA_CreateLabel(QEEA_HEADER_TXT, g_panelPosX + QEEA_PAD, g_panelPosY + 4,
+                        "QuantEdge EA [+]", clrWhite, 9);
+      return;
+   }
+
+   int panelH = QEEA_HEADER_H + QEEA_PAD * 2 + 5 * QEEA_BTN_H + 4 * QEEA_BTN_GAP;
+
+   QEEA_CreateRect(QEEA_BG, g_panelPosX, g_panelPosY, QEEA_PANEL_WIDTH, panelH,
+                    C'25,28,36', C'67,70,81');
+   QEEA_CreateRect(QEEA_HEADER, g_panelPosX, g_panelPosY, QEEA_PANEL_WIDTH, QEEA_HEADER_H,
+                    C'54,58,69', C'67,70,81');
+   QEEA_CreateLabel(QEEA_HEADER_TXT, g_panelPosX + QEEA_PAD, g_panelPosY + 4,
+                     ":::: QuantEdge EA [-]", clrSilver, 9);
+
+   int by = g_panelPosY + QEEA_HEADER_H + QEEA_PAD;
+   int bw = QEEA_PANEL_WIDTH - QEEA_PAD * 2;
+   int bx = g_panelPosX + QEEA_PAD;
+
+   QEEA_CreateButton(QEEA_BTN_PROFIT_ALL, bx, by, bw, QEEA_BTN_H,
+                      "Close All Profit", C'27,58,46', C'47,107,79');
+   by += QEEA_BTN_H + QEEA_BTN_GAP;
+
+   QEEA_CreateButton(QEEA_BTN_LOSS_ALL, bx, by, bw, QEEA_BTN_H,
+                      "Close All Loss", C'58,27,30', C'107,47,54');
+   by += QEEA_BTN_H + QEEA_BTN_GAP;
+
+   QEEA_CreateButton(QEEA_BTN_BUY_PROFIT, bx, by, bw, QEEA_BTN_H,
+                      "Close Buy Profit", C'22,50,74', C'47,93,138');
+   by += QEEA_BTN_H + QEEA_BTN_GAP;
+
+   QEEA_CreateButton(QEEA_BTN_SELL_PROFIT, bx, by, bw, QEEA_BTN_H,
+                      "Close Sell Profit", C'22,50,74', C'47,93,138');
+   by += QEEA_BTN_H + QEEA_BTN_GAP;
+
+   QEEA_CreateButton(QEEA_BTN_CLOSE_ALL, bx, by, bw, QEEA_BTN_H,
+                      "CLOSE ALL", C'90,26,26', C'163,58,58');
+
+   ChartRedraw(0);
+}
+
+void QEEA_DeletePanel()
+{
+   ObjectsDeleteAll(0, QEEA_PREFIX);
+}
+
+//+------------------------------------------------------------------+
+//| Close positions matching criteria, with MessageBox confirmation   |
+//+------------------------------------------------------------------+
+void ClosePositionsByCriteria(int criteria)
+{
+   ulong  tickets[];
+   double totalProfit = 0;
+   int    count = 0;
+
+   ArrayResize(tickets, PositionsTotal());
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0)
+         continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol())
+         continue;
+      if(PositionGetInteger(POSITION_MAGIC) != (long)InpMagicNumber)
+         continue;
+
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+
+      bool matches = false;
+      switch(criteria)
+      {
+         case CRIT_ALL_PROFIT:  matches = (profit > 0); break;
+         case CRIT_ALL_LOSS:    matches = (profit < 0); break;
+         case CRIT_BUY_PROFIT:  matches = (posType == POSITION_TYPE_BUY  && profit > 0); break;
+         case CRIT_SELL_PROFIT: matches = (posType == POSITION_TYPE_SELL && profit > 0); break;
+         case CRIT_CLOSE_ALL:   matches = true; break;
+      }
+
+      if(matches)
+      {
+         tickets[count] = ticket;
+         totalProfit += profit;
+         count++;
+      }
+   }
+
+   if(count == 0)
+   {
+      Print("[QuantEdge EA] Close panel: no matching positions for criteria=", criteria);
+      return;
+   }
+
+   string label;
+   switch(criteria)
+   {
+      case CRIT_ALL_PROFIT:  label = "profitable position(s)"; break;
+      case CRIT_ALL_LOSS:    label = "losing position(s)"; break;
+      case CRIT_BUY_PROFIT:  label = "profitable BUY position(s)"; break;
+      case CRIT_SELL_PROFIT: label = "profitable SELL position(s)"; break;
+      default:               label = "position(s)"; break;
+   }
+
+   string msg = StringFormat("Close %d %s on %s?\nTotal P/L: %s%.2f USD\n\nThis action cannot be undone.",
+                              count, label, Symbol(),
+                              (totalProfit >= 0 ? "+" : ""), totalProfit);
+
+   int result = MessageBox(msg, "QuantEdge EA", MB_OKCANCEL | MB_ICONQUESTION);
+   if(result != IDOK)
+   {
+      Print("[QuantEdge EA] Close panel: user cancelled criteria=", criteria);
+      return;
+   }
+
+   for(int i = 0; i < count; i++)
+   {
+      if(g_trade.PositionClose(tickets[i]))
+         Print("[QuantEdge EA] Closed ticket=", tickets[i]);
+      else
+         Print("[QuantEdge EA] Failed to close ticket=", tickets[i], ": ", g_trade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Expert initialization                                             |
 //+------------------------------------------------------------------+
 int OnInit()
@@ -194,6 +463,10 @@ int OnInit()
       Print("[QuantEdge EA] SKELETON MODE — logging decisions only. Set InpEnableAutoTrading=true for live trading.");
    else
       Print("[QuantEdge EA] LIVE MODE — auto-trading enabled. Magic=", InpMagicNumber);
+
+   QEEA_LoadPanelPosition();
+   QEEA_CreatePanel();
+   ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
 
    return INIT_SUCCEEDED;
 }
@@ -324,6 +597,90 @@ void OnDeinit(const int reason)
       IndicatorRelease(g_hIndicator);
       g_hIndicator = INVALID_HANDLE;
    }
+   QEEA_DeletePanel();
    Print("[QuantEdge EA] Deinit, reason=", reason);
+}
+
+//+------------------------------------------------------------------+
+//| Chart event: button clicks + panel drag                           |
+//+------------------------------------------------------------------+
+void OnChartEvent(const int id, const long &lparam, const double &dparam, const string &sparam)
+{
+   if(id == CHARTEVENT_OBJECT_CLICK)
+   {
+      if(sparam == QEEA_HEADER_TXT || sparam == QEEA_HEADER)
+      {
+         g_panelCollapsed = !g_panelCollapsed;
+         QEEA_CreatePanel();
+         return;
+      }
+
+      int criteria = -1;
+      if(sparam == QEEA_BTN_PROFIT_ALL)   criteria = CRIT_ALL_PROFIT;
+      else if(sparam == QEEA_BTN_LOSS_ALL)    criteria = CRIT_ALL_LOSS;
+      else if(sparam == QEEA_BTN_BUY_PROFIT)  criteria = CRIT_BUY_PROFIT;
+      else if(sparam == QEEA_BTN_SELL_PROFIT) criteria = CRIT_SELL_PROFIT;
+      else if(sparam == QEEA_BTN_CLOSE_ALL)   criteria = CRIT_CLOSE_ALL;
+
+      if(criteria >= 0)
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         ClosePositionsByCriteria(criteria);
+         return;
+      }
+   }
+
+   if(id == CHARTEVENT_MOUSE_MOVE)
+   {
+      if(!InpShowClosePanel || g_panelCollapsed) return;
+
+      int mouseX = (int)lparam;
+      int mouseY = (int)dparam;
+      int mouseFlags = (int)StringToInteger(sparam);
+      bool leftDown = ((mouseFlags & 1) == 1);
+
+      if(g_panelDragging)
+      {
+         if(leftDown)
+         {
+            int newX = mouseX - g_dragOffsetX;
+            int newY = mouseY - g_dragOffsetY;
+            if(newX < 0) newX = 0;
+            if(newY < 0) newY = 0;
+            if(newX != g_panelPosX || newY != g_panelPosY)
+            {
+               g_panelPosX = newX;
+               g_panelPosY = newY;
+               static uint s_lastDrag = 0;
+               uint now = GetTickCount();
+               if(now - s_lastDrag > 40)
+               {
+                  s_lastDrag = now;
+                  QEEA_CreatePanel();
+               }
+            }
+         }
+         else
+         {
+            g_panelDragging = false;
+            ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
+            QEEA_SavePanelPosition();
+            QEEA_CreatePanel();
+         }
+      }
+      else if(leftDown)
+      {
+         if(mouseX >= g_panelPosX && mouseX <= g_panelPosX + QEEA_PANEL_WIDTH &&
+            mouseY >= g_panelPosY && mouseY <= g_panelPosY + QEEA_HEADER_H)
+         {
+            g_panelDragging = true;
+            g_dragOffsetX = mouseX - g_panelPosX;
+            g_dragOffsetY = mouseY - g_panelPosY;
+            ChartSetInteger(0, CHART_MOUSE_SCROLL, false);
+         }
+      }
+      if(!g_panelDragging && !leftDown)
+         ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
+   }
 }
 //+------------------------------------------------------------------+

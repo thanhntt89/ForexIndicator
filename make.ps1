@@ -14,14 +14,19 @@ $MT5TerminalIDs = @(
 )
 
 $IndicatorName = "QuantEdge_RSI"
+$EAName = "QuantEdge_EA_Template"
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path  # Thư mục gốc project
 $BuildDir = Join-Path $ProjectRoot "Build"
 $SourceFile = Join-Path $ProjectRoot "$IndicatorName.mq4"
 $SourceFile5 = Join-Path $ProjectRoot "$IndicatorName.mq5"
+$EASourceFile = Join-Path $ProjectRoot "Experts\$EAName.mq4"
+$EASourceFile5 = Join-Path $ProjectRoot "Experts\$EAName.mq5"
 $DefinesFile = Join-Path $ProjectRoot "Include\QuantEdge\Core\Config.mqh"
 $LogFile = Join-Path $BuildDir "compile.log"
 $TempLogFile = Join-Path $BuildDir "temp_compile.log"
 $TempLogFile5 = Join-Path $BuildDir "temp_compile5.log"
+$EATempLogFile = Join-Path $BuildDir "temp_ea_compile.log"
+$EATempLogFile5 = Join-Path $BuildDir "temp_ea_compile5.log"
 
 $MetaEditor = "C:\Program Files (x86)\MetaTrader 4 EXNESS\metaeditor.exe"
 $MetaEditor5 = "C:\Program Files\TF Global Markets MetaTrader 5 Terminal\MetaEditor64.exe"
@@ -98,6 +103,8 @@ if (!(Test-Path $MetaEditor)) { Write-Error "MetaEditor (MT4) not found at $Meta
 if (!(Test-Path $MetaEditor5)) { Write-Error "MetaEditor (MT5) not found at $MetaEditor5"; exit 1 }
 if (!(Test-Path $SourceFile)) { Write-Error "Indicator Source file (MT4) not found."; exit 2 }
 if (!(Test-Path $SourceFile5)) { Write-Error "Indicator Source file (MT5) not found."; exit 2 }
+if (!(Test-Path $EASourceFile)) { Write-Error "EA Source file (MT4) not found."; exit 2 }
+if (!(Test-Path $EASourceFile5)) { Write-Error "EA Source file (MT5) not found."; exit 2 }
 if (!(Test-Path $DefinesFile)) { Write-Error "Config file (containing version) not found."; exit 3 }
 if (!(Test-Path $BuildDir)) { New-Item -ItemType Directory -Path $BuildDir | Out-Null }
 
@@ -195,6 +202,74 @@ if (!(Test-Path $GeneratedEX5)) { Write-Error "EX5 not found after compilation."
 Move-Item -Path $GeneratedEX5 -Destination $BuildOutput5 -Force
 
 
+# --- 5.3 COMPILE EA (MT4) ---
+$EABuildName = "${EAName}_v${Version}_$Timestamp.ex4"
+$EABuildOutput = Join-Path $BuildDir $EABuildName
+
+Write-Host "Compiling $EAName (MT4)..." -ForegroundColor Yellow
+& "$MetaEditor" /compile:"$EASourceFile" /log:"$EATempLogFile" | Out-Null
+Start-Sleep -Seconds 5
+
+if (!(Test-Path $EATempLogFile)) { Write-Error "MT4 Compiler did not produce a log for EA."; exit 7 }
+$EALogContent = Get-Content $EATempLogFile -Raw
+
+# Parse MT4 EA Results
+if ($EALogContent -match "Result:\s+([0-9]+)\s+errors,\s+([0-9]+)\s+warnings") {
+    $EAErrorCount = [int]$Matches[1]
+    $EAWarningCount = [int]$Matches[2]
+
+    if ($EAErrorCount -gt 0) {
+        Write-Host "MT4 EA BUILD FAILED - $EAErrorCount ERRORS" -ForegroundColor Red
+        Add-Content -Path $LogFile -Value "[$(Get-Date)] MT4 EA FAILED: $EABuildName`n$EALogContent"
+        Write-Host "Please check the detailed log at: $LogFile" -ForegroundColor Cyan
+        exit 7
+    }
+}
+
+# Log successful MT4 EA session
+$EASessionHeader = "`n==========================================`n[MT4 EA Build: $EABuildName] @ $(Get-Date)`n==========================================`n"
+Add-Content -Path $LogFile -Value "$EASessionHeader$EALogContent"
+if (Test-Path $EATempLogFile) { Remove-Item $EATempLogFile -Force }
+
+$GeneratedEAEX4 = Join-Path $ProjectRoot "Experts\$EAName.ex4"
+if (!(Test-Path $GeneratedEAEX4)) { Write-Error "EA EX4 not found after compilation."; exit 8 }
+Move-Item -Path $GeneratedEAEX4 -Destination $EABuildOutput -Force
+
+
+# --- 5.4 COMPILE EA (MT5) ---
+$EABuildName5 = "${EAName}_v${Version}_$Timestamp.ex5"
+$EABuildOutput5 = Join-Path $BuildDir $EABuildName5
+
+Write-Host "Compiling $EAName (MT5)..." -ForegroundColor Yellow
+& "$MetaEditor5" /compile:"$EASourceFile5" /log:"$EATempLogFile5" | Out-Null
+Start-Sleep -Seconds 5
+
+if (!(Test-Path $EATempLogFile5)) { Write-Error "MT5 Compiler did not produce a log for EA."; exit 7 }
+$EALogContent5 = Get-Content $EATempLogFile5 -Raw
+
+# Parse MT5 EA Results
+if ($EALogContent5 -match "Result:\s+([0-9]+)\s+errors,\s+([0-9]+)\s+warnings") {
+    $EAErrorCount5 = [int]$Matches[1]
+    $EAWarningCount5 = [int]$Matches[2]
+
+    if ($EAErrorCount5 -gt 0) {
+        Write-Host "MT5 EA BUILD FAILED - $EAErrorCount5 ERRORS" -ForegroundColor Red
+        Add-Content -Path $LogFile -Value "[$(Get-Date)] MT5 EA FAILED: $EABuildName5`n$EALogContent5"
+        Write-Host "Please check the detailed log at: $LogFile" -ForegroundColor Cyan
+        exit 7
+    }
+}
+
+# Log successful MT5 EA session
+$EASessionHeader5 = "`n==========================================`n[MT5 EA Build: $EABuildName5] @ $(Get-Date)`n==========================================`n"
+Add-Content -Path $LogFile -Value "$EASessionHeader5$EALogContent5"
+if (Test-Path $EATempLogFile5) { Remove-Item $EATempLogFile5 -Force }
+
+$GeneratedEAEX5 = Join-Path $ProjectRoot "Experts\$EAName.ex5"
+if (!(Test-Path $GeneratedEAEX5)) { Write-Error "EA EX5 not found after compilation."; exit 8 }
+Move-Item -Path $GeneratedEAEX5 -Destination $EABuildOutput5 -Force
+
+
 # ============================================
 # 6. MULTI-TERMINAL DEPLOYMENT
 # ============================================
@@ -229,9 +304,39 @@ foreach ($ID in $MT5TerminalIDs) {
     }
 }
 
+# Deploy EA MT4
+foreach ($ID in $MT4TerminalIDs) {
+    $TargetDir = Join-Path (Join-Path $AppDataPath $ID) "MQL4\Experts"
+    $DeployPath = Join-Path $TargetDir "$EAName.ex4"
+
+    if (Test-Path $TargetDir) {
+        Copy-Item -Path $EABuildOutput -Destination $DeployPath -Force
+        Write-Host "  [MT4 EA OK] Deployed -> $ID" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  [MT4 EA SKIP] Terminal folder not found: $ID" -ForegroundColor Yellow
+    }
+}
+
+# Deploy EA MT5
+foreach ($ID in $MT5TerminalIDs) {
+    $TargetDir = Join-Path (Join-Path $AppDataPath $ID) "MQL5\Experts"
+    $DeployPath = Join-Path $TargetDir "$EAName.ex5"
+
+    if (Test-Path $TargetDir) {
+        Copy-Item -Path $EABuildOutput5 -Destination $DeployPath -Force
+        Write-Host "  [MT5 EA OK] Deployed -> $ID" -ForegroundColor Green
+    }
+    else {
+        Write-Host "  [MT5 EA SKIP] Terminal folder not found: $ID" -ForegroundColor Yellow
+    }
+}
+
 Write-Host ""
 Write-Host "=========================================="
 Write-Host "BUILD & DEPLOY SUCCESS" -ForegroundColor Green
 Write-Host "MT4 Artifact: $BuildOutput"
 Write-Host "MT5 Artifact: $BuildOutput5"
+Write-Host "MT4 EA Artifact: $EABuildOutput"
+Write-Host "MT5 EA Artifact: $EABuildOutput5"
 Write-Host "=========================================="
