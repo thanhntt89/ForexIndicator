@@ -361,38 +361,68 @@ void QEEA_DeletePanel()
 }
 
 //+------------------------------------------------------------------+
-//| Close positions matching criteria, with MessageBox confirmation   |
+//| Shared ticket collector — NOT criteria-agnostic, each close       |
+//| function below passes its own match test as a small inline loop. |
+//| Kept private (not a switch dispatcher) so each button's logic    |
+//| lives in its own function and can be fixed/audited independently.|
 //+------------------------------------------------------------------+
-void ClosePositionsByCriteria(int criteria)
+string CloseCriteriaLabel(int criteria)
+{
+   switch(criteria)
+   {
+      case CRIT_ALL_PROFIT:  return "profitable position(s)";
+      case CRIT_ALL_LOSS:    return "losing position(s)";
+      case CRIT_BUY_PROFIT:  return "profitable BUY position(s)";
+      case CRIT_SELL_PROFIT: return "profitable SELL position(s)";
+      default:               return "position(s)";
+   }
+}
+
+bool ConfirmClose(int criteria, int count, double totalProfit)
+{
+   string msg = StringFormat("Close %d %s on %s?\nTotal P/L: %s%.2f USD\n\nThis action cannot be undone.",
+                              count, CloseCriteriaLabel(criteria), Symbol(),
+                              (totalProfit >= 0 ? "+" : ""), totalProfit);
+   int result = MessageBox(msg, "QuantEdge EA", MB_OKCANCEL | MB_ICONQUESTION);
+   if(result != IDOK)
+   {
+      Print("[QuantEdge EA] Close panel: user cancelled criteria=", criteria);
+      return false;
+   }
+   return true;
+}
+
+void ExecuteClose(ulong &tickets[], int count)
+{
+   for(int i = 0; i < count; i++)
+   {
+      if(g_trade.PositionClose(tickets[i]))
+         Print("[QuantEdge EA] Closed ticket=", tickets[i]);
+      else
+         Print("[QuantEdge EA] Failed to close ticket=", tickets[i], ": ", g_trade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Close ALL profitable positions (Buy + Sell), any magic number.    |
+//| confirm=true shows MessageBox (EA's own panel button); confirm=   |
+//| false skips it (indicator's Manual panel already confirmed).     |
+//+------------------------------------------------------------------+
+void CloseAllProfit(bool confirm = true)
 {
    ulong  tickets[];
    double totalProfit = 0;
    int    count = 0;
-
    ArrayResize(tickets, PositionsTotal());
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
-      if(ticket == 0)
-         continue;
-      if(PositionGetString(POSITION_SYMBOL) != Symbol())
-         continue;
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
 
-      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
       double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
-
-      bool matches = false;
-      switch(criteria)
-      {
-         case CRIT_ALL_PROFIT:  matches = (profit > 0); break;
-         case CRIT_ALL_LOSS:    matches = (profit < 0); break;
-         case CRIT_BUY_PROFIT:  matches = (posType == POSITION_TYPE_BUY  && profit > 0); break;
-         case CRIT_SELL_PROFIT: matches = (posType == POSITION_TYPE_SELL && profit > 0); break;
-         case CRIT_CLOSE_ALL:   matches = true; break;
-      }
-
-      if(matches)
+      if(profit > 0)
       {
          tickets[count] = ticket;
          totalProfit += profit;
@@ -400,39 +430,155 @@ void ClosePositionsByCriteria(int criteria)
       }
    }
 
-   if(count == 0)
+   if(count == 0) { Print("[QuantEdge EA] Close panel: no matching positions for CloseAllProfit"); return; }
+   if(confirm && !ConfirmClose(CRIT_ALL_PROFIT, count, totalProfit)) return;
+
+   Print("[QuantEdge EA] CloseAllProfit: closing ", count, " position(s), total P/L=", DoubleToString(totalProfit, 2));
+   ExecuteClose(tickets, count);
+}
+
+//+------------------------------------------------------------------+
+//| Close ALL losing positions (Buy + Sell), any magic number.        |
+//+------------------------------------------------------------------+
+void CloseAllLoss(bool confirm = true)
+{
+   ulong  tickets[];
+   double totalProfit = 0;
+   int    count = 0;
+   ArrayResize(tickets, PositionsTotal());
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
-      Print("[QuantEdge EA] Close panel: no matching positions for criteria=", criteria);
-      return;
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+
+      double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      if(profit < 0)
+      {
+         tickets[count] = ticket;
+         totalProfit += profit;
+         count++;
+      }
    }
 
-   string label;
+   if(count == 0) { Print("[QuantEdge EA] Close panel: no matching positions for CloseAllLoss"); return; }
+   if(confirm && !ConfirmClose(CRIT_ALL_LOSS, count, totalProfit)) return;
+
+   Print("[QuantEdge EA] CloseAllLoss: closing ", count, " position(s), total P/L=", DoubleToString(totalProfit, 2));
+   ExecuteClose(tickets, count);
+}
+
+//+------------------------------------------------------------------+
+//| Close profitable BUY positions only, any magic number.            |
+//+------------------------------------------------------------------+
+void CloseBuyProfit(bool confirm = true)
+{
+   ulong  tickets[];
+   double totalProfit = 0;
+   int    count = 0;
+   ArrayResize(tickets, PositionsTotal());
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      if(posType == POSITION_TYPE_BUY && profit > 0)
+      {
+         tickets[count] = ticket;
+         totalProfit += profit;
+         count++;
+      }
+   }
+
+   if(count == 0) { Print("[QuantEdge EA] Close panel: no matching positions for CloseBuyProfit"); return; }
+   if(confirm && !ConfirmClose(CRIT_BUY_PROFIT, count, totalProfit)) return;
+
+   Print("[QuantEdge EA] CloseBuyProfit: closing ", count, " position(s), total P/L=", DoubleToString(totalProfit, 2));
+   ExecuteClose(tickets, count);
+}
+
+//+------------------------------------------------------------------+
+//| Close profitable SELL positions only, any magic number.           |
+//+------------------------------------------------------------------+
+void CloseSellProfit(bool confirm = true)
+{
+   ulong  tickets[];
+   double totalProfit = 0;
+   int    count = 0;
+   ArrayResize(tickets, PositionsTotal());
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      if(posType == POSITION_TYPE_SELL && profit > 0)
+      {
+         tickets[count] = ticket;
+         totalProfit += profit;
+         count++;
+      }
+   }
+
+   if(count == 0) { Print("[QuantEdge EA] Close panel: no matching positions for CloseSellProfit"); return; }
+   if(confirm && !ConfirmClose(CRIT_SELL_PROFIT, count, totalProfit)) return;
+
+   Print("[QuantEdge EA] CloseSellProfit: closing ", count, " position(s), total P/L=", DoubleToString(totalProfit, 2));
+   ExecuteClose(tickets, count);
+}
+
+//+------------------------------------------------------------------+
+//| Close ALL positions regardless of P/L, any magic number.          |
+//+------------------------------------------------------------------+
+void CloseAllPositions(bool confirm = true)
+{
+   ulong  tickets[];
+   double totalProfit = 0;
+   int    count = 0;
+   ArrayResize(tickets, PositionsTotal());
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+
+      double profit = PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+      tickets[count] = ticket;
+      totalProfit += profit;
+      count++;
+   }
+
+   if(count == 0) { Print("[QuantEdge EA] Close panel: no matching positions for CloseAllPositions"); return; }
+   if(confirm && !ConfirmClose(CRIT_CLOSE_ALL, count, totalProfit)) return;
+
+   Print("[QuantEdge EA] CloseAllPositions: closing ", count, " position(s), total P/L=", DoubleToString(totalProfit, 2));
+   ExecuteClose(tickets, count);
+}
+
+//+------------------------------------------------------------------+
+//| Dispatch by criteria ordinal — used by both call sites (EA panel  |
+//| button click, and indicator GlobalVariable poll) so criteria->fn  |
+//| mapping lives in exactly one place.                               |
+//+------------------------------------------------------------------+
+void ClosePositionsByCriteria(int criteria, bool confirm = true)
+{
    switch(criteria)
    {
-      case CRIT_ALL_PROFIT:  label = "profitable position(s)"; break;
-      case CRIT_ALL_LOSS:    label = "losing position(s)"; break;
-      case CRIT_BUY_PROFIT:  label = "profitable BUY position(s)"; break;
-      case CRIT_SELL_PROFIT: label = "profitable SELL position(s)"; break;
-      default:               label = "position(s)"; break;
-   }
-
-   string msg = StringFormat("Close %d %s on %s?\nTotal P/L: %s%.2f USD\n\nThis action cannot be undone.",
-                              count, label, Symbol(),
-                              (totalProfit >= 0 ? "+" : ""), totalProfit);
-
-   int result = MessageBox(msg, "QuantEdge EA", MB_OKCANCEL | MB_ICONQUESTION);
-   if(result != IDOK)
-   {
-      Print("[QuantEdge EA] Close panel: user cancelled criteria=", criteria);
-      return;
-   }
-
-   for(int i = 0; i < count; i++)
-   {
-      if(g_trade.PositionClose(tickets[i]))
-         Print("[QuantEdge EA] Closed ticket=", tickets[i]);
-      else
-         Print("[QuantEdge EA] Failed to close ticket=", tickets[i], ": ", g_trade.ResultRetcodeDescription());
+      case CRIT_ALL_PROFIT:  CloseAllProfit(confirm);  break;
+      case CRIT_ALL_LOSS:    CloseAllLoss(confirm);    break;
+      case CRIT_BUY_PROFIT:  CloseBuyProfit(confirm);  break;
+      case CRIT_SELL_PROFIT: CloseSellProfit(confirm); break;
+      case CRIT_CLOSE_ALL:   CloseAllPositions(confirm); break;
+      default: Print("[QuantEdge EA] ClosePositionsByCriteria: unknown criteria=", criteria); break;
    }
 }
 
@@ -482,7 +628,7 @@ void OnTick()
       if(cmd >= 0 && cmd <= 4)
       {
          Print("[QuantEdge EA] Close command received from indicator: criteria=", cmd);
-         ClosePositionsByCriteria(cmd);
+         ClosePositionsByCriteria(cmd, false); // indicator already confirmed — skip 2nd MessageBox
       }
    }
 
@@ -625,17 +771,34 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          return;
       }
 
-      int criteria = -1;
-      if(sparam == QEEA_BTN_PROFIT_ALL)   criteria = CRIT_ALL_PROFIT;
-      else if(sparam == QEEA_BTN_LOSS_ALL)    criteria = CRIT_ALL_LOSS;
-      else if(sparam == QEEA_BTN_BUY_PROFIT)  criteria = CRIT_BUY_PROFIT;
-      else if(sparam == QEEA_BTN_SELL_PROFIT) criteria = CRIT_SELL_PROFIT;
-      else if(sparam == QEEA_BTN_CLOSE_ALL)   criteria = CRIT_CLOSE_ALL;
-
-      if(criteria >= 0)
+      if(sparam == QEEA_BTN_PROFIT_ALL)
       {
          ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-         ClosePositionsByCriteria(criteria);
+         CloseAllProfit();
+         return;
+      }
+      if(sparam == QEEA_BTN_LOSS_ALL)
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         CloseAllLoss();
+         return;
+      }
+      if(sparam == QEEA_BTN_BUY_PROFIT)
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         CloseBuyProfit();
+         return;
+      }
+      if(sparam == QEEA_BTN_SELL_PROFIT)
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         CloseSellProfit();
+         return;
+      }
+      if(sparam == QEEA_BTN_CLOSE_ALL)
+      {
+         ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
+         CloseAllPositions();
          return;
       }
    }
