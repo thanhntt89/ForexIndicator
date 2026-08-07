@@ -15,6 +15,10 @@
 #include "../Analysis/IntermarketAnalysis.mqh"
 #include "../Analysis/SessionStatistics.mqh"
 #include "../Engine/WalkForward.mqh"
+#include "../Analysis/ADXAnalysis.mqh"
+#include "../Analysis/MACDAnalysis.mqh"
+#include "../Analysis/US10YAnalysis.mqh"
+#include "../Analysis/EconCalendar.mqh"
 //+------------------------------------------------------------------+
 void CreateRectangleLabel(string name,int x,int y,int w,int h,color bg,color brd)
 {
@@ -79,7 +83,11 @@ void DrawInfoPanel(int signalIndex)
       bool hasV11 = (g_intermarket.isAvailable ||
                      g_outcomeCount > 0 ||
                      g_walkForward.isSamples > 0 ||
-                     InpUseSpreadRegime);
+                     InpUseSpreadRegime ||
+                     InpUseADXFilter ||
+                     InpUseMACDFilter ||
+                     g_us10y.isAvailable ||
+                     InpUseEconCalendar);
       int calcY = titleBarH + 2 + lh + lh;
       if(hasMTF) { calcY += 3 + lh + g_mtfCount * lh + lh; }
       if(hasV11)
@@ -90,6 +98,10 @@ void DrawInfoPanel(int signalIndex)
          if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0) calcY += lh;
          if(InpUseSpreadRegime) calcY += lh;
          if(g_rollingPerf.totalTracked > 0) calcY += lh;
+         if(InpUseADXFilter) calcY += lh;
+         if(InpUseMACDFilter) calcY += lh;
+         if(g_us10y.isAvailable) calcY += lh;
+         if(InpUseEconCalendar) calcY += lh;
          calcY += lh;  // vol-regime line (always shown)
       }
       calcY += lh + 4;
@@ -219,6 +231,30 @@ void DrawInfoPanel(int signalIndex)
                GetRollingPerfDisplay(), GetRollingPerfColor(), fs-2, false);
             cy += lh;
          }
+         if(InpUseADXFilter)
+         {
+            CreateTextLabel(PREFIX_PANEL+"V_ADX", px+pad+3, cy,
+               GetADXDisplayText(1), GetADXDisplayColor(1), fs-2, false);
+            cy += lh;
+         }
+         if(InpUseMACDFilter)
+         {
+            CreateTextLabel(PREFIX_PANEL+"V_MACD", px+pad+3, cy,
+               GetMACDDisplayText(1), GetMACDDisplayColor(1), fs-2, false);
+            cy += lh;
+         }
+         if(g_us10y.isAvailable)
+         {
+            CreateTextLabel(PREFIX_PANEL+"V_US10Y", px+pad+3, cy,
+               GetUS10YDisplayText(), GetUS10YColor(true), fs-2, false);
+            cy += lh;
+         }
+         if(InpUseEconCalendar)
+         {
+            CreateTextLabel(PREFIX_PANEL+"V_ECAL", px+pad+3, cy,
+               GetEconCalendarDisplayText(), GetEconCalendarDisplayColor(), fs-2, false);
+            cy += lh;
+         }
       }
       CreateTextLabel(PREFIX_PANEL+"Z_F", px+pad, cy,
          "Waiting for signal...", InpPanelDimColor, fs-2, false);
@@ -306,7 +342,11 @@ void DrawInfoPanel(int signalIndex)
    bool hasV11Data = (g_intermarket.isAvailable ||
                       g_outcomeCount > 0 ||
                       g_walkForward.isSamples > 0 ||
-                      InpUseSpreadRegime);
+                      InpUseSpreadRegime ||
+                      InpUseADXFilter ||
+                      InpUseMACDFilter ||
+                      g_us10y.isAvailable ||
+                      InpUseEconCalendar);
 
    // Detect layout change → need full redraw (delete stale objects)
    bool layoutChanged = false;
@@ -399,6 +439,10 @@ void DrawInfoPanel(int signalIndex)
       if(g_walkForward.isSamples > 0 || g_walkForward.oosSamples > 0) calcY += lh;
       if(InpUseSpreadRegime) calcY += lh;
       if(g_rollingPerf.totalTracked > 0) calcY += lh;
+      if(InpUseADXFilter) calcY += lh;
+      if(InpUseMACDFilter) calcY += lh;
+      if(g_us10y.isAvailable) calcY += lh;
+      if(InpUseEconCalendar) calcY += lh;
       calcY += lh;  // vol-regime line (always shown)
       // [GMT-FIX-A1] GMT warning line for H4+ timeframes
       // Note: Period() returns minutes via MQLCompat; PERIOD_H4 is enum 16388 in MT5.
@@ -1109,6 +1153,30 @@ void DrawInfoPanel(int signalIndex)
          string rpText = GetRollingPerfDisplay();
          color rpClr = GetRollingPerfColor();
          CreateTextLabel(PREFIX_PANEL+"V_RP", px+pad+3, cy, rpText, rpClr, fs-2, false);
+         cy += lh;
+      }
+      if(InpUseADXFilter)
+      {
+         CreateTextLabel(PREFIX_PANEL+"V_ADX", px+pad+3, cy,
+            GetADXDisplayText(1), GetADXDisplayColor(1), fs-2, false);
+         cy += lh;
+      }
+      if(InpUseMACDFilter)
+      {
+         CreateTextLabel(PREFIX_PANEL+"V_MACD", px+pad+3, cy,
+            GetMACDDisplayText(1), GetMACDDisplayColor(1), fs-2, false);
+         cy += lh;
+      }
+      if(g_us10y.isAvailable)
+      {
+         CreateTextLabel(PREFIX_PANEL+"V_US10Y", px+pad+3, cy,
+            GetUS10YDisplayText(), GetUS10YColor(isBuy), fs-2, false);
+         cy += lh;
+      }
+      if(InpUseEconCalendar)
+      {
+         CreateTextLabel(PREFIX_PANEL+"V_ECAL", px+pad+3, cy,
+            GetEconCalendarDisplayText(), GetEconCalendarDisplayColor(), fs-2, false);
          cy += lh;
       }
       // Brier Score calibration display
