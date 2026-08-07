@@ -82,6 +82,13 @@ FEATURE_COLS_SCORING = [
     "MTF_H4_TREND", "MTF_H1_TREND",
 ]
 
+# P2 additions (Advanced Features: ADX/MACD/US10Y) — map to MQL feature
+# array indices 21-24 in XGBPredict()/XGBPredictShadow(). Missing columns
+# (old CSVs, or the toggle was OFF) default to 0 via engineer_features().
+FEATURE_COLS_ADVANCED = [
+    "ADX_VALUE", "MACD_HISTOGRAM", "MACD_SLOPE", "US10Y_TREND",
+]
+
 CATEGORICAL_COLS = ["CASE_NUM", "DIR_BIN", "SESSION_ENC"]
 CYCLICAL_COLS = ["HOUR_SIN", "HOUR_COS", "DOW_SIN", "DOW_COS"]
 
@@ -200,6 +207,11 @@ def engineer_features(df: pd.DataFrame) -> tuple:
             feature_cols.append(c)
 
     for c in FEATURE_COLS_SCORING:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
+            feature_cols.append(c)
+
+    for c in FEATURE_COLS_ADVANCED:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce").fillna(0)
             feature_cols.append(c)
@@ -355,7 +367,11 @@ PREDICT_PARAMS = [
     "   double spreadRatio,",
     "   int    wfRobust,",
     "   int    h4Trend,",
-    "   int    h1Trend",
+    "   int    h1Trend,",
+    "   double adxValue = 0.0,",
+    "   double macdHistogram = 0.0,",
+    "   double macdSlope = 0.0,",
+    "   double us10yTrend = 0.0",
 ]
 
 FEATURE_ARG_MAP = {
@@ -380,6 +396,10 @@ FEATURE_ARG_MAP = {
     "HOUR_COS":           "MathCos(2.0*M_PI*hour/24.0)",
     "DOW_SIN":            "MathSin(2.0*M_PI*dow/5.0)",
     "DOW_COS":            "MathCos(2.0*M_PI*dow/5.0)",
+    "ADX_VALUE":          "adxValue",
+    "MACD_HISTOGRAM":     "macdHistogram",
+    "MACD_SLOPE":         "macdSlope",
+    "US10Y_TREND":        "us10yTrend",
 }
 
 
@@ -607,8 +627,12 @@ FEATURE_INDEX_MAP = {
     "CASE_NUM": 14,        "DIR_BIN": 15,         "SESSION_ENC": 16,
     "HOUR_SIN": 17,        "HOUR_COS": 18,
     "DOW_SIN": 19,         "DOW_COS": 20,
+    "ADX_VALUE": 21,       "MACD_HISTOGRAM": 22,
+    "MACD_SLOPE": 23,      "US10Y_TREND": 24,
+    # index 25 intentionally unused — reserved slot in XGBPredict()'s
+    # MQL feature array for future additions.
 }
-N_FEATURES_BIN = 22
+N_FEATURES_BIN = 26
 
 
 def build_tree_nodes(booster, tree_index: int, feature_cols: list) -> list:
