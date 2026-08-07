@@ -254,20 +254,21 @@ input double InpSpreadSpikeMulti = 2.0;           // Spread spike threshold (x a
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Advanced Features (ADX / MACD / US10Y / Econ Cal.)   |
-//| All default OFF — toggleable, backward-compatible additions.      |
+//| ADX/MACD/US10Y default ON (confirmed via manual test 2026-08-07). |
+//| EconCalendar default OFF — still pending validation.              |
 //+------------------------------------------------------------------+
 input string inp_grp_adv         = "========== Advanced Features =========="; // ---
 
-input bool   InpUseADXFilter     = false;  // ADX trend strength filter
+input bool   InpUseADXFilter     = true;   // ADX trend strength filter
 input int    InpADXPeriod        = 14;     // ADX period
 input int    InpMinADXValue      = 20;     // Min ADX (below = sideway noise)
 
-input bool   InpUseMACDFilter    = false;  // MACD histogram confirmation
+input bool   InpUseMACDFilter    = true;   // MACD histogram confirmation
 input int    InpMACDFast         = 12;     // MACD Fast EMA
 input int    InpMACDSlow         = 26;     // MACD Slow EMA
 input int    InpMACDSignal       = 9;      // MACD Signal line
 
-input bool   InpUseUS10Y         = false;  // US10Y yield correlation
+input bool   InpUseUS10Y         = true;   // US10Y yield correlation
 input string InpUS10YSymbol      = "";     // US10Y symbol (empty=auto detect)
 
 input bool   InpUseEconCalendar  = false;  // Economic calendar blackout gate
