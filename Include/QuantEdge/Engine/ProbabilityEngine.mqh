@@ -225,6 +225,9 @@
 #include "MTFEngine.mqh"
 #include "../Analysis/Normalize.mqh"
 #include "../Analysis/IntermarketAnalysis.mqh"
+#include "../Analysis/US10YAnalysis.mqh"
+#include "../Analysis/ADXAnalysis.mqh"
+#include "../Analysis/MACDAnalysis.mqh"
 #include "../Analysis/SessionStatistics.mqh"
 #include "WalkForward.mqh"
 
@@ -1277,6 +1280,25 @@ void CalculateProbability(int currentSignalIndex,
       edgeAdjustment += interAdj;
    }
 
+   // --- ADX trend-strength edge adjustment (max ±2%, fake-trend aware)
+   double _exADXAdj = 0;
+   if(InpUseADXFilter)
+   {
+      int adxBarShift = Bars - 1 - curSig.barIndex;
+      double adxAdj = GetADXEdgeAdjustment(curSig.caseNumber, adxBarShift);
+      _exADXAdj = adxAdj;
+      edgeAdjustment += adxAdj;
+   }
+
+   // --- US10Y yield-correlation edge adjustment (max ±2%, Gold inverse)
+   double _exUS10YAdj = 0;
+   if(g_us10y.isAvailable)
+   {
+      double us10yAdj = GetUS10YEdgeAdjustment(curSig.isBuySignal);
+      _exUS10YAdj = us10yAdj;
+      edgeAdjustment += us10yAdj;
+   }
+
    // --- Angle strength edge adjustment (Spec: AngleStrength_Probability_Spec.md)
    // Z > 1.0 = stronger angle than average → +edge; Z < 1.0 = weaker → -edge
    // Divergence cases (2,3) damped to 40% because structure matters more than angle
@@ -1334,6 +1356,8 @@ void CalculateProbability(int currentSignalIndex,
       g_explainData.baseEdge = measuredEdge;
       g_explainData.edgeMTF   = _exMtfAdj;
       g_explainData.edgeInter = _exInterAdj;
+      g_explainData.edgeADX   = _exADXAdj;
+      g_explainData.edgeUS10Y = _exUS10YAdj;
       g_explainData.edgeAngle = _exAngleAdj;
       g_explainData.edgeMktSt = g_marketState.probMultiplier;
 
@@ -1346,7 +1370,13 @@ void CalculateProbability(int currentSignalIndex,
       double _eInter = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj + _exInterAdj));
       g_explainData.probAfterInter = CalculateRealMarketProbTP(_eInter, slDist, tp1Dist, curSig.atrValue) * 100.0;
 
-      double _eAngle = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj + _exInterAdj + _exAngleAdj));
+      double _eADX = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj + _exInterAdj + _exADXAdj));
+      g_explainData.probAfterADX = CalculateRealMarketProbTP(_eADX, slDist, tp1Dist, curSig.atrValue) * 100.0;
+
+      double _eUS10Y = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj + _exInterAdj + _exADXAdj + _exUS10YAdj));
+      g_explainData.probAfterUS10Y = CalculateRealMarketProbTP(_eUS10Y, slDist, tp1Dist, curSig.atrValue) * 100.0;
+
+      double _eAngle = MathMax(0.48, MathMin(edgeCeiling, measuredEdge + _exMtfAdj + _exInterAdj + _exADXAdj + _exUS10YAdj + _exAngleAdj));
       g_explainData.probAfterAngle = CalculateRealMarketProbTP(_eAngle, slDist, tp1Dist, curSig.atrValue) * 100.0;
 
       double _eMktSt = MathMax(0.48, MathMin(edgeCeiling, _exEdgeBeforeMktSt * g_marketState.probMultiplier));
@@ -1477,6 +1507,26 @@ void CalculateProbability(int currentSignalIndex,
       g_explainData.probAfterConfirm = g_currentProb.probTP1;
       g_explainData.confirmHit = _exConfirmed;
    }
+
+   //--- MACD confirmation filter (confidence modifier, not a new signal source)
+   // Penalizes reversal signals where MACD histogram still trends against the reversal.
+   if(InpUseMACDFilter)
+   {
+      int macdBarShift = Bars - 1 - curSig.barIndex;
+      double macdMod = GetMACDConfidenceModifier(curSig.isBuySignal, macdBarShift);
+      g_currentProb.probTP1 *= macdMod;
+      g_currentProb.probTP2 *= macdMod;
+      g_currentProb.probTP3 *= macdMod;
+      g_currentProb.probSL = 100.0 - g_currentProb.probTP1;
+
+      if(InpShowProbExplain)
+         g_explainData.macdConfModifier = macdMod;
+   }
+   else if(InpShowProbExplain)
+      g_explainData.macdConfModifier = 1.0;
+
+   if(InpShowProbExplain)
+      g_explainData.probAfterMACD = g_currentProb.probTP1;
 
    //--- ATR Spike Detection (skip when Vol-regime already penalized as EVENT)
    // [PROB-FIX-4] Cache signal-bar ATR ratio per signal index.
