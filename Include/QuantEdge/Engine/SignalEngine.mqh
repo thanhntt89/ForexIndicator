@@ -12,6 +12,7 @@
 #include "../Analysis/VolumeAnalysis.mqh"
 #include "../Analysis/VolatilityAnalysis.mqh"
 #include "../Analysis/SessionFilter.mqh"
+#include "../Analysis/ADXAnalysis.mqh"
 #include "MTFEngine.mqh"
 
 //+------------------------------------------------------------------+
@@ -70,14 +71,30 @@ SignalScore CalculateSignalScore(int caseNum, bool isBuy, int barIndex,
    //--- S/R
    score.srScore = srScoreInput;
 
+   //--- ADX (trend strength; 50.0 neutral / 0 weight when InpUseADXFilter=false)
+   score.adxScore = GetADXScore(barIndex);
+
    //--- Weighted Total
    // RSI is DOMINANT - if RSI signal is clear, other factors are secondary
-   score.totalScore = score.rsiScore       * 0.50   // RSI dominant
-                    + score.volumeScore     * 0.08   // Low - unreliable tick vol
-                    + score.volatilityScore * 0.12   // Medium - useful
-                    + score.sessionScore    * 0.08   // Low - timezone issues
-                    + score.mtfScore        * 0.12   // Medium - useful
-                    + score.srScore         * 0.10;  // Medium - when available
+   if(InpUseADXFilter)
+   {
+      score.totalScore = score.rsiScore       * 0.45   // RSI dominant, trimmed for ADX
+                       + score.volumeScore     * 0.08   // Low - unreliable tick vol
+                       + score.volatilityScore * 0.12   // Medium - useful
+                       + score.sessionScore    * 0.08   // Low - timezone issues
+                       + score.mtfScore        * 0.12   // Medium - useful
+                       + score.srScore         * 0.10   // Medium - when available
+                       + score.adxScore        * 0.05;  // Trend-strength filter
+   }
+   else
+   {
+      score.totalScore = score.rsiScore       * 0.50   // RSI dominant
+                       + score.volumeScore     * 0.08   // Low - unreliable tick vol
+                       + score.volatilityScore * 0.12   // Medium - useful
+                       + score.sessionScore    * 0.08   // Low - timezone issues
+                       + score.mtfScore        * 0.12   // Medium - useful
+                       + score.srScore         * 0.10;  // Medium - when available
+   }
 
    //--- Quality classification
    if(score.totalScore >= 75)      { score.quality = "HIGH";     score.qualityColor = clrLime;   }
