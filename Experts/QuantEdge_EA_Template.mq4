@@ -61,7 +61,7 @@ input int    InpSlippage         = 3;                   // Max slippage (points)
 input string inp_grp_gates       = "========== Decision Gates =========="; // ---
 input int    InpMinRecLevel      = REC_ENTRY;           // Min recommendation level (0=STRONG, 1=ENTRY, 2=CAUTION)
 input bool   InpAllowCaution     = false;               // Allow CAUTION_ENTRY level trades
-input int    InpMinConfidence    = 75;                  // Min confidence score (0-100)
+input int    InpMinConfidence    = 65;                  // Min confidence score (0-100)
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
 input int    InpMaxSpreadPoints  = 30;                  // Max spread (points, 0=no check)
 
@@ -69,7 +69,7 @@ input int    InpMaxSpreadPoints  = 30;                  // Max spread (points, 0
 //| INPUT GROUP: Session Filter                                        |
 //+------------------------------------------------------------------+
 input string inp_grp_session     = "========== Session Filter =========="; // ---
-input bool   InpUseSessionFilter = true;                // Enable session filter (Gate 6)
+input bool   InpUseSessionFilter = false;               // Enable session filter (Gate 6)
 input int    InpSessionStartHour = 7;                   // Session start hour (GMT)
 input int    InpSessionEndHour   = 20;                  // Session end hour (GMT)
 
@@ -77,7 +77,7 @@ input int    InpSessionEndHour   = 20;                  // Session end hour (GMT
 //| INPUT GROUP: Daily Loss Cap                                        |
 //+------------------------------------------------------------------+
 input string inp_grp_daily       = "========== Daily Loss Cap =========="; // ---
-input bool   InpUseDailyLossCap  = true;                // Enable daily loss cap (Gate 7)
+input bool   InpUseDailyLossCap  = false;               // Enable daily loss cap (Gate 7)
 input int    InpMaxDailyLosses   = 3;                   // Max consecutive losses per day (0=no limit)
 input double InpMaxDailyLossPct  = 2.0;                 // Max daily loss % of balance (0=no limit)
 
