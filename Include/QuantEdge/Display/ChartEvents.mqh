@@ -33,14 +33,11 @@ void HandleChartEvent(const int id, const long &lparam,
 
          if(criteria >= 0)
          {
+            // NOTE: MessageBox() is not usable from a custom indicator's
+            // OnChartEvent on MQL5 (silently fails, short-circuiting the
+            // command before it's sent) — fire the close command directly,
+            // same as QuantEdge_EA_Template's own panel buttons.
             ObjectSetInteger(0, sparam, OBJPROP_STATE, false);
-            #ifdef __MQL5__
-            string msg = "Close " + btnLabel + " positions on " + Symbol() + "?\n\n"
-                       + "This action cannot be undone.\n"
-                       + "(Requires QuantEdge EA running on this chart)";
-            int result = MessageBox(msg, "QuantEdge - Close Positions", 0x01 | 0x20);
-            if(result != 1) return;
-            #endif
             string gvName = "QE_CloseCmd_" + Symbol();
             GlobalVariableSet(gvName, (double)(criteria + 1));
             Print("[ManualPanel] Close command sent: criteria=", criteria, " (", btnLabel, ")");
