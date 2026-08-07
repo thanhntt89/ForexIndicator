@@ -83,6 +83,15 @@ input int    InpMaxDailyLosses   = 3;                   // Max consecutive losse
 input double InpMaxDailyLossPct  = 2.0;                 // Max daily loss % of balance (0=no limit)
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Advanced Gates (ADX / Economic Calendar)              |
+//| Mirror the indicator's own flags — the indicator publishes gate    |
+//| state via GlobalVariable; the EA just reads it. Default OFF.       |
+//+------------------------------------------------------------------+
+input string inp_grp_advgates    = "========== Advanced Gates =========="; // ---
+input bool   InpUseADXGate       = false;               // Enable ADX trend-strength gate (Gate 8)
+input bool   InpUseEconCalGate   = false;               // Enable economic calendar blackout gate (Gate 9)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Trade Management                                      |
 //+------------------------------------------------------------------+
 input string inp_grp_mgmt        = "========== Trade Management =========="; // ---
@@ -880,13 +889,31 @@ void OnTick()
    // --- Gate 7: Daily Loss Cap ---
    bool g7_pass = !IsDailyLossCapHit();
 
-   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass && g7_pass;
+   // --- Gate 8: ADX Trend Strength (indicator publishes via GlobalVariable) ---
+   bool g8_pass = true;
+   if(InpUseADXGate)
+   {
+      string adxGateVar = "QE_ADXGatePassed_" + Symbol();
+      if(GlobalVariableCheck(adxGateVar))
+         g8_pass = (GlobalVariableGet(adxGateVar) != 0.0);
+   }
+
+   // --- Gate 9: Economic Calendar Blackout (indicator publishes via GlobalVariable) ---
+   bool g9_pass = true;
+   if(InpUseEconCalGate)
+   {
+      string econGateVar = "QE_EconBlackout_" + Symbol();
+      if(GlobalVariableCheck(econGateVar))
+         g9_pass = (GlobalVariableGet(econGateVar) == 0.0);
+   }
+
+   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass && g7_pass && g8_pass && g9_pass;
 
    string dirStr  = (direction > 0) ? "BUY" : "SELL";
-   string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s",
+   string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s",
       g1_pass?"PASS":"FAIL", g2_pass?"PASS":"FAIL", g3_pass?"PASS":"FAIL",
       g4_pass?"PASS":"FAIL", g5_pass?"PASS":"FAIL", g6_pass?"PASS":"FAIL",
-      g7_pass?"PASS":"FAIL");
+      g7_pass?"PASS":"FAIL", g8_pass?"PASS":"FAIL", g9_pass?"PASS":"FAIL");
 
    Print("[QuantEdge EA] ", dirStr, " Case=", caseNum,
          " Rec=", RecLevelName(recLevelInt), " Conf=", (int)MathRound(confidence),

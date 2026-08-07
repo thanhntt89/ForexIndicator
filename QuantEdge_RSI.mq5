@@ -812,6 +812,11 @@ int OnCalculate(const int rates_total,
 
    // Lightweight: every tick
    RefreshIntermarketData();
+   RefreshUS10YData();
+   RefreshADXData();
+   RefreshMACDData();
+   PublishADXGateState();
+   PublishEconBlackoutState();
    CheckPendingOutcomes();
    CheckAndLogNewlyResolved();
 

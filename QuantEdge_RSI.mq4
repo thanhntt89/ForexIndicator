@@ -719,6 +719,11 @@ int OnCalculate(const int rates_total,
    bool isNewBar = (currentBarTime != s_lastBarTime);
    // Lightweight: every tick
    RefreshIntermarketData();
+   RefreshUS10YData();
+   RefreshADXData();
+   RefreshMACDData();
+   PublishADXGateState();
+   PublishEconBlackoutState();
    CheckPendingOutcomes();
    CheckAndLogNewlyResolved(); // Log resolved outcomes to CSV
 

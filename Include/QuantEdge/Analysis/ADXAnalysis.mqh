@@ -247,4 +247,14 @@ void RefreshADXData()
    GetADXValue(1);
 }
 
+//+------------------------------------------------------------------+
+//| Publish gate state via GlobalVariable so the EA (separate program |
+//| instance) can read it without duplicating ADX/R2/ER logic.        |
+//+------------------------------------------------------------------+
+void PublishADXGateState()
+{
+   if(!InpUseADXFilter) return;
+   GlobalVariableSet("QE_ADXGatePassed_" + Symbol(), IsADXGatePassed(1) ? 1.0 : 0.0);
+}
+
 #endif
