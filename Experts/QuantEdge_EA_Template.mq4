@@ -51,7 +51,7 @@
 //+------------------------------------------------------------------+
 input string inp_grp_ea          = "========== EA Settings =========="; // ---
 input string InpIndicatorName    = "QuantEdge_RSI";     // Indicator name (compiled .ex4)
-input bool   InpEnableAutoTrading= false;               // Enable live order placement (default OFF)
+input bool   InpEnableAutoTrading= true;                // Enable live order placement
 input int    InpMagicNumber      = 20260805;            // Magic number for order identification
 input int    InpSlippage         = 3;                   // Max slippage (points)
 
