@@ -876,9 +876,31 @@ void OnTick()
       return;
    }
 
+   // --- Adjust SL/TP relative to current market price ---
+   double marketPrice = (direction > 0) ? Ask : Bid;
+   double priceShift  = marketPrice - entry;
+   double adjSL  = NormalizeDouble(sl  + priceShift, Digits);
+   double adjTP1 = NormalizeDouble(tp1 + priceShift, Digits);
+   double adjTP2 = (tp2 != EMPTY_VALUE && tp2 > 0)
+                   ? NormalizeDouble(tp2 + priceShift, Digits) : 0;
+
+   double stoplevel = MarketInfo(Symbol(), MODE_STOPLEVEL) * Point;
+   if(direction > 0)
+   {
+      if(adjSL >= Bid - stoplevel)  adjSL  = NormalizeDouble(Bid - stoplevel - Point, Digits);
+      if(adjTP1 <= Ask + stoplevel) adjTP1 = NormalizeDouble(Ask + stoplevel + Point, Digits);
+      if(adjTP2 > 0 && adjTP2 <= Ask + stoplevel) adjTP2 = NormalizeDouble(Ask + stoplevel + Point, Digits);
+   }
+   else
+   {
+      if(adjSL <= Ask + stoplevel)  adjSL  = NormalizeDouble(Ask + stoplevel + Point, Digits);
+      if(adjTP1 >= Bid - stoplevel) adjTP1 = NormalizeDouble(Bid - stoplevel - Point, Digits);
+      if(adjTP2 > 0 && adjTP2 >= Bid - stoplevel) adjTP2 = NormalizeDouble(Bid - stoplevel - Point, Digits);
+   }
+
    // --- Place order(s) ---
    string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
-   bool   useSplit = InpUsePartialClose && tp2 != EMPTY_VALUE && tp2 > 0
+   bool   useSplit = InpUsePartialClose && adjTP2 > 0
                      && lot >= minLot * 2.0;
 
    if(useSplit)
@@ -896,13 +918,13 @@ void OnTick()
       int t1 = -1, t2 = -1;
       if(direction > 0)
       {
-         t1 = OrderSend(Symbol(), OP_BUY, lot1, Ask, InpSlippage, sl, tp1, comment1, InpMagicNumber, 0, clrLime);
-         t2 = OrderSend(Symbol(), OP_BUY, lot2, Ask, InpSlippage, sl, tp2, comment2, magicTP2, 0, clrGreen);
+         t1 = OrderSend(Symbol(), OP_BUY, lot1, Ask, InpSlippage, adjSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
+         t2 = OrderSend(Symbol(), OP_BUY, lot2, Ask, InpSlippage, adjSL, adjTP2, comment2, magicTP2, 0, clrGreen);
       }
       else
       {
-         t1 = OrderSend(Symbol(), OP_SELL, lot1, Bid, InpSlippage, sl, tp1, comment1, InpMagicNumber, 0, clrRed);
-         t2 = OrderSend(Symbol(), OP_SELL, lot2, Bid, InpSlippage, sl, tp2, comment2, magicTP2, 0, clrMaroon);
+         t1 = OrderSend(Symbol(), OP_SELL, lot1, Bid, InpSlippage, adjSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
+         t2 = OrderSend(Symbol(), OP_SELL, lot2, Bid, InpSlippage, adjSL, adjTP2, comment2, magicTP2, 0, clrMaroon);
       }
 
       if(t1 < 0) Print("[QuantEdge EA] TP1 OrderSend failed: error ", GetLastError());
@@ -915,9 +937,9 @@ void OnTick()
    {
       int ticket = -1;
       if(direction > 0)
-         ticket = OrderSend(Symbol(), OP_BUY, lot, Ask, InpSlippage, sl, tp1, comment1, InpMagicNumber, 0, clrLime);
+         ticket = OrderSend(Symbol(), OP_BUY, lot, Ask, InpSlippage, adjSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
       else
-         ticket = OrderSend(Symbol(), OP_SELL, lot, Bid, InpSlippage, sl, tp1, comment1, InpMagicNumber, 0, clrRed);
+         ticket = OrderSend(Symbol(), OP_SELL, lot, Bid, InpSlippage, adjSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
 
       if(ticket < 0)
          Print("[QuantEdge EA] OrderSend failed: error ", GetLastError());

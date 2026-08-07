@@ -927,9 +927,34 @@ void OnTick()
       return;
    }
 
+   // --- Adjust SL/TP relative to current market price ---
+   double askPrice = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+   double bidPrice = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+   double marketPrice = (direction > 0) ? askPrice : bidPrice;
+   double priceShift  = marketPrice - entry;
+   double adjSL  = NormalizeDouble(sl  + priceShift, _Digits);
+   double adjTP1 = NormalizeDouble(tp1 + priceShift, _Digits);
+   double adjTP2 = (tp2 != EMPTY_VALUE && tp2 > 0)
+                   ? NormalizeDouble(tp2 + priceShift, _Digits) : 0;
+
+   long stoplevelPts = SymbolInfoInteger(Symbol(), SYMBOL_TRADE_STOPS_LEVEL);
+   double stoplevel  = stoplevelPts * _Point;
+   if(direction > 0)
+   {
+      if(adjSL >= bidPrice - stoplevel)  adjSL  = NormalizeDouble(bidPrice - stoplevel - _Point, _Digits);
+      if(adjTP1 <= askPrice + stoplevel) adjTP1 = NormalizeDouble(askPrice + stoplevel + _Point, _Digits);
+      if(adjTP2 > 0 && adjTP2 <= askPrice + stoplevel) adjTP2 = NormalizeDouble(askPrice + stoplevel + _Point, _Digits);
+   }
+   else
+   {
+      if(adjSL <= askPrice + stoplevel)  adjSL  = NormalizeDouble(askPrice + stoplevel + _Point, _Digits);
+      if(adjTP1 >= bidPrice - stoplevel) adjTP1 = NormalizeDouble(bidPrice - stoplevel - _Point, _Digits);
+      if(adjTP2 > 0 && adjTP2 >= bidPrice - stoplevel) adjTP2 = NormalizeDouble(bidPrice - stoplevel - _Point, _Digits);
+   }
+
    // --- Place order(s) ---
    string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
-   bool   useSplit = InpUsePartialClose && tp2 != EMPTY_VALUE && tp2 > 0
+   bool   useSplit = InpUsePartialClose && adjTP2 > 0
                      && lot >= minLot * 2.0;
 
    if(useSplit)
@@ -946,13 +971,13 @@ void OnTick()
       bool r1 = false, r2 = false;
       if(direction > 0)
       {
-         r1 = g_trade.Buy(lot1, Symbol(), 0, sl, tp1, comment1);
-         r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, sl, tp2, comment2);
+         r1 = g_trade.Buy(lot1, Symbol(), 0, adjSL, adjTP1, comment1);
+         r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, adjSL, adjTP2, comment2);
       }
       else
       {
-         r1 = g_trade.Sell(lot1, Symbol(), 0, sl, tp1, comment1);
-         r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, sl, tp2, comment2);
+         r1 = g_trade.Sell(lot1, Symbol(), 0, adjSL, adjTP1, comment1);
+         r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, adjSL, adjTP2, comment2);
       }
 
       if(!r1) Print("[QuantEdge EA] TP1 order failed: ", g_trade.ResultRetcodeDescription());
@@ -967,9 +992,9 @@ void OnTick()
    {
       bool result = false;
       if(direction > 0)
-         result = g_trade.Buy(lot, Symbol(), 0, sl, tp1, comment1);
+         result = g_trade.Buy(lot, Symbol(), 0, adjSL, adjTP1, comment1);
       else
-         result = g_trade.Sell(lot, Symbol(), 0, sl, tp1, comment1);
+         result = g_trade.Sell(lot, Symbol(), 0, adjSL, adjTP1, comment1);
 
       if(!result)
          Print("[QuantEdge EA] Order failed: ", g_trade.ResultRetcodeDescription());
