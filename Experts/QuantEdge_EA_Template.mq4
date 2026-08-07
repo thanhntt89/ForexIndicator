@@ -59,9 +59,9 @@ input int    InpSlippage         = 3;                   // Max slippage (points)
 //| INPUT GROUP: Decision Gates                                       |
 //+------------------------------------------------------------------+
 input string inp_grp_gates       = "========== Decision Gates =========="; // ---
-input int    InpMinRecLevel      = REC_ENTRY;           // Min recommendation level (0=STRONG, 1=ENTRY, 2=CAUTION)
-input bool   InpAllowCaution     = false;               // Allow CAUTION_ENTRY level trades
-input int    InpMinConfidence    = 65;                  // Min confidence score (0-100)
+input int    InpMinRecLevel      = REC_WAIT;             // Min recommendation level (0=STRONG, 1=ENTRY, 2=CAUTION, 3=WAIT)
+input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
+input int    InpMinConfidence    = 0;                   // Min confidence score (0-100)
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
 input int    InpMaxSpreadPoints  = 30;                  // Max spread (points, 0=no check)
 
