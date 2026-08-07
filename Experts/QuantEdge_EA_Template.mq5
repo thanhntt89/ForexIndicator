@@ -96,6 +96,7 @@ input int    InpTrailATRPeriod   = 14;                  // ATR period for traili
 //| INPUT GROUP: Risk & Lot Sizing                                    |
 //+------------------------------------------------------------------+
 input string inp_grp_risk        = "========== Risk & Lot Sizing =========="; // ---
+input double InpDefaultRiskPct   = 0.5;                 // Fallback risk % when indicator returns 0
 input double InpMaxLotSize       = 1.0;                 // Max lot size (hard cap)
 input double InpMinLotSize       = 0.01;                // Min lot size
 
@@ -897,8 +898,12 @@ void OnTick()
       return;
 
    // --- Compute lot size ---
+   double effectiveRisk = riskPct;
+   if(effectiveRisk <= 0 && InpDefaultRiskPct > 0)
+      effectiveRisk = InpDefaultRiskPct;
+
    double slDistance = MathAbs(entry - sl) / _Point;
-   double lot = CalculateLotFromRisk(riskPct, slDistance);
+   double lot = CalculateLotFromRisk(effectiveRisk, slDistance);
    if(lot <= 0)
    {
       Print("[QuantEdge EA] Lot calculation returned 0 — cannot trade.");
