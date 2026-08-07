@@ -185,6 +185,7 @@ int FindSignalByArrowName(string arrowName)
 //| V11: Multi-Source + Walk-Forward data                               |
 //+------------------------------------------------------------------+
 IntermarketData   g_intermarket;
+US10YData         g_us10y;
 SessionStats      g_sessionStats;
 WalkForwardData   g_walkForward;
 RollingPerformance g_rollingPerf;

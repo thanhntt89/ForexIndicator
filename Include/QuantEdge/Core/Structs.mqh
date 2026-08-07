@@ -79,6 +79,7 @@ struct SignalScore
    double sessionScore;
    double mtfScore;
    double srScore;
+   double adxScore;        // ADX trend-strength component (0 when InpUseADXFilter=false)
    string quality;
    color  qualityColor;
 };
@@ -169,6 +170,13 @@ struct ExplainData
    double edgeInter;
    double edgeAngle;
    double edgeMktSt;
+   // Advanced Features (V13): ADX / US10Y edge adjustments, MACD confidence modifier
+   double edgeADX;
+   double edgeUS10Y;
+   double macdConfModifier;
+   double probAfterADX;
+   double probAfterUS10Y;
+   double probAfterMACD;
 };
 
 struct EntryZone
@@ -197,6 +205,15 @@ struct IntermarketData
    double dxyTrend;           // SMA slope: positive=rising, negative=falling
    double correlationScore;   // -1.0 to +1.0 alignment with signal
    bool   isAvailable;        // DXY/EURUSD found on broker
+   string sourceSymbol;       // Which symbol used
+};
+
+struct US10YData
+{
+   double price;              // US10Y yield price
+   double trend;              // SMA slope: positive=yields rising, negative=falling
+   double correlationScore;   // -1.0 to +1.0 alignment with signal (Gold inverse)
+   bool   isAvailable;        // US10Y symbol found on broker
    string sourceSymbol;       // Which symbol used
 };
 

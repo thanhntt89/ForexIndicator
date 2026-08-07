@@ -253,6 +253,27 @@ input bool   InpUseSpreadRegime  = true;          // Monitor spread anomalies
 input double InpSpreadSpikeMulti = 2.0;           // Spread spike threshold (x average)
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Advanced Features (ADX / MACD / US10Y / Econ Cal.)   |
+//| All default OFF — toggleable, backward-compatible additions.      |
+//+------------------------------------------------------------------+
+input string inp_grp_adv         = "========== Advanced Features =========="; // ---
+
+input bool   InpUseADXFilter     = false;  // ADX trend strength filter
+input int    InpADXPeriod        = 14;     // ADX period
+input int    InpMinADXValue      = 20;     // Min ADX (below = sideway noise)
+
+input bool   InpUseMACDFilter    = false;  // MACD histogram confirmation
+input int    InpMACDFast         = 12;     // MACD Fast EMA
+input int    InpMACDSlow         = 26;     // MACD Slow EMA
+input int    InpMACDSignal       = 9;      // MACD Signal line
+
+input bool   InpUseUS10Y         = false;  // US10Y yield correlation
+input string InpUS10YSymbol      = "";     // US10Y symbol (empty=auto detect)
+
+input bool   InpUseEconCalendar  = false;  // Economic calendar blackout gate
+input int    InpEconBlackoutMin  = 30;     // Blackout window ±minutes (MT5 only)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: TF Auto-Config                                        |
 //| When enabled, SL/TP ratios, method, case filters, cooldown, risk  |
 //| are automatically adapted to the current chart timeframe using     |
