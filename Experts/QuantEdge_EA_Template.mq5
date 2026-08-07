@@ -62,9 +62,35 @@ input ulong  InpSlippage         = 3;                   // Max slippage (points)
 input string inp_grp_gates       = "========== Decision Gates =========="; // ---
 input int    InpMinRecLevel      = REC_ENTRY;           // Min recommendation level (0=STRONG, 1=ENTRY, 2=CAUTION)
 input bool   InpAllowCaution     = false;               // Allow CAUTION_ENTRY level trades
-input int    InpMinConfidence    = 65;                  // Min confidence score (0-100)
+input int    InpMinConfidence    = 75;                  // Min confidence score (0-100)
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
 input int    InpMaxSpreadPoints  = 30;                  // Max spread (points, 0=no check)
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: Session Filter                                        |
+//+------------------------------------------------------------------+
+input string inp_grp_session     = "========== Session Filter =========="; // ---
+input bool   InpUseSessionFilter = true;                // Enable session filter (Gate 6)
+input int    InpSessionStartHour = 7;                   // Session start hour (GMT)
+input int    InpSessionEndHour   = 20;                  // Session end hour (GMT)
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: Daily Loss Cap                                        |
+//+------------------------------------------------------------------+
+input string inp_grp_daily       = "========== Daily Loss Cap =========="; // ---
+input bool   InpUseDailyLossCap  = true;                // Enable daily loss cap (Gate 7)
+input int    InpMaxDailyLosses   = 3;                   // Max consecutive losses per day (0=no limit)
+input double InpMaxDailyLossPct  = 2.0;                 // Max daily loss % of balance (0=no limit)
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: Trade Management                                      |
+//+------------------------------------------------------------------+
+input string inp_grp_mgmt        = "========== Trade Management =========="; // ---
+input bool   InpUsePartialClose  = true;                // Split into TP1 (60%) + TP2 (40%) legs
+input double InpTP1LotRatio      = 0.6;                 // TP1 leg lot ratio (0.1-0.9)
+input bool   InpUseTrailing      = true;                // Enable ATR trailing stop on TP2 leg
+input double InpTrailATRMult     = 1.5;                 // Trailing distance = ATR × this multiplier
+input int    InpTrailATRPeriod   = 14;                  // ATR period for trailing calculation
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Risk & Lot Sizing                                    |
@@ -122,8 +148,10 @@ input bool   InpShowClosePanel   = true;                // Show close-order pane
 //| Globals                                                           |
 //+------------------------------------------------------------------+
 int      g_hIndicator = INVALID_HANDLE;
+int      g_hATR       = INVALID_HANDLE;
 datetime g_lastBarTime = 0;
 CTrade   g_trade;
+CTrade   g_tradeTP2;
 
 int      g_panelPosX = 20;
 int      g_panelPosY = 20;
@@ -131,6 +159,11 @@ bool     g_panelDragging = false;
 int      g_dragOffsetX = 0;
 int      g_dragOffsetY = 0;
 bool     g_panelCollapsed = false;
+
+#define MAGIC_TP2_OFFSET  100000
+int      g_dailyLossCount   = 0;
+double   g_dailyLossAmount  = 0;
+datetime g_dailyResetDate   = 0;
 
 //+------------------------------------------------------------------+
 //| Read one indicator buffer value at shift=1                        |
@@ -189,9 +222,11 @@ string RecLevelName(int level)
 
 //+------------------------------------------------------------------+
 //| Check if we already have a position in the same direction         |
+//| Considers both TP1 and TP2 leg magic numbers.                     |
 //+------------------------------------------------------------------+
 bool HasOpenPosition(int direction)
 {
+   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
@@ -199,7 +234,8 @@ bool HasOpenPosition(int direction)
          continue;
       if(PositionGetString(POSITION_SYMBOL) != Symbol())
          continue;
-      if(PositionGetInteger(POSITION_MAGIC) != (long)InpMagicNumber)
+      long mag = PositionGetInteger(POSITION_MAGIC);
+      if(mag != (long)InpMagicNumber && mag != (long)magicTP2)
          continue;
 
       ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
@@ -209,6 +245,129 @@ bool HasOpenPosition(int direction)
          return true;
    }
    return false;
+}
+
+//+------------------------------------------------------------------+
+//| Session filter: check if current GMT hour is within trade window   |
+//+------------------------------------------------------------------+
+bool IsWithinSession()
+{
+   if(!InpUseSessionFilter)
+      return true;
+   MqlDateTime dt;
+   TimeGMT(dt);
+   int hourGMT = dt.hour;
+   if(InpSessionStartHour <= InpSessionEndHour)
+      return(hourGMT >= InpSessionStartHour && hourGMT < InpSessionEndHour);
+   return(hourGMT >= InpSessionStartHour || hourGMT < InpSessionEndHour);
+}
+
+//+------------------------------------------------------------------+
+//| Daily loss tracking via deal history                                |
+//+------------------------------------------------------------------+
+void UpdateDailyLossTracking()
+{
+   MqlDateTime dt;
+   TimeGMT(dt);
+   datetime today = StringToTime(StringFormat("%04d.%02d.%02d", dt.year, dt.mon, dt.day));
+   if(today != g_dailyResetDate)
+   {
+      g_dailyLossCount  = 0;
+      g_dailyLossAmount = 0;
+      g_dailyResetDate  = today;
+   }
+
+   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   HistorySelect(g_dailyResetDate, TimeCurrent());
+   int totalDeals = HistoryDealsTotal();
+
+   g_dailyLossCount  = 0;
+   g_dailyLossAmount = 0;
+
+   for(int i = 0; i < totalDeals; i++)
+   {
+      ulong dealTicket = HistoryDealGetTicket(i);
+      if(dealTicket == 0) continue;
+
+      long dealEntry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+      if(dealEntry != DEAL_ENTRY_OUT) continue;
+
+      string dealSym = HistoryDealGetString(dealTicket, DEAL_SYMBOL);
+      if(dealSym != Symbol()) continue;
+
+      long dealMagic = HistoryDealGetInteger(dealTicket, DEAL_MAGIC);
+      if(dealMagic != (long)InpMagicNumber && dealMagic != (long)magicTP2) continue;
+
+      double pnl = HistoryDealGetDouble(dealTicket, DEAL_PROFIT)
+                  + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
+                  + HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+      if(pnl < 0)
+      {
+         g_dailyLossCount++;
+         g_dailyLossAmount += MathAbs(pnl);
+      }
+   }
+}
+
+bool IsDailyLossCapHit()
+{
+   if(!InpUseDailyLossCap)
+      return false;
+   if(InpMaxDailyLosses > 0 && g_dailyLossCount >= InpMaxDailyLosses)
+      return true;
+   if(InpMaxDailyLossPct > 0)
+   {
+      double maxLoss = AccountInfoDouble(ACCOUNT_BALANCE) * InpMaxDailyLossPct / 100.0;
+      if(g_dailyLossAmount >= maxLoss)
+         return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| ATR trailing stop for TP2 legs                                     |
+//+------------------------------------------------------------------+
+void ManageTrailing()
+{
+   if(!InpUseTrailing || g_hATR == INVALID_HANDLE)
+      return;
+
+   double atrBuf[1];
+   if(CopyBuffer(g_hATR, 0, 0, 1, atrBuf) != 1)
+      return;
+   double atr = atrBuf[0];
+   if(atr <= 0)
+      return;
+   double trailDist = atr * InpTrailATRMult;
+
+   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      if(PositionGetInteger(POSITION_MAGIC) != (long)magicTP2) continue;
+
+      double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
+      double curSL     = PositionGetDouble(POSITION_SL);
+      double curTP     = PositionGetDouble(POSITION_TP);
+      ENUM_POSITION_TYPE posType = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+
+      if(posType == POSITION_TYPE_BUY)
+      {
+         double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+         double newSL = NormalizeDouble(bid - trailDist, _Digits);
+         if(newSL > openPrice && newSL > curSL)
+            g_tradeTP2.PositionModify(ticket, newSL, curTP);
+      }
+      else if(posType == POSITION_TYPE_SELL)
+      {
+         double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+         double newSL = NormalizeDouble(ask + trailDist, _Digits);
+         if(newSL < openPrice && (curSL == 0 || newSL < curSL))
+            g_tradeTP2.PositionModify(ticket, newSL, curTP);
+      }
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -601,6 +760,10 @@ int OnInit()
 
    g_trade.SetExpertMagicNumber(InpMagicNumber);
    g_trade.SetDeviationInPoints(InpSlippage);
+   g_tradeTP2.SetExpertMagicNumber(InpMagicNumber + MAGIC_TP2_OFFSET);
+   g_tradeTP2.SetDeviationInPoints(InpSlippage);
+
+   g_hATR = iATR(Symbol(), Period(), InpTrailATRPeriod);
 
    if(!InpEnableAutoTrading)
       Print("[QuantEdge EA] SKELETON MODE — logging decisions only. Set InpEnableAutoTrading=true for live trading.");
@@ -619,6 +782,9 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnTick()
 {
+   ManageTrailing();
+   UpdateDailyLossTracking();
+
    // Poll for close commands from indicator's Manual Trading panel
    string closeGV = "QE_CloseCmd_" + Symbol();
    if(GlobalVariableCheck(closeGV))
@@ -628,7 +794,7 @@ void OnTick()
       if(cmd >= 0 && cmd <= 4)
       {
          Print("[QuantEdge EA] Close command received from indicator: criteria=", cmd);
-         ClosePositionsByCriteria(cmd, false); // indicator already confirmed — skip 2nd MessageBox
+         ClosePositionsByCriteria(cmd, false);
       }
    }
 
@@ -651,6 +817,7 @@ void OnTick()
    double entry     = ReadBuffer(BUF_ENTRY);
    double sl        = ReadBuffer(BUF_SL);
    double tp1       = ReadBuffer(BUF_TP1);
+   double tp2       = ReadBuffer(BUF_TP2);
    double recLevel  = ReadBuffer(BUF_REC_LEVEL);
    double confidence= ReadBuffer(BUF_REC_CONFIDENCE);
    double ev        = ReadBuffer(BUF_REC_EV);
@@ -694,12 +861,19 @@ void OnTick()
          g5_pass = false;
    }
 
-   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass;
+   // --- Gate 6: Session Filter ---
+   bool g6_pass = IsWithinSession();
+
+   // --- Gate 7: Daily Loss Cap ---
+   bool g7_pass = !IsDailyLossCapHit();
+
+   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass && g7_pass;
 
    string dirStr  = (direction > 0) ? "BUY" : "SELL";
-   string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s",
+   string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s",
       g1_pass?"PASS":"FAIL", g2_pass?"PASS":"FAIL", g3_pass?"PASS":"FAIL",
-      g4_pass?"PASS":"FAIL", g5_pass?"PASS":"FAIL");
+      g4_pass?"PASS":"FAIL", g5_pass?"PASS":"FAIL", g6_pass?"PASS":"FAIL",
+      g7_pass?"PASS":"FAIL");
 
    Print("[QuantEdge EA] ", dirStr, " Case=", caseNum,
          " Rec=", RecLevelName(recLevelInt), " Conf=", (int)MathRound(confidence),
@@ -719,28 +893,73 @@ void OnTick()
       return;
    }
 
+   double lotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
+   double minLot  = MathMax(SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN), InpMinLotSize);
+
    if(!InpEnableAutoTrading)
    {
-      Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot @ ",
-            DoubleToString(entry, _Digits), " SL=", DoubleToString(sl, _Digits),
-            " TP=", DoubleToString(tp1, _Digits), " — auto-trading OFF.");
+      if(InpUsePartialClose && tp2 != EMPTY_VALUE && tp2 > 0)
+         Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot (split TP1+TP2) @ ",
+               DoubleToString(entry, _Digits), " SL=", DoubleToString(sl, _Digits),
+               " TP1=", DoubleToString(tp1, _Digits), " TP2=", DoubleToString(tp2, _Digits),
+               " — auto-trading OFF.");
+      else
+         Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot @ ",
+               DoubleToString(entry, _Digits), " SL=", DoubleToString(sl, _Digits),
+               " TP=", DoubleToString(tp1, _Digits), " — auto-trading OFF.");
       return;
    }
 
-   // --- Place order ---
-   string comment = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
+   // --- Place order(s) ---
+   string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
+   bool   useSplit = InpUsePartialClose && tp2 != EMPTY_VALUE && tp2 > 0
+                     && lot >= minLot * 2.0;
 
-   bool result = false;
-   if(direction > 0)
-      result = g_trade.Buy(lot, Symbol(), 0, sl, tp1, comment);
-   else
-      result = g_trade.Sell(lot, Symbol(), 0, sl, tp1, comment);
+   if(useSplit)
+   {
+      double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
+      double lot2 = MathFloor(lot * (1.0 - InpTP1LotRatio) / lotStep) * lotStep;
+      lot1 = MathMax(lot1, minLot);
+      lot2 = MathMax(lot2, minLot);
+      lot1 = MathMin(lot1, InpMaxLotSize);
+      lot2 = MathMin(lot2, InpMaxLotSize);
 
-   if(!result)
-      Print("[QuantEdge EA] Order failed: ", g_trade.ResultRetcodeDescription());
+      string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
+
+      bool r1 = false, r2 = false;
+      if(direction > 0)
+      {
+         r1 = g_trade.Buy(lot1, Symbol(), 0, sl, tp1, comment1);
+         r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, sl, tp2, comment2);
+      }
+      else
+      {
+         r1 = g_trade.Sell(lot1, Symbol(), 0, sl, tp1, comment1);
+         r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, sl, tp2, comment2);
+      }
+
+      if(!r1) Print("[QuantEdge EA] TP1 order failed: ", g_trade.ResultRetcodeDescription());
+      else    Print("[QuantEdge EA] TP1 placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
+                    DoubleToString(lot1, 2), " lot");
+
+      if(!r2) Print("[QuantEdge EA] TP2 order failed: ", g_tradeTP2.ResultRetcodeDescription());
+      else    Print("[QuantEdge EA] TP2 placed: ticket=", g_tradeTP2.ResultOrder(), " ", dirStr, " ",
+                    DoubleToString(lot2, 2), " lot (trailing)");
+   }
    else
-      Print("[QuantEdge EA] Order placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
-            DoubleToString(lot, 2), " lot @ ", DoubleToString(g_trade.ResultPrice(), _Digits));
+   {
+      bool result = false;
+      if(direction > 0)
+         result = g_trade.Buy(lot, Symbol(), 0, sl, tp1, comment1);
+      else
+         result = g_trade.Sell(lot, Symbol(), 0, sl, tp1, comment1);
+
+      if(!result)
+         Print("[QuantEdge EA] Order failed: ", g_trade.ResultRetcodeDescription());
+      else
+         Print("[QuantEdge EA] Order placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
+               DoubleToString(lot, 2), " lot @ ", DoubleToString(g_trade.ResultPrice(), _Digits));
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -752,6 +971,11 @@ void OnDeinit(const int reason)
    {
       IndicatorRelease(g_hIndicator);
       g_hIndicator = INVALID_HANDLE;
+   }
+   if(g_hATR != INVALID_HANDLE)
+   {
+      IndicatorRelease(g_hATR);
+      g_hATR = INVALID_HANDLE;
    }
    QEEA_DeletePanel();
    Print("[QuantEdge EA] Deinit, reason=", reason);
