@@ -64,7 +64,7 @@ input int    InpMinRecLevel      = REC_WAIT;             // Min recommendation l
 input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
 input int    InpMinConfidence    = 0;                   // Min confidence score (0-100)
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
-input int    InpMaxSpreadPoints  = 30;                  // Max spread (points, 0=no check)
+input int    InpMaxSpreadPoints  = 0;                   // Max spread (points, 0=no check)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Session Filter                                        |
