@@ -714,10 +714,22 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   Print("[QuantEdge EA] === SETTINGS DUMP ===");
+   Print("[QuantEdge EA] AutoTrading=", InpEnableAutoTrading, " Magic=", InpMagicNumber);
+   Print("[QuantEdge EA] MinRecLevel=", InpMinRecLevel, " AllowCaution=", InpAllowCaution,
+         " MinConfidence=", InpMinConfidence, " MaxSurvivalFloor=", InpMaxSurvivalFloor,
+         " MaxSpread=", InpMaxSpreadPoints);
+   Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
+   Print("[QuantEdge EA] PartialClose=", InpUsePartialClose, " Trailing=", InpUseTrailing);
+   Print("[QuantEdge EA] ===================");
+
    if(!InpEnableAutoTrading)
-      Print("[QuantEdge EA] SKELETON MODE — logging decisions only. Set InpEnableAutoTrading=true for live trading.");
+   {
+      Print("[QuantEdge EA] *** WARNING: AutoTrading=OFF — no orders will be placed! Set InpEnableAutoTrading=true ***");
+      Comment("QuantEdge EA: AutoTrading OFF — no orders placed");
+   }
    else
-      Print("[QuantEdge EA] LIVE MODE — auto-trading enabled. Magic=", InpMagicNumber);
+      Print("[QuantEdge EA] LIVE MODE — auto-trading enabled.");
 
    QEEA_LoadPanelPosition();
    QEEA_CreatePanel();
