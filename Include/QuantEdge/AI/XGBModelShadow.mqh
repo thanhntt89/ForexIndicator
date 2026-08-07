@@ -328,14 +328,20 @@ double XGBPredictShadow(
    double spreadRatio,
    int    wfRobust,
    int    h4Trend,
-   int    h1Trend)
+   int    h1Trend,
+   // P2 additions (Advanced Features: ADX/MACD/US10Y) — mirrors
+   // XGBPredict()'s new trailing params to keep the two signatures identical.
+   double adxValue = 0.0,
+   double macdHistogram = 0.0,
+   double macdSlope = 0.0,
+   double us10yTrend = 0.0)
 {
    if(!g_xgbShadowLoaded) return(50.0);
 
    int modelIdx = XGBFindShadowModel(Symbol(), Period());
    if(modelIdx < 0) return(50.0);
 
-   double features[22];
+   double features[26];
    features[0]  = rsiAtSignal;
    features[1]  = angleZ;
    features[2]  = atrRatio;
@@ -357,6 +363,10 @@ double XGBPredictShadow(
    features[18] = MathCos(2.0 * M_PI * hour / 24.0);
    features[19] = MathSin(2.0 * M_PI * dow / 5.0);
    features[20] = MathCos(2.0 * M_PI * dow / 5.0);
+   features[21] = adxValue;
+   features[22] = macdHistogram;
+   features[23] = macdSlope;
+   features[24] = us10yTrend;
 
    double logit = 0.0;
    int treeStart = g_xgbShadowModels[modelIdx].treeStartIdx;

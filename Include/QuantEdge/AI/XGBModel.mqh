@@ -14,7 +14,7 @@
 #define XGB_MAX_MODELS        20
 #define XGB_MAX_TREES_TOTAL   2000
 #define XGB_MAX_NODES_TOTAL   100000
-#define XGB_NUM_FEATURES      22
+#define XGB_NUM_FEATURES      26
 #define XGB_MODEL_FILE        "QuantEdge_RSI\\XGBModels.bin"
 #define XGB_RELOAD_SECONDS    300
 
@@ -349,14 +349,21 @@ double XGBPredict(
    double spreadRatio,
    int    wfRobust,
    int    h4Trend,
-   int    h1Trend)
+   int    h1Trend,
+   // P2 additions (Advanced Features: ADX/MACD/US10Y). Default 0 keeps
+   // any pre-existing call site source-compatible and behaviorally
+   // identical (old model binaries never reference indices 21-25).
+   double adxValue = 0.0,
+   double macdHistogram = 0.0,
+   double macdSlope = 0.0,
+   double us10yTrend = 0.0)
 {
    if(!g_xgbLoaded) return(50.0);
 
    int modelIdx = XGBFindModel(Symbol(), Period());
    if(modelIdx < 0) return(50.0);
 
-   double features[22];
+   double features[26];
    features[0]  = rsiAtSignal;
    features[1]  = angleZ;
    features[2]  = atrRatio;
@@ -378,6 +385,10 @@ double XGBPredict(
    features[18] = MathCos(2.0 * M_PI * hour / 24.0);
    features[19] = MathSin(2.0 * M_PI * dow / 5.0);
    features[20] = MathCos(2.0 * M_PI * dow / 5.0);
+   features[21] = adxValue;
+   features[22] = macdHistogram;
+   features[23] = macdSlope;
+   features[24] = us10yTrend;
 
    double logit = 0.0;
    int treeStart = g_xgbModels[modelIdx].treeStartIdx;

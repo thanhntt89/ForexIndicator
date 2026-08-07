@@ -34,6 +34,8 @@ double XGBGetPrediction(const SignalData &sig,
    MqlDateTime sigDt;
    TimeToStruct(sig.signalTime, sigDt);
 
+   int adxMacdBarShift = Bars - 1 - sig.barIndex;
+
    return XGBPredict(
       sig.rsiAtSignal,
       sig.angleStrength,
@@ -53,7 +55,11 @@ double XGBGetPrediction(const SignalData &sig,
       g_spreadRegime.spreadRatio,
       g_walkForward.isRobust ? 1 : 0,
       SL_GetMTFTrendForTF(TF_H4),
-      SL_GetMTFTrendForTF(TF_H1)
+      SL_GetMTFTrendForTF(TF_H1),
+      InpUseADXFilter ? GetADXValue(adxMacdBarShift) : 0.0,
+      InpUseMACDFilter ? GetMACDHistogram(adxMacdBarShift) : 0.0,
+      InpUseMACDFilter ? GetMACDHistogramSlope(adxMacdBarShift) : 0.0,
+      g_us10y.isAvailable ? g_us10y.trend : 0.0
    );
 }
 
@@ -76,6 +82,8 @@ double XGBGetShadowPrediction(const SignalData &sig,
    MqlDateTime sigDt;
    TimeToStruct(sig.signalTime, sigDt);
 
+   int adxMacdBarShift = Bars - 1 - sig.barIndex;
+
    return XGBPredictShadow(
       sig.rsiAtSignal,
       sig.angleStrength,
@@ -95,7 +103,11 @@ double XGBGetShadowPrediction(const SignalData &sig,
       g_spreadRegime.spreadRatio,
       g_walkForward.isRobust ? 1 : 0,
       SL_GetMTFTrendForTF(TF_H4),
-      SL_GetMTFTrendForTF(TF_H1)
+      SL_GetMTFTrendForTF(TF_H1),
+      InpUseADXFilter ? GetADXValue(adxMacdBarShift) : 0.0,
+      InpUseMACDFilter ? GetMACDHistogram(adxMacdBarShift) : 0.0,
+      InpUseMACDFilter ? GetMACDHistogramSlope(adxMacdBarShift) : 0.0,
+      g_us10y.isAvailable ? g_us10y.trend : 0.0
    );
 }
 
