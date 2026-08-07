@@ -584,7 +584,12 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
                         int h4Trend,
                         int h1Trend,
                         int rawT1, int rawT2, int countT3, double realPct,
-                        double xgbProbTP1 = 0.0)
+                        double xgbProbTP1 = 0.0,
+                        // P2 additions (Advanced Features: ADX/MACD/US10Y):
+                        double adxValue = 0.0,
+                        double macdHistogram = 0.0,
+                        double macdSlope = 0.0,
+                        double us10yTrend = 0.0)
 {
    if(!InpEnableSignalLog || !s_loggerReady || IsBacktestMode()) return;
 
@@ -609,7 +614,12 @@ void LogScoringSnapshot(datetime signalTime, int caseNum, bool isBuy,
               + IntegerToString(rawT2)             + ","
               + IntegerToString(countT3)           + ","
               + DoubleToString(realPct, 1)         + ","
-              + DoubleToString(xgbProbTP1, 1);
+              + DoubleToString(xgbProbTP1, 1)      + ","
+              // P2 new columns:
+              + DoubleToString(adxValue, 2)        + ","
+              + DoubleToString(macdHistogram, 5)   + ","
+              + DoubleToString(macdSlope, 5)       + ","
+              + DoubleToString(us10yTrend, 3);
 
    QueueScoringRow(row);
 }
@@ -647,7 +657,8 @@ void FlushLogQueues()
       string header = "SIGNAL_ID,SCORE,REC_LEVEL,PROB_TP1,PROB_SL,PROB_N,EV,RR"
                       ",MTF_AGREE_PCT,MTF_TREND,ANGLE_Z,HOUR,DOW,SPREAD_RATIO,WF_ROBUST"
                       ",MTF_H4_TREND,MTF_H1_TREND,RAW_T1,RAW_T2,COUNT_T3,REAL_PCT"
-                      ",XGB_PROB_TP1";
+                      ",XGB_PROB_TP1"
+                      ",ADX_VALUE,MACD_HISTOGRAM,MACD_SLOPE,US10Y_TREND";
       bool isNew;
       int fh = SL_OpenAppend(SL_GetScoringPath(), header, isNew);
       if(fh != INVALID_HANDLE)

@@ -956,7 +956,11 @@ int OnCalculate(const int rates_total,
                SL_GetMTFTrendForTF(TF_H4), SL_GetMTFTrendForTF(TF_H1),
                g_currentProb.rawCountT1, g_currentProb.rawCountT2,
                g_currentProb.countT3, g_currentProb.realPct,
-               g_currentProb.xgbProbTP1);
+               g_currentProb.xgbProbTP1,
+               InpUseADXFilter ? GetADXValue(1) : 0.0,
+               InpUseMACDFilter ? GetMACDHistogram(1) : 0.0,
+               InpUseMACDFilter ? GetMACDHistogramSlope(1) : 0.0,
+               g_us10y.isAvailable ? g_us10y.trend : 0.0);
          }
 
          CalculatePositionSize();
