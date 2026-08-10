@@ -886,29 +886,38 @@ int OnCalculate(const int rates_total,
             s_zonesDrawn = false;
          bool needZoneRedraw = !s_zonesDrawn
                                || g_activeSignalIndex != s_lastDrawSignalIdx;
-         if(!suppressDisplay && needZoneRedraw)
+
+         // Virtual trade tracking must see EVERY new signal for accurate backtest
+         // stats, independent of whether display is suppressed (AVOID/WAIT/COUNTER_TREND).
+         static datetime s_lastVirtualSignalTime = 0;
+         bool isNewVirtualSignal = InpEnableVirtualTrades
+                                   && activeSig.signalTime != s_lastVirtualSignalTime;
+
+         // CalculateEntryZones() populates g_entryZones[], needed both for drawing
+         // and for OnNewSignal() (Pullback zone positions) below.
+         if(needZoneRedraw || isNewVirtualSignal)
          {
             CalculateEntryZones(
                activeSig.isBuySignal, activeSig.barIndex,
                activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
                activeSig.atrValue, high, low, rates_total,
                BufferOrange, BufferBBUpper, BufferBBLower);
+         }
+         if(!suppressDisplay && needZoneRedraw)
+         {
             DrawZoneLines(false);
             s_zonesDrawn = true;
-
-            if(InpEnableVirtualTrades)
-            {
-               static datetime s_lastVirtualSignalTime = 0;
-               if(activeSig.signalTime != s_lastVirtualSignalTime)
-               {
-                  if(s_lastVirtualSignalTime > 0)
-                     VP_CloseAllBySignal(s_lastVirtualSignalTime, MarketInfo(Symbol(), MODE_BID), MarketInfo(Symbol(), MODE_ASK));
-                  OnNewSignal(activeSig);
-                  s_lastVirtualSignalTime = activeSig.signalTime;
-               }
-            }
          }
-         else if(suppressDisplay && s_zonesDrawn)
+
+         if(isNewVirtualSignal)
+         {
+            if(s_lastVirtualSignalTime > 0)
+               VP_CloseAllBySignal(s_lastVirtualSignalTime, MarketInfo(Symbol(), MODE_BID), MarketInfo(Symbol(), MODE_ASK));
+            OnNewSignal(activeSig);
+            s_lastVirtualSignalTime = activeSig.signalTime;
+         }
+
+         if(suppressDisplay && s_zonesDrawn)
          {
             DeleteObjectsByPrefix(PREFIX_ZONE);
             s_zonesDrawn = false;
