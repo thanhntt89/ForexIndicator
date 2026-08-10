@@ -40,19 +40,19 @@
 
 ## Tasks
 
-| # | Task | Status | Files | Effort |
+| # | Task | Status | Files | Plan Doc |
 |---|---|---|---|---|
-| 6.1 | VirtualPosition struct + globals | `DONE` | `Structs.mqh`, `Globals.mqh` | 2h |
-| 6.2 | VirtualTradeTracker.mqh — core engine | `DONE` | `VirtualTradeTracker.mqh` (new) | 8h |
-| 6.3 | Virtual trade CSV logging | `DONE` | `SignalLogger.mqh` | 3h |
-| 6.4 | Chart history lines (OBJ_TREND) | `DONE` | `LineDrawing.mqh` | 2h |
-| 6.5 | Main file integration (OnTick + OnBarClose) | `DONE` | `QuantEdge_RSI.mq4/.mq5` | 2h |
-| 6.6 | Config inputs (Virtual History) | `DONE` | `Config.mqh` | 1h |
-| 6.7 | PerfReport panel section | `DONE` | `PanelDrawing.mqh` | 4h |
-| 6.8 | EA OnTester() hook | `DONE` | `Experts/QuantEdge_EA_Template.mq4/.mq5` | 3h |
-| 6.9 | Python offline backtest script | `DONE` | `tools/backtest_analyzer.py` (new) | 8h |
-| 6.10 | MQ4/MQ5 sync verify + compile — USER | `NOT STARTED` | *(user task)* | 2h |
-| 6.11 | Update MASTER_PLAN + this file | `DONE` | `MASTER_PLAN.md`, this file | 0.5h |
+| 6.1 | VirtualPosition struct + globals | `DONE` | `Structs.mqh`, `Globals.mqh` | [FILE_01](Sprint6/FILE_01_Structs.md), [FILE_02](Sprint6/FILE_02_Globals.md) |
+| 6.2 | VirtualTradeTracker.mqh — core engine | `DONE` | `VirtualTradeTracker.mqh` (new) | [FILE_04](Sprint6/FILE_04_VirtualTradeTracker.md) |
+| 6.3 | Virtual trade CSV logging | `DONE` | `SignalLogger.mqh` | [FILE_03](Sprint6/FILE_03_SignalLogger.md) |
+| 6.4 | Chart history lines (OBJ_TREND) | `DONE` | `LineDrawing.mqh` | [FILE_05](Sprint6/FILE_05_LineDrawing.md) |
+| 6.5 | Main file integration (OnTick + OnBarClose) | `DONE` | `QuantEdge_RSI.mq4/.mq5` | [FILE_06](Sprint6/FILE_06_MainFiles.md) |
+| 6.6 | Config inputs (Virtual History) | `DONE` | `Config.mqh` | [FILE_07](Sprint6/FILE_07_Config.md) |
+| 6.7 | PerfReport panel section | `DONE` | `PanelDrawing.mqh` | [FILE_08](Sprint6/FILE_08_PanelDrawing.md) |
+| 6.8 | EA OnTester() hook | `DONE` | `EA_Template.mq4/.mq5` | [FILE_09](Sprint6/FILE_09_EA_OnTester.md) |
+| 6.9 | Python offline backtest script | `DONE` | `backtest_analyzer.py` (new) | [FILE_10](Sprint6/FILE_10_BacktestAnalyzer.md) |
+| 6.10 | MQ4/MQ5 sync verify + compile — USER | `NOT STARTED` | *(user task)* | — |
+| 6.11 | Update MASTER_PLAN + this file | `DONE` | `MASTER_PLAN.md`, this file | — |
 
 ---
 
