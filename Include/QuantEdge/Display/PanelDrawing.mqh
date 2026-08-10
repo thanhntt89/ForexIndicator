@@ -1588,6 +1588,7 @@ void DrawManualPanel(int signalIndex)
    bool hasProb = hasSig && (InpShowProbability && (g_currentProb.totalSamples >= GetMinSamplesForTimeframe() || g_currentProb.probTP1 > 0));
    bool hasMTF = (InpShowMTF && g_mtfCount > 0);
    bool hasZones = false;
+   bool suppressZones = false;
    int visibleZones = 0;
    TradeRecommendation rec;
    bool isInvalidated = false;
@@ -1613,6 +1614,8 @@ void DrawManualPanel(int signalIndex)
          rec = GetTradeRecommendation(
             sig.caseNumber, isBuy, g_currentProb.probTP1, g_currentProb.probSL,
             recN, mtfAgree, slDist, tp1Dist, sig.atrValue, sig.signalTime);
+         if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
+            suppressZones = true;
       }
 
       hasZones = (InpEntryZoneCount >= 2 && g_validZoneCount >= 1 && !isInvalidated);
@@ -1631,10 +1634,15 @@ void DrawManualPanel(int signalIndex)
       calcY += lh;      // TP1
       calcY += lh;      // TP2
       calcY += lh;      // TP3
-      if(hasZones && visibleZones > 0)
+      if(hasZones && !suppressZones && visibleZones > 0)
       {
          calcY += 3;
          calcY += visibleZones * lh;
+      }
+      else if(hasZones && suppressZones)
+      {
+         calcY += 3;
+         calcY += lh;   // "Entry Zones: SUPPRESSED"
       }
       if(InpShowRiskSummary && !IsBacktestMode()) calcY += lh * 2;  // risk summary (2 lines, compact)
       if(InpShowVirtualPerf && !IsBacktestMode() && g_vpCount > 0)
@@ -1772,7 +1780,14 @@ void DrawManualPanel(int signalIndex)
       cy += lh;
 
       // Entry zones (compact)
-      if(hasZones && visibleZones > 0)
+      if(hasZones && suppressZones)
+      {
+         cy += 3;
+         CreateTextLabel(PREFIX_PANEL+"EZ_T", px+pad, cy,
+            "Entry Zones: SUPPRESSED", clrGray, fs-2, true);
+         cy += lh;
+      }
+      else if(hasZones && visibleZones > 0)
       {
          cy += 3;
          for(int z = 0; z < 5; z++)
