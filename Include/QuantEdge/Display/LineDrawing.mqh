@@ -293,4 +293,34 @@ void DrawZoneLines(bool suppress = false)
    }
 }
 
+//+------------------------------------------------------------------+
+//| Sprint 6: Virtual Trade History lines (OBJ_TREND, entry -> exit)  |
+//| Called only from Tier 2 (bar close), never per-tick.               |
+//| "VH_" prefix -> bulk cleanup via DeleteObjectsByPrefix("VH_").      |
+//| Not deleted on OnDeinit/fullRecalc — history lines are analysis    |
+//| data, must survive TF switches and indicator reloads.              |
+//+------------------------------------------------------------------+
+void CreateHistoryLine(string name, datetime t1, double p1, datetime t2, double p2,
+                        color clr, int width, int style)
+{
+   if(InpEAMode || !InpShowHistoryLines) return;
+   if(ObjectFind(name) >= 0) ObjectDelete(name);
+   ObjectCreate(name, OBJ_TREND, 0, t1, p1, t2, p2);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, width);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, style);
+   ObjectSetInteger(0, name, OBJPROP_RAY, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
+   ObjectSetInteger(0, name, OBJPROP_BACK, true);
+}
+
+void UpdateHistoryLineEnd(string name, datetime t2, double p2, color clr)
+{
+   if(InpEAMode || !InpShowHistoryLines) return;
+   if(ObjectFind(name) < 0) return;
+   ObjectMove(name, 1, t2, p2);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+}
+
 #endif

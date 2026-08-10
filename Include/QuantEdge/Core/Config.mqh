@@ -165,6 +165,18 @@ input color  InpZone4Color       = clrMediumOrchid;     // Zone 4 color
 input color  InpZone5Color       = clrHotPink; // Zone 5 color
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Virtual Trade History (Sprint 6)                      |
+//+------------------------------------------------------------------+
+input string inp_grp_vhist         = "========== Virtual Trade History =========="; // ---
+input bool   InpEnableVirtualTrades = true;            // Enable virtual trade tracking
+input bool   InpShowHistoryLines    = true;            // Draw history lines on chart
+input color  InpColorVirtualTP      = clrLime;         // TP line color
+input color  InpColorVirtualSL      = clrRed;          // SL line color
+input int    InpHistoryLineWidth    = 1;               // History line width
+input int    InpHistoryLineStyle    = 0;               // History line style (0=solid)
+input bool   InpShowVirtualPerf     = true;            // Show virtual performance on panel
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Info Panel                                            |
 //+------------------------------------------------------------------+
 input string inp_grp_panel      = "========== Info Panel =========="; // ---

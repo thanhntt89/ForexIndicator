@@ -191,6 +191,163 @@ void DrawRiskSummary(int px,int pad,int fs,int &cy,bool compact)
       cy += lh;
    }
 }
+
+//+------------------------------------------------------------------+
+//| Sprint 6: Virtual trade performance calculation + panel display   |
+//+------------------------------------------------------------------+
+VirtualPerfMetrics CalculateVirtualPerf()
+{
+   VirtualPerfMetrics m;
+   ZeroMemory(m);
+
+   double grossProfit = 0, grossLoss = 0;
+   double returns[];
+   int    retCount = 0;
+   int    mktWins = 0, mktTotal = 0, pbWins = 0, pbTotal = 0;
+   double cumPips = 0, peakPips = 0, maxDD = 0;
+   double sumWinRR = 0;
+
+   for(int i = 0; i < g_vpCount; i++)
+   {
+      if(g_virtualPositions[i].signalTime == 0)   continue;
+      if(g_virtualPositions[i].finalOutcome == 0)  continue;
+      if(!g_virtualPositions[i].isActivated)       continue;
+
+      double slDist = MathAbs(g_virtualPositions[i].entryPrice - g_virtualPositions[i].stopLoss);
+      if(slDist <= 0) continue;
+
+      m.totalTrades++;
+
+      double pnl;
+      if(g_virtualPositions[i].isBuy)
+         pnl = g_virtualPositions[i].closePrice - g_virtualPositions[i].entryPrice;
+      else
+         pnl = g_virtualPositions[i].entryPrice - g_virtualPositions[i].closePrice;
+
+      double rReturn = pnl / slDist;
+
+      bool isWin = (pnl > 0);
+      if(isWin)
+      {
+         m.wins++;
+         grossProfit += pnl;
+         sumWinRR += MathAbs(g_virtualPositions[i].takeProfit1 - g_virtualPositions[i].entryPrice) / slDist;
+      }
+      else
+      {
+         m.losses++;
+         grossLoss += MathAbs(pnl);
+      }
+
+      bool isMkt = (g_virtualPositions[i].zoneIndex == 0);
+      if(isMkt) { mktTotal++; if(isWin) mktWins++; }
+      else      { pbTotal++;  if(isWin) pbWins++;  }
+
+      ArrayResize(returns, retCount + 1, 32);
+      returns[retCount] = rReturn;
+      retCount++;
+
+      cumPips += pnl;
+      if(cumPips > peakPips) peakPips = cumPips;
+      double dd = peakPips - cumPips;
+      if(dd > maxDD) maxDD = dd;
+   }
+
+   if(m.totalTrades > 0)
+      m.winRate = (double)m.wins / m.totalTrades * 100.0;
+   m.profitFactor = (grossLoss > 0) ? grossProfit / grossLoss : 0;
+   if(peakPips > 0)
+      m.maxDrawdownPct = maxDD / peakPips * 100.0;
+   else if(maxDD > 0)
+      m.maxDrawdownPct = 100.0;
+   else
+      m.maxDrawdownPct = 0;
+   m.avgRR = (m.wins > 0) ? sumWinRR / m.wins : 0;
+   m.marketWinRate  = (mktTotal > 0) ? (double)mktWins / mktTotal * 100.0 : 0;
+   m.pullbackWinRate = (pbTotal > 0) ? (double)pbWins / pbTotal * 100.0 : 0;
+
+   if(retCount > 1)
+   {
+      double sumR = 0, sumR2 = 0, sumNeg2 = 0;
+      for(int j = 0; j < retCount; j++) sumR += returns[j];
+      double meanR = sumR / retCount;
+      for(int j = 0; j < retCount; j++)
+      {
+         double diff = returns[j] - meanR;
+         sumR2 += diff * diff;
+         if(returns[j] < 0) sumNeg2 += returns[j] * returns[j];
+      }
+      double stdR = MathSqrt(sumR2 / (retCount - 1));
+      double downDev = MathSqrt(sumNeg2 / retCount);
+      m.sharpe  = (stdR > 0) ? meanR / stdR : 0;
+      m.sortino = (downDev > 0) ? meanR / downDev : 0;
+      m.evPerTradeR = meanR;
+   }
+
+   return(m);
+}
+
+void DrawPerfReport(int px, int pad, int fs, int &cy, bool compact)
+{
+   if(!InpShowVirtualPerf || IsBacktestMode()) return;
+   if(g_vpCount == 0) return;
+
+   VirtualPerfMetrics pm = CalculateVirtualPerf();
+   if(pm.totalTrades == 0) return;
+
+   int lh = fs + 6;
+
+   if(!compact)
+   {
+      CreateTextLabel(PREFIX_PANEL+"VP_H", px+pad+3, cy,
+         "--- Virtual Perf ---", InpPanelDimColor, fs-2, false);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"VP1", px+pad+3, cy,
+         "Trades: "+IntegerToString(pm.totalTrades)+
+         " ("+IntegerToString(pm.wins)+"W "+IntegerToString(pm.losses)+"L)"
+         +" | WR: "+DoubleToString(pm.winRate,1)+"%",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"VP2", px+pad+3, cy,
+         "PF: "+DoubleToString(pm.profitFactor,2)+
+         " | Sharpe: "+DoubleToString(pm.sharpe,2)+
+         " | Sortino: "+DoubleToString(pm.sortino,2),
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"VP3", px+pad+3, cy,
+         "MaxDD: -"+DoubleToString(pm.maxDrawdownPct,1)+"%"+
+         " | Avg RR: "+DoubleToString(pm.avgRR,1)+
+         " | EV: "+(pm.evPerTradeR>=0?"+":"")+DoubleToString(pm.evPerTradeR,2)+"R",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"VP4", px+pad+3, cy,
+         "Market: "+DoubleToString(pm.marketWinRate,0)+"% WR"+
+         " | Pullback: "+DoubleToString(pm.pullbackWinRate,0)+"% WR",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+   }
+   else
+   {
+      CreateTextLabel(PREFIX_PANEL+"VP1", px+pad+3, cy,
+         IntegerToString(pm.totalTrades)+" trades "+
+         DoubleToString(pm.winRate,0)+"%WR PF:"+DoubleToString(pm.profitFactor,2)+
+         " DD:-"+DoubleToString(pm.maxDrawdownPct,1)+"%",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"VP2", px+pad+3, cy,
+         "Mkt:"+DoubleToString(pm.marketWinRate,0)+"%"+
+         " PB:"+DoubleToString(pm.pullbackWinRate,0)+"%"+
+         " EV:"+(pm.evPerTradeR>=0?"+":"")+DoubleToString(pm.evPerTradeR,2)+"R",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+   }
+}
+
 //+------------------------------------------------------------------+
 void DrawInfoPanel(int signalIndex)
 {
@@ -1330,6 +1487,7 @@ void DrawInfoPanel(int signalIndex)
       }
       // Risk summary (account + budget + suggested size)
       DrawRiskSummary(px, pad, fs, cy, false);
+      DrawPerfReport(px, pad, fs, cy, false);
    }
    //--- FOOTER ---
    CreateTextLabel(PREFIX_PANEL+"Z_F", px+pad, cy,
@@ -1623,6 +1781,7 @@ void DrawManualPanel(int signalIndex)
 
       // Risk summary (compact form)
       DrawRiskSummary(px, pad, fs, cy, true);
+      DrawPerfReport(px, pad, fs, cy, true);
    }
    else
    {

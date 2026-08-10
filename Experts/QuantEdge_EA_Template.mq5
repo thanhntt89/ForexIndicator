@@ -1149,4 +1149,58 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
    }
 }
+
+//+------------------------------------------------------------------+
+//| Sprint 6: Custom fitness for Strategy Tester optimizer             |
+//| Select "Custom max" in optimization settings to use this.         |
+//| Returns EV * sqrt(N) — rewards edge AND sample size together.     |
+//+------------------------------------------------------------------+
+double OnTester()
+{
+   int wins = 0, losses = 0;
+   double totalProfit = 0, totalLoss = 0;
+   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+
+   HistorySelect(0, TimeCurrent());
+   int totalDeals = HistoryDealsTotal();
+
+   for(int i = 0; i < totalDeals; i++)
+   {
+      ulong dealTicket = HistoryDealGetTicket(i);
+      if(dealTicket == 0) continue;
+
+      long dealEntry = HistoryDealGetInteger(dealTicket, DEAL_ENTRY);
+      if(dealEntry != DEAL_ENTRY_OUT) continue;
+
+      string dealSym = HistoryDealGetString(dealTicket, DEAL_SYMBOL);
+      if(dealSym != Symbol()) continue;
+
+      long dealMagic = HistoryDealGetInteger(dealTicket, DEAL_MAGIC);
+      if(dealMagic != (long)InpMagicNumber && dealMagic != (long)magicTP2) continue;
+
+      double pnl = HistoryDealGetDouble(dealTicket, DEAL_PROFIT)
+                  + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
+                  + HistoryDealGetDouble(dealTicket, DEAL_COMMISSION);
+      if(pnl >= 0)
+      {
+         wins++;
+         totalProfit += pnl;
+      }
+      else
+      {
+         losses++;
+         totalLoss += MathAbs(pnl);
+      }
+   }
+
+   int n = wins + losses;
+   if(n == 0) return(-999);
+
+   double wr     = (double)wins / n;
+   double avgWin = (wins > 0) ? totalProfit / wins : 0;
+   double avgLos = (losses > 0) ? totalLoss / losses : 0;
+   double ev     = wr * avgWin - (1.0 - wr) * avgLos;
+
+   return(ev * MathSqrt((double)n));
+}
 //+------------------------------------------------------------------+

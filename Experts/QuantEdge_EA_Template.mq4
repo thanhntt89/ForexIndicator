@@ -1090,4 +1090,47 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
          ChartSetInteger(0, CHART_MOUSE_SCROLL, true);
    }
 }
+
+//+------------------------------------------------------------------+
+//| Sprint 6: Custom fitness for Strategy Tester optimizer             |
+//| Select "Custom max" in optimization settings to use this.         |
+//| Returns EV * sqrt(N) — rewards edge AND sample size together.     |
+//+------------------------------------------------------------------+
+double OnTester()
+{
+   int wins = 0, losses = 0;
+   double totalProfit = 0, totalLoss = 0;
+   int magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+
+   for(int i = OrdersHistoryTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      int mag = OrderMagicNumber();
+      if(mag != InpMagicNumber && mag != magicTP2) continue;
+      if(OrderType() > OP_SELL) continue;
+
+      double pnl = OrderProfit() + OrderSwap() + OrderCommission();
+      if(pnl >= 0)
+      {
+         wins++;
+         totalProfit += pnl;
+      }
+      else
+      {
+         losses++;
+         totalLoss += MathAbs(pnl);
+      }
+   }
+
+   int n = wins + losses;
+   if(n == 0) return(-999);
+
+   double wr     = (double)wins / n;
+   double avgWin = (wins > 0) ? totalProfit / wins : 0;
+   double avgLos = (losses > 0) ? totalLoss / losses : 0;
+   double ev     = wr * avgWin - (1.0 - wr) * avgLos;
+
+   return(ev * MathSqrt((double)n));
+}
 //+------------------------------------------------------------------+

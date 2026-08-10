@@ -278,4 +278,13 @@ int    g_cfgZoneCount      = 3;
 int    g_cfgPriceDistLB    = 50;
 bool   g_cfgCaseEnabled[10];  // index 0-9 -> Case 0-9 (Case 9 = OB/OS crossover, raw)
 
+//+------------------------------------------------------------------+
+//| Sprint 6: Virtual Trade History globals                            |
+//| Fixed-size circular buffer, avoids ArrayResize at tick rate.       |
+//+------------------------------------------------------------------+
+#define MAX_VIRTUAL_POS 200
+VirtualPosition g_virtualPositions[MAX_VIRTUAL_POS];
+int             g_vpCount     = 0;   // positions currently occupying slots
+int             g_vpWriteHead = 0;   // circular overwrite pointer
+
 #endif

@@ -120,6 +120,7 @@ double BufferRecSuggestedRisk[];   // 24
 #include <QuantEdge/Display/PanelDrawing.mqh>
 #include <QuantEdge/Display/ChartEvents.mqh>
 #include <QuantEdge/Data/SignalLogger.mqh>
+#include <QuantEdge/Engine/VirtualTradeTracker.mqh>
 //+------------------------------------------------------------------+
 int OnInit()
 {
@@ -217,6 +218,7 @@ int OnInit()
    LoadPanelPosition();
    if(!InpEAMode) ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
+   InitVirtualCSV();
 
    // Apply auto TF config profile (scalping params per TF when InpAutoTFConfig=true)
    ApplyTFAutoConfig();
@@ -261,6 +263,7 @@ void OnDeinit(const int reason)
       FileDelete(SS_GetBinaryPath());
    }
    FlushLogQueues();
+   CloseVirtualCSV();
    // [PERF] Only release indicator handles on full remove/close Ã¢â‚¬â€ not TF switch.
    #ifdef __MQL5__
    if(reason == REASON_REMOVE || reason == REASON_CLOSE)
@@ -726,6 +729,8 @@ int OnCalculate(const int rates_total,
    PublishEconBlackoutState();
    CheckPendingOutcomes();
    CheckAndLogNewlyResolved(); // Log resolved outcomes to CSV
+   if(InpEnableVirtualTrades)
+      UpdateVirtualPositions_Tick(MarketInfo(Symbol(), MODE_BID), MarketInfo(Symbol(), MODE_ASK));
 
    // Heavy: only per new bar
    if(isNewBar)
@@ -733,6 +738,8 @@ int OnCalculate(const int rates_total,
       UpdateSpreadRegime();
       s_lastBarTime = currentBarTime;
       FlushLogQueues(); // Flush any live-queued signals/outcomes to CSV
+      if(InpEnableVirtualTrades)
+         UpdateVirtualPositions_OnBar();
       UpdateSessionStats();
       CalculateRollingPerformance();
       CalculateWalkForwardMetrics();
@@ -888,6 +895,18 @@ int OnCalculate(const int rates_total,
                BufferOrange, BufferBBUpper, BufferBBLower);
             DrawZoneLines(false);
             s_zonesDrawn = true;
+
+            if(InpEnableVirtualTrades)
+            {
+               static datetime s_lastVirtualSignalTime = 0;
+               if(activeSig.signalTime != s_lastVirtualSignalTime)
+               {
+                  if(s_lastVirtualSignalTime > 0)
+                     VP_CloseAllBySignal(s_lastVirtualSignalTime, MarketInfo(Symbol(), MODE_BID), MarketInfo(Symbol(), MODE_ASK));
+                  OnNewSignal(activeSig);
+                  s_lastVirtualSignalTime = activeSig.signalTime;
+               }
+            }
          }
          else if(suppressDisplay && s_zonesDrawn)
          {

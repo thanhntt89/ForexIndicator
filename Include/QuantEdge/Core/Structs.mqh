@@ -326,4 +326,58 @@ struct PortfolioRisk
    double   rollingMaxDD;
 };
 
+//+------------------------------------------------------------------+
+//| Sprint 6: Virtual Trade History (backtest simulation)              |
+//+------------------------------------------------------------------+
+
+struct VirtualPosition
+{
+   // --- Identity (set once at creation, composite key not array index) ---
+   datetime signalTime;
+   int      signalCaseNum;
+   int      zoneIndex;      // 0=Market, 1-4=Pullback zones
+   string   entryType;      // "Market", "PB-Zone2", etc (copied from EntryZone.zoneName)
+   double   entryPrice;
+   double   stopLoss;
+   double   takeProfit1;
+   double   takeProfit2;
+   double   takeProfit3;
+   bool     isBuy;
+   string   sessionName;
+
+   // --- Lifetime state (mutated tick-by-tick / bar-by-bar) ---
+   bool     isActivated;    // Market: true immediately; Pullback: true once price touches zone
+   datetime activationTime;
+   int      activationBar;
+   int      maxTPReached;   // 0-3, monotonic high-water mark (never decreases)
+   datetime tpTime[4];      // index 0 unused, [1..3] = time TP level was first reached
+   int      finalOutcome;   // 0=pending, 1=TP, -1=SL, -2=Reversal
+   datetime outcomeTime;
+   double   closePrice;
+   double   mfe;            // Max favorable excursion, price units from entryPrice
+   double   mae;            // Max adverse excursion, price units from entryPrice
+
+   // --- Tier1 -> Tier2 handoff flags ---
+   bool     needsRedraw;
+   bool     needsLog;
+   bool     historyDrawn;
+   string   objectName;
+};
+
+struct VirtualPerfMetrics
+{
+   int    totalTrades;
+   int    wins;
+   int    losses;
+   double winRate;
+   double profitFactor;
+   double sharpe;
+   double sortino;
+   double maxDrawdownPct;
+   double avgRR;
+   double evPerTradeR;
+   double marketWinRate;
+   double pullbackWinRate;
+};
+
 #endif

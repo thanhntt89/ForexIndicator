@@ -31,8 +31,8 @@ Sprint 6 ── Backtest Engine (optional) ───────── 2 tuần
 | Sprint 2: Signal Interface | `DONE` | 2026-07-31 | 2026-07-31 | [SPRINT_2_SIGNAL_INTERFACE.md](SPRINT_2_SIGNAL_INTERFACE.md) |
 | Sprint 3: Export API | `DONE` | 2026-08-05 | 2026-08-05 | [SPRINT_3_EXPORT_API.md](SPRINT_3_EXPORT_API.md) |
 | Sprint 4: XGB Versioning+SHAP+Shadow | `DONE` | 2026-08-06 | 2026-08-06 | [SPRINT_4_XGB_AUTOTRAIN.md](SPRINT_4_XGB_AUTOTRAIN.md) |
-| Sprint 5: Enhanced UX | `IN PROGRESS` | 2026-08-10 | — | [SPRINT_5_ENHANCED_UX.md](SPRINT_5_ENHANCED_UX.md) |
-| Sprint 6: Backtest | `PLANNED` | — | — | [SPRINT_6_BACKTEST.md](SPRINT_6_BACKTEST.md) |
+| Sprint 5: Enhanced UX | `DONE` | 2026-08-10 | 2026-08-10 | [SPRINT_5_ENHANCED_UX.md](SPRINT_5_ENHANCED_UX.md) |
+| Sprint 6: Backtest | `CODE COMPLETE` | 2026-08-10 | 2026-08-10 | [SPRINT_6_BACKTEST.md](SPRINT_6_BACKTEST.md) |
 
 ---
 

@@ -690,4 +690,114 @@ void FlushLogQueues()
    }
 }
 
+//+------------------------------------------------------------------+
+//| Sprint 6: Virtual Trade History CSV logging                       |
+//| Persistent handle (unlike above queues) — virtual trades close     |
+//| far more often than real signals, so open/close per flush would    |
+//| thrash I/O. Enabled even in Strategy Tester: virtual trades ARE    |
+//| the backtest data.                                                  |
+//+------------------------------------------------------------------+
+static int  s_vhFileHandle  = INVALID_HANDLE;
+static bool s_vhHeaderOK    = false;
+static int  s_vhPendingCount = 0;
+#define VH_FLUSH_EVERY 10
+
+string VH_GetPath()
+{
+   MqlDateTime dt;
+   TimeToStruct(TimeCurrent(), dt);
+   return(InpLogFolder + "\\virtual_trades_"
+          + Symbol() + "_" + SL_GetTFName()
+          + "_" + IntegerToString(dt.year) + ".csv");
+}
+
+double PriceToPips(double priceUnits)
+{
+   double pip = SL_PipSize();
+   if(pip <= 0) return(0);
+   return(NormalizeDouble(priceUnits / pip, 1));
+}
+
+void InitVirtualCSV()
+{
+   if(!InpEnableVirtualTrades) return;
+
+   FolderCreate(InpLogFolder);
+
+   string header = "SIGNAL_ID,SYMBOL,TF,SIGNAL_TIME,CASE_NUM,CASE_NAME,DIR,SESSION"
+                   ",ENTRY_TYPE,ENTRY_PRICE,ACTIVATION_TIME"
+                   ",SL,TP1,TP2,TP3,ATR"
+                   ",MAX_TP_REACHED,FINAL_OUTCOME,OUTCOME_TIME"
+                   ",EXIT_PRICE,BARS_HELD,MFE_PIPS,MAE_PIPS,RR_RATIO";
+
+   bool isNew;
+   s_vhFileHandle = SL_OpenAppend(VH_GetPath(), header, isNew);
+   s_vhHeaderOK   = (s_vhFileHandle != INVALID_HANDLE);
+}
+
+void AppendVirtualTradeLog(const VirtualPosition &pos, double atr)
+{
+   if(!InpEnableVirtualTrades || !s_vhHeaderOK || s_vhFileHandle == INVALID_HANDLE) return;
+
+   string outcomeStr;
+   if(pos.finalOutcome == 1)       outcomeStr = "TP";
+   else if(pos.finalOutcome == -1) outcomeStr = "SL";
+   else if(pos.finalOutcome == -2) outcomeStr = "REVERSAL";
+   else                             outcomeStr = "PENDING";
+
+   int barsHeld = 0;
+   if(pos.outcomeTime > 0 && pos.activationTime > 0)
+      barsHeld = (int)MathRound(
+         (double)(pos.outcomeTime - pos.activationTime) / (double)PeriodSeconds(PERIOD_CURRENT));
+
+   double slDist  = MathAbs(pos.entryPrice - pos.stopLoss);
+   double tp1Dist = MathAbs(pos.takeProfit1 - pos.entryPrice);
+   double rrRatio = (slDist > 0) ? NormalizeDouble(tp1Dist / slDist, 3) : -1;
+
+   string row = SL_BuildSignalID(pos.signalCaseNum, pos.isBuy, pos.signalTime) + ","
+              + Symbol()                                + ","
+              + SL_GetTFName()                          + ","
+              + SL_FmtDT(pos.signalTime)                + ","
+              + IntegerToString(pos.signalCaseNum)       + ","
+              + SL_GetCaseName(pos.signalCaseNum)        + ","
+              + (pos.isBuy ? "BUY" : "SELL")             + ","
+              + pos.sessionName                          + ","
+              + pos.entryType                            + ","
+              + DoubleToString(pos.entryPrice, _Digits)  + ","
+              + SL_FmtDT(pos.activationTime)             + ","
+              + DoubleToString(pos.stopLoss, _Digits)    + ","
+              + DoubleToString(pos.takeProfit1, _Digits) + ","
+              + DoubleToString(pos.takeProfit2, _Digits) + ","
+              + DoubleToString(pos.takeProfit3, _Digits) + ","
+              + DoubleToString(atr, _Digits)             + ","
+              + IntegerToString(pos.maxTPReached)         + ","
+              + outcomeStr                                + ","
+              + SL_FmtDT(pos.outcomeTime)                + ","
+              + DoubleToString(pos.closePrice, _Digits)  + ","
+              + IntegerToString(barsHeld)                 + ","
+              + DoubleToString(PriceToPips(pos.mfe), 1)  + ","
+              + DoubleToString(PriceToPips(pos.mae), 1)  + ","
+              + DoubleToString(rrRatio, 3);
+
+   FileWriteString(s_vhFileHandle, row + "\n");
+   s_vhPendingCount++;
+}
+
+void FlushPendingCSVLogs()
+{
+   if(s_vhFileHandle == INVALID_HANDLE || s_vhPendingCount == 0) return;
+   if(s_vhPendingCount < VH_FLUSH_EVERY) return;
+   FileFlush(s_vhFileHandle);
+   s_vhPendingCount = 0;
+}
+
+void CloseVirtualCSV()
+{
+   if(s_vhFileHandle == INVALID_HANDLE) return;
+   FileFlush(s_vhFileHandle);
+   FileClose(s_vhFileHandle);
+   s_vhFileHandle = INVALID_HANDLE;
+   s_vhHeaderOK   = false;
+}
+
 #endif
