@@ -92,7 +92,7 @@ void DrawTDSLine(int px,int pad,int fs,int &cy,bool hasSig,const SignalData &sig
    else if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND)  tdsClr = clrRed;
    string tdsText = dirTxt+" "+DoubleToString(g_positionSize.recommendedLot,2)+" lot @ "+
       DoubleToString(entry,_Digits)+" | "+DoubleToString(g_currentProb.probTP1,0)+"% TP1 | EV "+
-      (rec.ev>=0?"+":"")+DoubleToString(rec.ev,1)+"R | Kelly "+DoubleToString(g_positionSize.kellyPct,0)+
+      (rec.ev>=0?"+":"")+DoubleToString(rec.ev,1)+"R | Risk "+DoubleToString(g_positionSize.adjustedRiskPct,1)+
       "% -> "+rec.label;
    CreateTextLabel(PREFIX_PANEL+"TDS", px+pad, cy, tdsText, tdsClr, fs, true);
    cy += fs+6;
