@@ -319,7 +319,7 @@ void UpdateHistoryLineEnd(string name, datetime t2, double p2, color clr)
 {
    if(InpEAMode || !InpShowHistoryLines) return;
    if(ObjectFind(name) < 0) return;
-   ObjectMove(name, 1, t2, p2);
+   ObjectMove(0, name, 1, t2, p2);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
 }
 
