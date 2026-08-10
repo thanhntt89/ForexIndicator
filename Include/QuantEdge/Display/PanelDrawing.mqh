@@ -70,6 +70,128 @@ void CreateTextLabel(string name,int x,int y,string text,color clr,int fs,bool b
    ObjectSetInteger(0,name,OBJPROP_HIDDEN,true);
 }
 //+------------------------------------------------------------------+
+//| Trade Decision Summary — one line, trader reads it and knows      |
+//| whether to enter. hasSig=false draws the neutral placeholder.     |
+//+------------------------------------------------------------------+
+void DrawTDSLine(int px,int pad,int fs,int &cy,bool hasSig,const SignalData &sig,
+                  const TradeRecommendation &rec)
+{
+   if(!InpShowTDS) return;
+   if(!hasSig)
+   {
+      CreateTextLabel(PREFIX_PANEL+"TDS", px+pad, cy, "-- No Active Signal --", clrGray, fs, true);
+      cy += fs+6;
+      return;
+   }
+   string dirTxt = sig.isBuySignal ? "BUY" : "SELL";
+   double entry = (g_entryZones[0].isValid) ? g_entryZones[0].price : sig.entryPrice;
+   color tdsClr = clrGray;
+   if(rec.level == REC_STRONG_ENTRY || rec.level == REC_ENTRY)        tdsClr = clrLime;
+   else if(rec.level == REC_CAUTION_ENTRY)                            tdsClr = clrYellow;
+   else if(rec.level == REC_WAIT)                                     tdsClr = clrOrange;
+   else if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND)  tdsClr = clrRed;
+   string tdsText = dirTxt+" "+DoubleToString(g_positionSize.recommendedLot,2)+" lot @ "+
+      DoubleToString(entry,_Digits)+" | "+DoubleToString(g_currentProb.probTP1,0)+"% TP1 | EV "+
+      (rec.ev>=0?"+":"")+DoubleToString(rec.ev,1)+"R | Kelly "+DoubleToString(g_positionSize.kellyPct,0)+
+      "% -> "+rec.label;
+   CreateTextLabel(PREFIX_PANEL+"TDS", px+pad, cy, tdsText, tdsClr, fs, true);
+   cy += fs+6;
+}
+//+------------------------------------------------------------------+
+//| Quick Attribution Bar — compact 1-line probability waterfall,     |
+//| same source data as DrawExplainPanel() but summarized to 5 steps. |
+//+------------------------------------------------------------------+
+void DrawAttributionBar(int px,int pad,int fs,int &cy)
+{
+   if(!InpShowAttribution) return;
+   ExplainData e = g_explainData;
+   double dMTF   = e.probAfterMTF   - e.probAfterBase;
+   double dInter = e.probAfterInter - e.probAfterMTF;
+   double dVol   = e.probAfterMktSt - e.probAfterInter;
+   double dBrier = e.probAfterBrier - e.probAfterMktSt;
+   double dDecay = e.probFinal      - e.probAfterBrier;
+   string attrText = "Edge "+DoubleToString(e.probAfterBase,0)+"%"+
+      " -> MTF "+(dMTF>=0?"+":"")+DoubleToString(dMTF,0)+"%"+
+      " -> Inter "+(dInter>=0?"+":"")+DoubleToString(dInter,0)+"%"+
+      " -> Vol "+(dVol>=0?"+":"")+DoubleToString(dVol,0)+"%"+
+      " -> Brier "+(dBrier>=0?"+":"")+DoubleToString(dBrier,0)+"%"+
+      " -> Decay "+(dDecay>=0?"+":"")+DoubleToString(dDecay,0)+"%"+
+      " = "+DoubleToString(e.probFinal,0)+"%";
+   CreateTextLabel(PREFIX_PANEL+"ATTR", px+pad, cy, attrText, InpPanelDimColor, fs-2, false);
+   cy += fs+6;
+}
+//+------------------------------------------------------------------+
+//| Confidence Meter — visual rectangle bar replacing text-art.       |
+//+------------------------------------------------------------------+
+void DrawConfidenceMeter(int px,int pad,int y,int width,int confidence)
+{
+   color fillClr = clrRed;
+   if(confidence >= 70)      fillClr = clrLime;
+   else if(confidence >= 50) fillClr = clrYellow;
+   else if(confidence >= 30) fillClr = clrOrange;
+   int fillW = (int)MathRound(width * MathMax(0,MathMin(100,confidence)) / 100.0);
+   CreateRectangleLabel(PREFIX_PANEL+"CONF_BG",   px+pad, y, width, 14, clrDarkSlateGray, clrDarkSlateGray);
+   CreateRectangleLabel(PREFIX_PANEL+"CONF_FILL", px+pad, y, fillW, 14, fillClr, fillClr);
+   CreateTextLabel(PREFIX_PANEL+"CONF_TXT", px+pad+width+6, y-2,
+      IntegerToString(confidence)+"/100", InpPanelTextColor, 8, false);
+}
+//+------------------------------------------------------------------+
+//| Risk Summary — account state + risk budget + suggested size.      |
+//| compact=true renders the 2-line Manual-panel form.                |
+//+------------------------------------------------------------------+
+void DrawRiskSummary(int px,int pad,int fs,int &cy,bool compact)
+{
+   if(!InpShowRiskSummary || IsBacktestMode()) return;
+   int lh = fs+6;
+   int    cbLvl  = g_portfolioRisk.cbLevel;
+   string cbTag  = "GREEN"; color cbClr = clrLime;
+   if(cbLvl == 1)      { cbTag = "YELLOW"; cbClr = clrYellow; }
+   else if(cbLvl == 2) { cbTag = "ORANGE"; cbClr = clrOrange; }
+   else if(cbLvl == 3) { cbTag = "RED";    cbClr = clrRed;    }
+   double budgetLeft = InpMaxDailyRiskPct - g_portfolioRisk.dailyDrawdownPct;
+
+   if(!compact)
+   {
+      double bal = AccountBalance();
+      CreateTextLabel(PREFIX_PANEL+"RISK1", px+pad+3, cy,
+         "Account: $"+DoubleToString(bal,2)+" | Today: "+
+         (g_portfolioRisk.dailyPnLPips>=0?"+":"")+DoubleToString(g_portfolioRisk.dailyPnLPips,1)+" pips",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+
+      string rk2 = "Risk Budget: "+DoubleToString(budgetLeft,2)+"% remaining | Circuit: "+cbTag;
+      if(g_portfolioRisk.circuitBreakerActive)
+         rk2 = "CIRCUIT BREAKER - signals blocked [RED]";
+      CreateTextLabel(PREFIX_PANEL+"RISK2", px+pad+3, cy, rk2, cbClr, fs-2, false);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"RISK3", px+pad+3, cy,
+         "Suggested: "+DoubleToString(g_positionSize.recommendedLot,2)+" lot ("+
+         DoubleToString(g_positionSize.adjustedRiskPct,1)+"% risk) | Kelly: "+
+         DoubleToString(g_positionSize.kellyPct,0)+"%",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+   }
+   else
+   {
+      double bal = AccountBalance();
+      CreateTextLabel(PREFIX_PANEL+"RISK1", px+pad+3, cy,
+         "$"+DoubleToString(bal,0)+" | Today "+
+         (g_portfolioRisk.dailyPnLPips>=0?"+":"")+DoubleToString(g_portfolioRisk.dailyPnLPips,0)+
+         "pips | Budget "+DoubleToString(budgetLeft,1)+"% | Circuit "+
+         (g_portfolioRisk.circuitBreakerActive?"BLOCKED":cbTag),
+         cbClr, fs-2, false);
+      cy += lh;
+
+      CreateTextLabel(PREFIX_PANEL+"RISK2", px+pad+3, cy,
+         DoubleToString(g_positionSize.recommendedLot,2)+" lot ("+
+         DoubleToString(g_positionSize.adjustedRiskPct,1)+"%) | Kelly: "+
+         DoubleToString(g_positionSize.kellyPct,0)+"%",
+         InpPanelTextColor, fs-2, false);
+      cy += lh;
+   }
+}
+//+------------------------------------------------------------------+
 void DrawInfoPanel(int signalIndex)
 {
    if(InpEAMode || !InpShowPanel) return;
@@ -377,6 +499,8 @@ void DrawInfoPanel(int signalIndex)
    // ============================================
    int calcY = 0;
    calcY += titleBarH + 2;
+   if(InpShowTDS)                        calcY += lh;  // TDS line (or invalidated placeholder)
+   if(InpShowAttribution && !isInvalidated) calcY += lh;  // Attribution bar (hidden when invalidated)
    calcY += lh;
    calcY += detailCount * (lh - 2) + 2;
    calcY += lh;
@@ -386,6 +510,7 @@ void DrawInfoPanel(int signalIndex)
    calcY += 3;
    calcY += lh;
    calcY += lh;
+   if(!isInvalidated) calcY += lh;  // confidence meter row
    calcY += 3;
    calcY += lh;
    calcY += lh;
@@ -449,8 +574,7 @@ void DrawInfoPanel(int signalIndex)
       // Compare against 240 (minutes) for cross-platform compatibility.
       if(Period() >= TF_H4) calcY += lh;
       if(g_brierMetrics.samples >= 5) calcY += lh;
-      calcY += lh;  // portfolio risk line 1
-      calcY += lh;  // portfolio risk line 2 (DD scale)
+      if(InpShowRiskSummary && !IsBacktestMode()) calcY += lh * 3;  // risk summary (3 lines, full mode)
    }
    calcY += lh + 4;
    int totalH = calcY;
@@ -504,6 +628,9 @@ void DrawInfoPanel(int signalIndex)
    }
    CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText, titleClr, fs+1, true);
    cy += titleBarH + 2 - 3;
+   //--- TDS + ATTRIBUTION ---
+   DrawTDSLine(px, pad, fs, cy, !isInvalidated, sig, rec);
+   if(!isInvalidated) DrawAttributionBar(px, pad, fs, cy);
    //--- CASE ---
    CreateTextLabel(PREFIX_PANEL+"2_C", px+pad, cy,
       "Case "+IntegerToString(sig.caseNumber)+": "+GetCaseName(sig.caseNumber),
@@ -566,8 +693,10 @@ void DrawInfoPanel(int signalIndex)
    else
    {
       CreateTextLabel(PREFIX_PANEL+"4_R", px+pad, cy,
-         ">> "+rec.label+" <<  ["+IntegerToString(rec.confidence)+"/100]",
+         ">> "+rec.label+" <<",
          rec.labelColor, fs+1, true);
+      cy += lh;
+      DrawConfidenceMeter(px, pad, cy, 80, rec.confidence);
       cy += lh;
       string riskReason = "";
       if(rec.suggestedRisk > 0) riskReason = "Risk:"+DoubleToString(rec.suggestedRisk,1)+"% | ";
@@ -1199,45 +1328,8 @@ void DrawInfoPanel(int signalIndex)
          CreateTextLabel(PREFIX_PANEL+"V_BR", px+pad+3, cy, brText, brClr, fs-2, false);
          cy += lh;
       }
-      // Portfolio risk display
-      {
-         double riskPct = g_portfolioRisk.totalExposurePct;
-         double maxRisk = g_portfolioRisk.maxExposurePct;
-         double ddPct   = g_portfolioRisk.dailyDrawdownPct;
-         int    trades  = g_portfolioRisk.dailyTradeCount;
-         int    maxTr   = g_portfolioRisk.maxDailyTrades;
-         int    cbLvl   = g_portfolioRisk.cbLevel;
-
-         string cbTag = "GREEN";
-         color  cbClr = clrLime;
-         if(cbLvl == 1)      { cbTag = "YELLOW"; cbClr = clrYellow; }
-         else if(cbLvl == 2) { cbTag = "ORANGE"; cbClr = clrOrange; }
-         else if(cbLvl == 3) { cbTag = "RED";    cbClr = clrRed;    }
-
-         string rkLine1 = "Risk:" + DoubleToString(riskPct, 1) + "/" + DoubleToString(maxRisk, 1) + "%"
-                        + " T:" + IntegerToString(trades) + "/" + IntegerToString(maxTr)
-                        + " [" + cbTag + "]";
-         if(g_portfolioRisk.circuitBreakerActive)
-         {
-            rkLine1 = "CIRCUIT BREAKER - signals blocked [RED]";
-            cbClr = clrRed;
-         }
-         CreateTextLabel(PREFIX_PANEL+"V_RK", px+pad+3, cy, rkLine1, cbClr, fs-2, false);
-         cy += lh;
-
-         double ddScl = g_portfolioRisk.ddScale;
-         string rkLine2 = "DD:" + DoubleToString(ddPct, 1) + "%"
-                        + " Scale:" + DoubleToString(ddScl * 100, 0) + "%";
-         if(g_positionSize.recommendedLot > 0)
-            rkLine2 += " Lot:" + DoubleToString(g_positionSize.recommendedLot, 2);
-         if(InpUseQualityAlloc && g_positionSize.qualityScale != 1.0)
-            rkLine2 += " Q:" + DoubleToString(g_positionSize.qualityScale, 2) + "x";
-         color ddClr = cbClr;
-         if(!g_portfolioRisk.circuitBreakerActive && ddPct < InpDDYellowPct)
-            ddClr = InpPanelTextColor;
-         CreateTextLabel(PREFIX_PANEL+"V_RK2", px+pad+3, cy, rkLine2, ddClr, fs-2, false);
-         cy += lh;
-      }
+      // Risk summary (account + budget + suggested size)
+      DrawRiskSummary(px, pad, fs, cy, false);
    }
    //--- FOOTER ---
    CreateTextLabel(PREFIX_PANEL+"Z_F", px+pad, cy,
@@ -1365,7 +1457,10 @@ void DrawManualPanel(int signalIndex)
             if(g_entryZones[z].isValid) visibleZones++;
 
       calcY += lh;      // signal banner
-      calcY += lh;      // recommendation + confidence
+      calcY += lh;      // recommendation label
+      if(!isInvalidated) calcY += lh;  // confidence meter row
+      if(InpShowTDS)                          calcY += lh;  // TDS line (or invalidated placeholder)
+      if(InpShowAttribution && !isInvalidated) calcY += lh;  // Attribution bar (hidden when invalidated)
       calcY += 3;
       calcY += lh;      // Entry
       calcY += lh;      // SL
@@ -1377,6 +1472,7 @@ void DrawManualPanel(int signalIndex)
          calcY += 3;
          calcY += visibleZones * lh;
       }
+      if(InpShowRiskSummary && !IsBacktestMode()) calcY += lh * 2;  // risk summary (2 lines, compact)
    }
    else
    {
@@ -1454,15 +1550,18 @@ void DrawManualPanel(int signalIndex)
       }
       else
       {
-         string confBar = "";
-         int barLen = rec.confidence / 10;
-         for(int b = 0; b < 10; b++)
-            confBar += (b < barLen) ? "|" : ".";
-         CreateTextLabel(PREFIX_PANEL+"2_REC", px+pad, cy,
-            rec.label + "  [" + confBar + "] " + IntegerToString(rec.confidence) + "%",
-            rec.labelColor, fs, true);
+         CreateTextLabel(PREFIX_PANEL+"2_REC", px+pad, cy, rec.label, rec.labelColor, fs, true);
       }
       cy += lh;
+      if(!isInvalidated)
+      {
+         DrawConfidenceMeter(px, pad, cy, 80, rec.confidence);
+         cy += lh;
+      }
+
+      // TDS + Attribution
+      DrawTDSLine(px, pad, fs, cy, !isInvalidated, sig, rec);
+      if(!isInvalidated) DrawAttributionBar(px, pad, fs, cy);
 
       // Price levels
       cy += 3;
@@ -1521,6 +1620,9 @@ void DrawManualPanel(int signalIndex)
             cy += lh;
          }
       }
+
+      // Risk summary (compact form)
+      DrawRiskSummary(px, pad, fs, cy, true);
    }
    else
    {

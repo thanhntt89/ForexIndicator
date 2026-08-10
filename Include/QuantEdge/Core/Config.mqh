@@ -170,6 +170,9 @@ input color  InpZone5Color       = clrHotPink; // Zone 5 color
 input string inp_grp_panel      = "========== Info Panel =========="; // ---
 input bool   InpShowPanel       = true;           // Show info panel
 input ENUM_DASHBOARD_MODE InpDashboardMode = DASHBOARD_FULL; // Dashboard mode (Full / Manual Trading)
+input bool   InpShowTDS         = true;           // Show Trade Decision Summary line
+input bool   InpShowAttribution = true;           // Show probability attribution bar
+input bool   InpShowRiskSummary = true;           // Show risk summary section
 input int    InpPanelDefaultX   = 20;             // Panel default X
 input int    InpPanelDefaultY   = 60;             // Panel default Y
 input int    InpPanelWidth      = 330;            // Panel width
@@ -207,7 +210,7 @@ input ENUM_PROB_MODE InpProbMode  = PROB_CALIBRATION;  // Probability Mode (Cali
 input int    InpProbMaxBars       = 1000;          // Max bars for probability scan
 input color  InpProbTextColor     = clrWhite;      // Probability text color
 input int    InpProbFontSize      = 8;             // Probability font size
-input bool   InpShowProbExplain  = false;         // Show probability attribution panel (debug)
+input bool   InpShowProbExplain  = true;          // Show probability attribution panel
 input bool   InpEnableXGBShadow  = false;         // Enable A/B shadow model (loads XGBModels_shadow.bin, observational only)
 
 //+------------------------------------------------------------------+
