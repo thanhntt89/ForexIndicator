@@ -94,8 +94,9 @@ void DrawTDSLine(int px,int pad,int fs,int &cy,bool hasSig,const SignalData &sig
       DoubleToString(entry,_Digits)+" | "+DoubleToString(g_currentProb.probTP1,0)+"% TP1 | EV "+
       (rec.ev>=0?"+":"")+DoubleToString(rec.ev,1)+"R | Risk "+DoubleToString(g_positionSize.adjustedRiskPct,1)+
       "% -> "+rec.label;
-   CreateTextLabel(PREFIX_PANEL+"TDS", px+pad, cy, tdsText, tdsClr, fs, true);
-   cy += fs+6;
+   int tdsFs = fs - 1;   // TDS line is the longest on the panel — shrink to keep it inside panel width
+   CreateTextLabel(PREFIX_PANEL+"TDS", px+pad, cy, tdsText, tdsClr, tdsFs, true);
+   cy += tdsFs+6;
 }
 //+------------------------------------------------------------------+
 //| Quick Attribution Bar — compact 1-line probability waterfall,     |
