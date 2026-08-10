@@ -271,8 +271,6 @@ void DrawZoneLines(bool suppress = false)
       //--- Zone label anchored exactly at zone line with minimal nudge
       string tagText = "Z" + IntegerToString(z + 1) + " " +
                         DoubleToString(g_entryZones[z].price, _Digits);
-      if(g_entryZones[z].lotSize > 0)
-         tagText += " " + DoubleToString(g_entryZones[z].lotSize, 2) + "lot";
       if(g_entryZones[z].isRecommended && g_entryZones[z].rrRatio > 0)
          tagText += " R:R1:" + DoubleToString(g_entryZones[z].rrRatio, 1);
       tagText += "  Reach:" + DoubleToString(g_entryZones[z].probReach * 100, 0) + "%";

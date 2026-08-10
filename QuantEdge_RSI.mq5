@@ -162,7 +162,6 @@ double BufferRecSuggestedRisk[];   // 24
 #include <QuantEdge/Analysis/Normalize.mqh>
 #include <QuantEdge/Signal/CandleNormalize.mqh>
 #include <QuantEdge/Signal/SignalDetector.mqh>
-#include <QuantEdge/Risk/PositionSizing.mqh>
 #include <QuantEdge/Engine/SLTP.mqh>
 #include <QuantEdge/Engine/SLTPOptimizer.mqh>
 #include <QuantEdge/Engine/MTFEngine.mqh>
@@ -172,7 +171,6 @@ double BufferRecSuggestedRisk[];   // 24
 #include <QuantEdge/Engine/ProbabilityEngine.mqh>
 #include <QuantEdge/Engine/CalibrationEngine.mqh>
 #include <QuantEdge/AI/XGBIntegration.mqh>
-#include <QuantEdge/Risk/RiskManager.mqh>
 #include <QuantEdge/Display/ArrowManager.mqh>
 #include <QuantEdge/Display/LineDrawing.mqh>
 #include <QuantEdge/Display/PanelDrawing.mqh>
@@ -264,7 +262,6 @@ int OnInit()
    ArrayResize(g_outcomes, 0);
 
    InitSessionStats();
-   InitPortfolioRisk();
    LoadPanelPosition();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
    LoggerInit(false);
@@ -586,11 +583,6 @@ int OnCalculate(const int rates_total,
 
       if(buySignal > 0)
       {
-         // [STALE-FIX] Always store/display the signal so the panel reflects the
-         // CURRENT bar. The risk gate only blocks counting it as a taken trade
-         // (circuit-breaker/limits are surfaced separately on the panel). Prevents
-         // the panel from freezing on an old pre-breaker signal.
-         bool _buyBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferBuySignal[i] = (double)buySignal;
          if(!fullRecalc && i >= rates_total - 2) DeleteOppositeArrows(true);
          CreateSignalArrow(time[i], low[i], true, buySignal);
@@ -636,7 +628,6 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1, (i >= rates_total - 2));
-         if(i >= rates_total - 2 && !_buyBlocked) OnNewSignalAccepted();
          BufferEntry[i] = entryPrice;
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
@@ -687,9 +678,6 @@ int OnCalculate(const int rates_total,
       }
       if(sellSignal > 0)
       {
-         // [STALE-FIX] Always store/display the signal (see buy branch). Risk gate
-         // only blocks counting it as a taken trade, not recording/display.
-         bool _sellBlocked = (i >= rates_total - 2 && !CanTakeNewSignal());
          BufferSellSignal[i] = (double)sellSignal;
          if(!fullRecalc && i >= rates_total - 2) DeleteOppositeArrows(false);
          CreateSignalArrow(time[i], high[i], false, sellSignal);
@@ -735,7 +723,6 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1, (i >= rates_total - 2));
-         if(i >= rates_total - 2 && !_sellBlocked) OnNewSignalAccepted();
          BufferEntry[i] = entryPrice;
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
@@ -839,7 +826,6 @@ int OnCalculate(const int rates_total,
       UpdateBrierMetrics();
       UpdateXGBBrierMetrics();
       if(InpEnableXGBShadow) UpdateXGBShadowBrierMetrics();
-      UpdatePortfolioRisk();
 
       // Memory management: cap outcomes at 500
       if(g_outcomeCount > 500)
@@ -970,7 +956,6 @@ int OnCalculate(const int rates_total,
                g_us10y.isAvailable ? g_us10y.trend : 0.0);
          }
 
-         CalculatePositionSize();
          DrawDashboard(g_activeSignalIndex);
          if(InpDashboardMode != DASHBOARD_MANUAL && InpShowProbExplain && g_activeSignalIndex >= 0)
             DrawExplainPanel();

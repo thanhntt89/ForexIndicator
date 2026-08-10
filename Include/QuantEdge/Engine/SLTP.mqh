@@ -1122,7 +1122,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       g_entryZones[z].slDistance = 0;
       g_entryZones[z].tp1Distance = 0;
       g_entryZones[z].riskShare = 0;
-      g_entryZones[z].lotSize = 0;
       g_entryZones[z].rrRatio = 0;
       g_entryZones[z].probReach = 0;
       g_entryZones[z].probTP1 = 0;
@@ -1193,10 +1192,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
 
    double shares[];
    CalculateRiskShares(adaptiveMax, shares);
-
-   double accountBalance = AccountBalance();
-   if(accountBalance <= 0) accountBalance = 1000;
-   double totalRisk = accountBalance * GetEffectiveRiskPct() / 100.0;
 
    g_entryZones[0].price = marketEntry;
    g_entryZones[0].zoneName = "Market";
@@ -1291,21 +1286,6 @@ void CalculateEntryZones(bool isBuy, int barIndex,
       if(g_entryZones[z].isRecommended) g_recommendedZoneCount++;
 
       g_entryZones[z].riskShare = (z < ArraySize(shares)) ? shares[z] : 0;
-
-      double pipValue = 0;
-      double tickValue = MarketInfo(Symbol(), MODE_TICKVALUE);
-      double tickSize = MarketInfo(Symbol(), MODE_TICKSIZE);
-      if(tickSize > 0)
-         pipValue = tickValue * (g_entryZones[z].slDistance / tickSize);
-
-      if(pipValue > 0)
-         g_entryZones[z].lotSize = NormalizeDouble(
-            (totalRisk * g_entryZones[z].riskShare) / pipValue, 2);
-      else
-         g_entryZones[z].lotSize = MarketInfo(Symbol(), MODE_MINLOT);
-
-      double minLot = MarketInfo(Symbol(), MODE_MINLOT);
-      g_entryZones[z].lotSize = MathMax(g_entryZones[z].lotSize, minLot);
    }
 
    if(g_recommendedZoneCount < 2)
@@ -1332,20 +1312,10 @@ void CalculateEntryZones(bool isBuy, int barIndex,
          if(g_entryZones[z].isRecommended)
          {
             g_entryZones[z].riskShare /= totalRecShare;
-            double pv = 0;
-            double tv = MarketInfo(Symbol(), MODE_TICKVALUE);
-            double ts = MarketInfo(Symbol(), MODE_TICKSIZE);
-            if(ts > 0) pv = tv * (g_entryZones[z].slDistance / ts);
-            if(pv > 0)
-               g_entryZones[z].lotSize = NormalizeDouble(
-                  (totalRisk * g_entryZones[z].riskShare) / pv, 2);
-            double ml = MarketInfo(Symbol(), MODE_MINLOT);
-            g_entryZones[z].lotSize = MathMax(g_entryZones[z].lotSize, ml);
          }
          else
          {
             g_entryZones[z].riskShare = 0;
-            g_entryZones[z].lotSize = 0;
          }
       }
    }

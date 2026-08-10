@@ -90,13 +90,78 @@ void DrawTDSLine(int px,int pad,int fs,int &cy,bool hasSig,const SignalData &sig
    else if(rec.level == REC_CAUTION_ENTRY)                            tdsClr = clrYellow;
    else if(rec.level == REC_WAIT)                                     tdsClr = clrOrange;
    else if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND)  tdsClr = clrRed;
-   string tdsText = dirTxt+" "+DoubleToString(g_positionSize.recommendedLot,2)+" lot @ "+
+   string tdsText = dirTxt+" @ "+
       DoubleToString(entry,_Digits)+" | "+DoubleToString(g_currentProb.probTP1,0)+"% TP1 | EV "+
-      (rec.ev>=0?"+":"")+DoubleToString(rec.ev,1)+"R | Risk "+DoubleToString(g_positionSize.adjustedRiskPct,1)+
-      "% -> "+rec.label;
+      (rec.ev>=0?"+":"")+DoubleToString(rec.ev,1)+"R -> "+rec.label;
    int tdsFs = fs - 1;   // TDS line is the longest on the panel — shrink to keep it inside panel width
    CreateTextLabel(PREFIX_PANEL+"TDS", px+pad, cy, tdsText, tdsClr, tdsFs, true);
    cy += tdsFs+6;
+}
+//+------------------------------------------------------------------+
+//| Trade Summary — pure Win/Loss/EV tally from g_outcomes[], no       |
+//| account balance or lot sizing involved.                           |
+//+------------------------------------------------------------------+
+struct TradeSummary
+{
+   int    wins;
+   int    losses;
+   double winRate;
+   double avgEV;
+};
+
+TradeSummary CalculateTradeSummary()
+{
+   TradeSummary s;
+   ZeroMemory(s);
+
+   int wins = 0, losses = 0;
+   double sumEV = 0;
+   for(int i = 0; i < g_outcomeCount; i++)
+   {
+      if(g_outcomes[i].outcome == 0) continue;
+      if(g_outcomes[i].outcome == 1)
+         wins++;
+      else
+         losses++;
+
+      if(g_outcomes[i].entryPrice > 0 && g_outcomes[i].stopLoss > 0)
+      {
+         double slDist = MathAbs(g_outcomes[i].entryPrice - g_outcomes[i].stopLoss);
+         if(slDist > 0)
+         {
+            double tp1Dist = MathAbs(g_outcomes[i].takeProfit1 - g_outcomes[i].entryPrice);
+            double rr = tp1Dist / slDist;
+            if(g_outcomes[i].outcome == 1)
+               sumEV += rr;
+            else
+               sumEV -= 1.0;
+         }
+      }
+   }
+   s.wins = wins;
+   s.losses = losses;
+   int total = wins + losses;
+   if(total > 0)
+   {
+      s.winRate = (double)wins / total * 100.0;
+      s.avgEV = sumEV / total;
+   }
+   return s;
+}
+
+void DrawTradeSummaryLine(int px,int pad,int fs,int &cy)
+{
+   if(g_outcomeCount <= 0) return;
+   TradeSummary ts = CalculateTradeSummary();
+   int total = ts.wins + ts.losses;
+   string tsLine = "W/L:" + IntegerToString(ts.wins) + "/" + IntegerToString(ts.losses);
+   if(total > 0)
+      tsLine += " (" + DoubleToString(ts.winRate, 0) + "%)";
+   tsLine += " EV:" + (ts.avgEV >= 0 ? "+" : "") + DoubleToString(ts.avgEV, 2);
+   color tsClr = (ts.winRate > 55) ? clrLime : (ts.winRate > 45) ? clrYellow : clrOrange;
+   if(total == 0) tsClr = InpPanelDimColor;
+   CreateTextLabel(PREFIX_PANEL+"TS", px+pad, cy, tsLine, tsClr, fs-1, false);
+   cy += fs+5;
 }
 //+------------------------------------------------------------------+
 //| Quick Attribution Bar — compact 1-line probability waterfall,     |
@@ -136,63 +201,6 @@ void DrawConfidenceMeter(int px,int pad,int y,int width,int confidence)
    CreateTextLabel(PREFIX_PANEL+"CONF_TXT", px+pad+width+6, y-2,
       IntegerToString(confidence)+"/100", InpPanelTextColor, 8, false);
 }
-//+------------------------------------------------------------------+
-//| Risk Summary — account state + risk budget + suggested size.      |
-//| compact=true renders the 2-line Manual-panel form.                |
-//+------------------------------------------------------------------+
-void DrawRiskSummary(int px,int pad,int fs,int &cy,bool compact)
-{
-   if(!InpShowRiskSummary || IsBacktestMode()) return;
-   int lh = fs+6;
-   int    cbLvl  = g_portfolioRisk.cbLevel;
-   string cbTag  = "GREEN"; color cbClr = clrLime;
-   if(cbLvl == 1)      { cbTag = "YELLOW"; cbClr = clrYellow; }
-   else if(cbLvl == 2) { cbTag = "ORANGE"; cbClr = clrOrange; }
-   else if(cbLvl == 3) { cbTag = "RED";    cbClr = clrRed;    }
-   double budgetLeft = InpMaxDailyRiskPct - g_portfolioRisk.dailyDrawdownPct;
-
-   if(!compact)
-   {
-      double bal = AccountBalance();
-      CreateTextLabel(PREFIX_PANEL+"RISK1", px+pad+3, cy,
-         "Account: $"+DoubleToString(bal,2)+" | Today: "+
-         (g_portfolioRisk.dailyPnLPips>=0?"+":"")+DoubleToString(g_portfolioRisk.dailyPnLPips,1)+" pips",
-         InpPanelTextColor, fs-2, false);
-      cy += lh;
-
-      string rk2 = "Risk Budget: "+DoubleToString(budgetLeft,2)+"% remaining | Circuit: "+cbTag;
-      if(g_portfolioRisk.circuitBreakerActive)
-         rk2 = "CIRCUIT BREAKER - signals blocked [RED]";
-      CreateTextLabel(PREFIX_PANEL+"RISK2", px+pad+3, cy, rk2, cbClr, fs-2, false);
-      cy += lh;
-
-      CreateTextLabel(PREFIX_PANEL+"RISK3", px+pad+3, cy,
-         "Suggested: "+DoubleToString(g_positionSize.recommendedLot,2)+" lot ("+
-         DoubleToString(g_positionSize.adjustedRiskPct,1)+"% risk) | Kelly: "+
-         DoubleToString(g_positionSize.kellyPct,0)+"%",
-         InpPanelTextColor, fs-2, false);
-      cy += lh;
-   }
-   else
-   {
-      double bal = AccountBalance();
-      CreateTextLabel(PREFIX_PANEL+"RISK1", px+pad+3, cy,
-         "$"+DoubleToString(bal,0)+" | Today "+
-         (g_portfolioRisk.dailyPnLPips>=0?"+":"")+DoubleToString(g_portfolioRisk.dailyPnLPips,0)+
-         "pips | Budget "+DoubleToString(budgetLeft,1)+"% | Circuit "+
-         (g_portfolioRisk.circuitBreakerActive?"BLOCKED":cbTag),
-         cbClr, fs-2, false);
-      cy += lh;
-
-      CreateTextLabel(PREFIX_PANEL+"RISK2", px+pad+3, cy,
-         DoubleToString(g_positionSize.recommendedLot,2)+" lot ("+
-         DoubleToString(g_positionSize.adjustedRiskPct,1)+"%) | Kelly: "+
-         DoubleToString(g_positionSize.kellyPct,0)+"%",
-         InpPanelTextColor, fs-2, false);
-      cy += lh;
-   }
-}
-
 //+------------------------------------------------------------------+
 //| Sprint 6: Virtual trade performance calculation + panel display   |
 //+------------------------------------------------------------------+
@@ -658,6 +666,7 @@ void DrawInfoPanel(int signalIndex)
    int calcY = 0;
    calcY += titleBarH + 2;
    if(InpShowTDS)                        calcY += lh;  // TDS line (or invalidated placeholder)
+   if(g_outcomeCount > 0)                calcY += lh;  // W/L/EV trade summary line
    if(InpShowAttribution && !isInvalidated) calcY += lh;  // Attribution bar (hidden when invalidated)
    calcY += lh;
    calcY += detailCount * (lh - 2) + 2;
@@ -696,15 +705,6 @@ void DrawInfoPanel(int signalIndex)
       calcY += lh; // Kelly + P-value line
       calcY += lh; // Angle IC diagnostic line
    }
-   // Position Sizing section
-   if(InpUseKellyLot || g_outcomeCount > 0)
-   {
-      calcY += 3;
-      calcY += lh;  // title
-      if(InpUseKellyLot) calcY += lh;  // Kelly | Vol | Brier
-      if(InpUseKellyLot) calcY += lh;  // Risk% -> Lot
-      if(g_outcomeCount > 0) calcY += lh;  // W/L EV
-   }
    if(hasMTF)
    {
       calcY += 3;
@@ -732,7 +732,6 @@ void DrawInfoPanel(int signalIndex)
       // Compare against 240 (minutes) for cross-platform compatibility.
       if(Period() >= TF_H4) calcY += lh;
       if(g_brierMetrics.samples >= 5) calcY += lh;
-      if(InpShowRiskSummary && !IsBacktestMode()) calcY += lh * 3;  // risk summary (3 lines, full mode)
    }
    if(InpShowVirtualPerf && !IsBacktestMode() && g_vpCount > 0)
    {
@@ -782,17 +781,11 @@ void DrawInfoPanel(int signalIndex)
       else
          titleClr = clrYellow;
    }
-   // [STALE-FIX] Mark a signal that cannot be taken right now (circuit breaker /
-   // risk limits) so a blocked signal is never read as a fresh actionable entry.
-   if(!isInvalidated && !CanTakeNewSignal())
-   {
-      titleText += " [BLOCKED]";
-      titleClr = clrOrange;
-   }
    CreateTextLabel(PREFIX_PANEL+"1_T", px+pad, cy, titleText, titleClr, fs+1, true);
    cy += titleBarH + 2 - 3;
    //--- TDS + ATTRIBUTION ---
    DrawTDSLine(px, pad, fs, cy, !isInvalidated, sig, rec);
+   DrawTradeSummaryLine(px, pad, fs, cy);
    if(!isInvalidated) DrawAttributionBar(px, pad, fs, cy);
    //--- CASE ---
    CreateTextLabel(PREFIX_PANEL+"2_C", px+pad, cy,
@@ -915,7 +908,6 @@ void DrawInfoPanel(int signalIndex)
          string evStar = (g_entryZones[z].expectedValue > 0) ? " *" : "";
          string zLine = "Z"+IntegerToString(z+1)+" "+
             g_entryZones[z].zoneName+":"+DoubleToString(g_entryZones[z].price, _Digits)+
-            " "+DoubleToString(g_entryZones[z].lotSize, 2)+"lot"+
             " R:R1:"+DoubleToString(g_entryZones[z].rrRatio, 1)+
             " Reach:"+DoubleToString(g_entryZones[z].probReach*100, 0)+"%"+
             " Win:"+DoubleToString(g_entryZones[z].probTP1, 0)+"%"+
@@ -1238,52 +1230,6 @@ void DrawInfoPanel(int signalIndex)
       cy += lh;
    }
    //==========================================================
-   // POSITION SIZING + TRADE SUMMARY
-   //==========================================================
-   if(InpUseKellyLot || g_outcomeCount > 0)
-   {
-      cy += 3;
-      CreateTextLabel(PREFIX_PANEL+"PS_T", px+pad, cy,
-         "Position Sizing", InpPanelTitleColor, fs-1, true);
-      cy += lh;
-
-      if(InpUseKellyLot)
-      {
-         string psLine1 = " Kelly:" + DoubleToString(g_positionSize.kellyPct, 1) + "%"
-                        + " Vol:" + DoubleToString(g_positionSize.volScale, 1) + "x"
-                        + " Brier:" + DoubleToString(g_positionSize.brierScale, 1) + "x"
-                        + " DD:" + DoubleToString(g_positionSize.ddScale * 100, 0) + "%";
-         color psClr1 = (g_positionSize.kellyPct > 1.0) ? clrLime
-                      : (g_positionSize.kellyPct > 0)   ? clrYellow
-                      : clrOrange;
-         CreateTextLabel(PREFIX_PANEL+"PS_L1", px+pad, cy, psLine1, psClr1, fs-2, false);
-         cy += lh;
-
-         string psLine2 = " Risk:" + DoubleToString(g_positionSize.adjustedRiskPct, 2) + "%";
-         if(g_positionSize.recommendedLot > 0)
-            psLine2 += " -> " + DoubleToString(g_positionSize.recommendedLot, 2) + " lot";
-         CreateTextLabel(PREFIX_PANEL+"PS_L2", px+pad, cy, psLine2, clrWhite, fs-2, false);
-         cy += lh;
-      }
-
-      if(g_outcomeCount > 0)
-      {
-         int total = g_positionSize.totalWins + g_positionSize.totalLosses;
-         string tsLine = " W/L:" + IntegerToString(g_positionSize.totalWins)
-                       + "/" + IntegerToString(g_positionSize.totalLosses);
-         if(total > 0)
-            tsLine += " (" + DoubleToString(g_positionSize.winRate, 0) + "%)";
-         tsLine += " EV:" + (g_positionSize.avgEV >= 0 ? "+" : "")
-                 + DoubleToString(g_positionSize.avgEV, 2);
-         color tsClr = (g_positionSize.winRate > 55) ? clrLime
-                     : (g_positionSize.winRate > 45) ? clrYellow
-                     : clrOrange;
-         if(total == 0) tsClr = InpPanelDimColor;
-         CreateTextLabel(PREFIX_PANEL+"PS_TS", px+pad, cy, tsLine, tsClr, fs-2, false);
-         cy += lh;
-      }
-   }
-   //==========================================================
    // MTF
    //==========================================================
    if(hasMTF)
@@ -1491,8 +1437,6 @@ void DrawInfoPanel(int signalIndex)
          CreateTextLabel(PREFIX_PANEL+"V_BR", px+pad+3, cy, brText, brClr, fs-2, false);
          cy += lh;
       }
-      // Risk summary (account + budget + suggested size)
-      DrawRiskSummary(px, pad, fs, cy, false);
       DrawPerfReport(px, pad, fs, cy, false);
    }
    //--- FOOTER ---
@@ -1627,6 +1571,7 @@ void DrawManualPanel(int signalIndex)
       calcY += lh;      // recommendation label
       if(!isInvalidated) calcY += lh;  // confidence meter row
       if(InpShowTDS)                          calcY += lh;  // TDS line (or invalidated placeholder)
+      if(g_outcomeCount > 0)                  calcY += lh;  // W/L/EV trade summary line
       if(InpShowAttribution && !isInvalidated) calcY += lh;  // Attribution bar (hidden when invalidated)
       calcY += 3;
       calcY += lh;      // Entry
@@ -1644,7 +1589,6 @@ void DrawManualPanel(int signalIndex)
          calcY += 3;
          calcY += lh;   // "Entry Zones: SUPPRESSED"
       }
-      if(InpShowRiskSummary && !IsBacktestMode()) calcY += lh * 2;  // risk summary (2 lines, compact)
       if(InpShowVirtualPerf && !IsBacktestMode() && g_vpCount > 0)
       {
          VirtualPerfMetrics calcPm = CalculateVirtualPerf();
@@ -1738,6 +1682,7 @@ void DrawManualPanel(int signalIndex)
 
       // TDS + Attribution
       DrawTDSLine(px, pad, fs, cy, !isInvalidated, sig, rec);
+      DrawTradeSummaryLine(px, pad, fs, cy);
       if(!isInvalidated) DrawAttributionBar(px, pad, fs, cy);
 
       // Price levels
@@ -1805,8 +1750,6 @@ void DrawManualPanel(int signalIndex)
          }
       }
 
-      // Risk summary (compact form)
-      DrawRiskSummary(px, pad, fs, cy, true);
       DrawPerfReport(px, pad, fs, cy, true);
    }
    else

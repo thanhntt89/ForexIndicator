@@ -185,7 +185,6 @@ struct EntryZone
    double slDistance;       // Distance from zone price to SL
    double tp1Distance;     // Distance from zone price to TP1
    double riskShare;       // Fraction of total risk (0.0 - 1.0)
-   double lotSize;         // Calculated lot size
    double rrRatio;         // R:R ratio from this zone
    double probReach;       // P(price reaches this zone) 0.0-1.0
    double probTP1;         // P(TP1 hit | entered at this zone) 0-100
@@ -306,24 +305,6 @@ struct MarketStateData
    double confidence;
    double probMultiplier;
    string label;
-};
-
-struct PortfolioRisk
-{
-   int      openSignals;
-   int      maxSignals;
-   double   totalExposurePct;
-   double   maxExposurePct;
-   double   dailyPnLPips;
-   double   dailyDrawdownPct;
-   bool     circuitBreakerActive;
-   int      dailyTradeCount;
-   int      maxDailyTrades;
-   datetime lastResetDate;
-   double   ddScale;
-   int      cbLevel;
-   double   equityHWM;
-   double   rollingMaxDD;
 };
 
 //+------------------------------------------------------------------+

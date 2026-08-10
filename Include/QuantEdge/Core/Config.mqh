@@ -184,7 +184,6 @@ input bool   InpShowPanel       = true;           // Show info panel
 input ENUM_DASHBOARD_MODE InpDashboardMode = DASHBOARD_FULL; // Dashboard mode (Full / Manual Trading)
 input bool   InpShowTDS         = true;           // Show Trade Decision Summary line
 input bool   InpShowAttribution = true;           // Show probability attribution bar
-input bool   InpShowRiskSummary = true;           // Show risk summary section
 input int    InpPanelDefaultX   = 20;             // Panel default X
 input int    InpPanelDefaultY   = 60;             // Panel default Y
 input int    InpPanelWidth      = 330;            // Panel width
@@ -305,26 +304,6 @@ input string inp_grp_log        = "========== Signal Logging =========="; // ---
 input bool   InpEnableSignalLog = true;                   // Enable signal logging to CSV (persists actual outcomes across TF switch/restart)
 input string InpLogFolder       = "QuantEdge_RSI_Logs";   // Log folder (inside MQL4/Files/)
 
-
-//+------------------------------------------------------------------+
-//| INPUT GROUP: Risk Manager                                          |
-//+------------------------------------------------------------------+
-input string inp_grp_risk       = "========== Risk Manager =========="; // ---
-input int    InpMaxOpenSignals   = 3;      // Max concurrent signals
-input double InpMaxDailyRiskPct  = 2.0;    // Max total risk %
-input int    InpMaxDailyTrades   = 15;     // Max trades per day
-input double InpDDYellowPct     = 1.5;    // DD % -> Scale lot 50% (Yellow)
-input double InpDDOrangePct     = 2.5;    // DD % -> Scale lot 25% (Orange)
-input double InpDDRedPct        = 3.0;    // DD % -> Full STOP (Red)
-input double InpMinRiskPct      = 0.25;   // Min risk % per trade (floor)
-input bool   InpUseQualityAlloc = true;   // Scale risk by signal quality (probTP1)
-
-//+------------------------------------------------------------------+
-//| INPUT GROUP: Position Sizing                                       |
-//+------------------------------------------------------------------+
-input string inp_grp_possizing   = "========== Position Sizing =========="; // ---
-input bool   InpUseKellyLot      = true;    // Use Kelly-adjusted lot sizing
-input double InpMaxRiskPct       = 2.0;     // Max risk % per trade (hard cap)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Debug                                                 |

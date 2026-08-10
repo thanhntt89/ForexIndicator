@@ -192,7 +192,6 @@ RollingPerformance g_rollingPerf;
 SpreadRegime      g_spreadRegime;
 VolRegimeData     g_volRegime;
 MarketStateData   g_marketState;
-PortfolioRisk     g_portfolioRisk;
 
 // [GMT-FIX-0] GMT normalization state
 bool   g_gmtNormActive      = false;   // true when H4 normalization is active
