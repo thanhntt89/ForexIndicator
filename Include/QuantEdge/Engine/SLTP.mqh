@@ -532,9 +532,9 @@ void MeasureOptimalTPRatios(bool isBuy, int barIndex, int totalBars,
 
       ArraySort(moveRatios);
       int tgt[3];
-      tgt[0] = MathMax(0, MathMin((int)(moveCount*0.50), moveCount-1));
-      tgt[1] = MathMax(0, MathMin((int)(moveCount*0.75), moveCount-1));
-      tgt[2] = MathMax(0, MathMin((int)(moveCount*0.90), moveCount-1));
+      tgt[0] = MathMax(0, MathMin((int)(moveCount*0.78), moveCount-1));  // was 0.50 (median) -> ~78% historical hit-rate
+      tgt[1] = MathMax(0, MathMin((int)(moveCount*0.88), moveCount-1));  // was 0.75
+      tgt[2] = MathMax(0, MathMin((int)(moveCount*0.95), moveCount-1));  // was 0.90
       tp1Ratio = moveRatios[tgt[0]];
       tp2Ratio = moveRatios[tgt[1]];
       tp3Ratio = moveRatios[tgt[2]];
@@ -655,7 +655,7 @@ void _UpdateDynamicCache(bool isBuy, int caseNum)
    s_dynIsBuy = isBuy;
    s_dynCase = caseNum;
 
-   if(InpSLTPMode == SLTP_DYNAMIC)
+   if(InpSLTPMode == SLTP_DYNAMIC || InpSLTPMode == SLTP_EV_OPTIMIZED)
    {
       s_dynSL = MeasureOptimalSLRatio(isBuy, caseNum);
       double tp1, tp2, tp3;
@@ -765,16 +765,16 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
       double mTP2 = entry + (isBuy ? 1.0 : -1.0) * outATR * b2;
       double mTP3 = entry + (isBuy ? 1.0 : -1.0) * outATR * b3;
 
-      if(InpSLTPMode == SLTP_DYNAMIC)
+      if(InpSLTPMode == SLTP_DYNAMIC || InpSLTPMode == SLTP_EV_OPTIMIZED)
       {
-         // Dynamic: use measured TP directly (can widen or tighten)
+         // Dynamic/EV_OPTIMIZED: use measured (Bayesian-blended) TP directly (can widen or tighten)
          outTP1 = mTP1;
          outTP2 = mTP2;
          outTP3 = mTP3;
       }
       else
       {
-         // Default (shouldn't reach here with mode==1 guard above, but safe fallback)
+         // SLTP_FIXED with measuredApplied somehow true (shouldn't normally happen): tighten-only fallback
          if(isBuy)
          {
             if(mTP1 < outTP1) outTP1 = mTP1;
