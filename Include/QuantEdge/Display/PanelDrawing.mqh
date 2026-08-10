@@ -734,6 +734,11 @@ void DrawInfoPanel(int signalIndex)
       if(g_brierMetrics.samples >= 5) calcY += lh;
       if(InpShowRiskSummary && !IsBacktestMode()) calcY += lh * 3;  // risk summary (3 lines, full mode)
    }
+   if(InpShowVirtualPerf && !IsBacktestMode() && g_vpCount > 0)
+   {
+      VirtualPerfMetrics calcPm = CalculateVirtualPerf();
+      if(calcPm.totalTrades > 0) calcY += lh * 5;  // perf report (5 lines, full mode)
+   }
    calcY += lh + 4;
    int totalH = calcY;
    if(!g_panelUserMoved)
@@ -1632,6 +1637,11 @@ void DrawManualPanel(int signalIndex)
          calcY += visibleZones * lh;
       }
       if(InpShowRiskSummary && !IsBacktestMode()) calcY += lh * 2;  // risk summary (2 lines, compact)
+      if(InpShowVirtualPerf && !IsBacktestMode() && g_vpCount > 0)
+      {
+         VirtualPerfMetrics calcPm = CalculateVirtualPerf();
+         if(calcPm.totalTrades > 0) calcY += lh * 2;  // perf report (2 lines, compact)
+      }
    }
    else
    {
