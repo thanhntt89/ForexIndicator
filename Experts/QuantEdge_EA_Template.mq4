@@ -59,10 +59,14 @@ input int    InpSlippage         = 3;                   // Max slippage (points)
 //| INPUT GROUP: Decision Gates                                       |
 //+------------------------------------------------------------------+
 input string inp_grp_gates       = "========== Decision Gates =========="; // ---
+input bool   InpUseGate1RecLevel = true;                // Enable Gate 1: Recommendation Level check
 input int    InpMinRecLevel      = REC_WAIT;             // Min recommendation level (0=STRONG, 1=ENTRY, 2=CAUTION, 3=WAIT)
 input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
+input bool   InpUseGate2Confidence = true;              // Enable Gate 2: Confidence check
 input int    InpMinConfidence    = 0;                   // Min confidence score (0-100)
+input bool   InpUseGate3Staleness  = true;              // Enable Gate 3: Staleness check
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
+input bool   InpUseGate5Spread     = false;             // Enable Gate 5: Spread check (also requires InpMaxSpreadPoints > 0)
 input int    InpMaxSpreadPoints  = 0;                   // Max spread (points, 0=no check)
 
 //+------------------------------------------------------------------+
@@ -1432,18 +1436,22 @@ void OnTick()
    }
 
    // --- Gate 1: Recommendation Level ---
-   bool g1_pass = false;
-   if(recLevelInt <= InpMinRecLevel)
-      g1_pass = true;
-   if(recLevelInt == REC_CAUTION_ENTRY && InpAllowCaution)
-      g1_pass = true;
+   bool g1_pass = true;
+   if(InpUseGate1RecLevel)
+   {
+      g1_pass = false;
+      if(recLevelInt <= InpMinRecLevel)
+         g1_pass = true;
+      if(recLevelInt == REC_CAUTION_ENTRY && InpAllowCaution)
+         g1_pass = true;
+   }
 
    // --- Gate 2: Confidence ---
-   bool g2_pass = ((int)MathRound(confidence) >= InpMinConfidence);
+   bool g2_pass = !InpUseGate2Confidence || ((int)MathRound(confidence) >= InpMinConfidence);
 
    // --- Gate 3: Staleness ---
    bool g3_pass = true;
-   if(survival != EMPTY_VALUE && survival < InpMaxSurvivalFloor)
+   if(InpUseGate3Staleness && survival != EMPTY_VALUE && survival < InpMaxSurvivalFloor)
       g3_pass = false;
 
    // --- Gate 4: No Duplicate Position (also blocks ANY new signal while a  ---
@@ -1458,7 +1466,7 @@ void OnTick()
 
    // --- Gate 5: Spread ---
    bool g5_pass = true;
-   if(InpMaxSpreadPoints > 0)
+   if(InpUseGate5Spread && InpMaxSpreadPoints > 0)
    {
       double spread = MarketInfo(Symbol(), MODE_SPREAD);
       if(spread > InpMaxSpreadPoints)
