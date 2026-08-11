@@ -117,7 +117,7 @@ input bool   InpUseNegativeDCA    = false;               // Enable negative DCA 
 input int    InpNegDCAMaxOrders   = 5;                   // Max negative DCA orders (1-10)
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
 input double InpNegDCAATRMult     = 0.5;                 // DCA spacing = ATR × this multiplier
-input double InpNegDCAMaxDDPct    = 5.0;                 // Hard drawdown cap (% of balance) — close all if exceeded
+input double InpNegDCAMaxDDPct    = 5.0;                 // Hard drawdown cap (% of balance) — applies to ENTIRE basket whenever ANY DCA mode is active, close all if exceeded
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Risk & Lot Sizing                                    |
@@ -765,8 +765,8 @@ void ManagePositiveDCA()
       dcaTrade.SetDeviationInPoints(InpSlippage);
 
       bool result = (g_dcaDirection > 0)
-                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, g_dcaOriginalSL, 0, comment)
-                    : dcaTrade.Sell(dcaLot, Symbol(), 0, g_dcaOriginalSL, 0, comment);
+                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, 0, comment)
+                    : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, 0, comment);
 
       if(result)
          Print("[QuantEdge EA] Positive DCA+", idx, " placed: ",
@@ -827,6 +827,35 @@ void CloseEntireBasket()
 }
 
 //+------------------------------------------------------------------+
+//| Basket-wide drawdown safety valve — applies whenever ANY DCA mode |
+//| is active (positive-only, negative-only, or both). Independent   |
+//| of InpUseNegativeDCA so a positive-DCA-only setup with SL=0       |
+//| orders still has a hard loss limit.                               |
+//+------------------------------------------------------------------+
+bool CheckDrawdownCap()
+{
+   if(InpNegDCAMaxDDPct <= 0)
+      return false;
+
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   if(balance <= 0)
+      return false;
+
+   double basketPnL = CalculateBasketPnL();
+   double maxLoss    = balance * InpNegDCAMaxDDPct / 100.0;
+   if(basketPnL < 0 && MathAbs(basketPnL) >= maxLoss)
+   {
+      Print("[QuantEdge EA] DRAWDOWN CAP HIT: basket P/L=", DoubleToString(basketPnL, 2),
+            " exceeds ", DoubleToString(InpNegDCAMaxDDPct, 1), "% of balance (",
+            DoubleToString(maxLoss, 2), "). CLOSING ENTIRE BASKET.");
+      CloseEntireBasket();
+      ClearDCAState();
+      return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
 //| Negative DCA: add orders as price moves against position          |
 //+------------------------------------------------------------------+
 void ManageNegativeDCA()
@@ -837,24 +866,9 @@ void ManageNegativeDCA()
    double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
    double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
 
-   // --- Drawdown Cap Check (priority 1 — safety valve) ---
-   double basketPnL = CalculateBasketPnL();
-   double balance   = AccountInfoDouble(ACCOUNT_BALANCE);
-   if(balance > 0 && InpNegDCAMaxDDPct > 0)
-   {
-      double maxLoss = balance * InpNegDCAMaxDDPct / 100.0;
-      if(basketPnL < 0 && MathAbs(basketPnL) >= maxLoss)
-      {
-         Print("[QuantEdge EA] DRAWDOWN CAP HIT: basket P/L=", DoubleToString(basketPnL, 2),
-               " exceeds ", DoubleToString(InpNegDCAMaxDDPct, 1), "% of balance (",
-               DoubleToString(maxLoss, 2), "). CLOSING ENTIRE BASKET.");
-         CloseEntireBasket();
-         ClearDCAState();
-         return;
-      }
-   }
-
-   // --- Basket Breakeven Check (priority 2) ---
+   // --- Basket Breakeven Check (priority 1) ---
+   // Drawdown cap is checked once, basket-wide, in ManageDCA() -> CheckDrawdownCap()
+   // (applies regardless of which DCA mode is active, not just negative DCA).
    if(g_dcaNegTriggered && CountDCAPositions(MAGIC_NEG_DCA_OFFSET) > 0)
    {
       double avgEntry = CalculateNegDCAAvgEntry();
@@ -871,7 +885,7 @@ void ManageNegativeDCA()
       }
    }
 
-   // --- Trigger Check (priority 3) ---
+   // --- Trigger Check (priority 2) ---
    double entryToSL = g_dcaOriginalSL - g_dcaOriginalEntry;
    double triggerPrice = g_dcaOriginalEntry + entryToSL * (InpNegDCATriggerPct / 100.0);
 
@@ -889,7 +903,7 @@ void ManageNegativeDCA()
             " (trigger level=", DoubleToString(triggerPrice, _Digits), ")");
    }
 
-   // --- Place orders (priority 4) ---
+   // --- Place orders (priority 3) ---
    double atrBuf[1];
    if(g_hATR == INVALID_HANDLE || CopyBuffer(g_hATR, 0, 0, 1, atrBuf) != 1)
       return;
@@ -967,6 +981,13 @@ void ManageDCA()
    }
 
    if(!g_dcaActive)
+      return;
+
+   // --- Basket-wide drawdown cap (priority 1, safety valve) ---
+   // Runs regardless of which DCA mode(s) are enabled, so a
+   // positive-DCA-only setup (no SL on any leg) still has a hard
+   // loss limit. See CheckDrawdownCap().
+   if(CheckDrawdownCap())
       return;
 
    ManagePositiveDCA();
@@ -1395,7 +1416,7 @@ int OnInit()
    if(g_dcaActive)
       Print("[QuantEdge EA] DCA state restored: dir=", (g_dcaDirection > 0 ? "BUY" : "SELL"),
             " entry=", DoubleToString(g_dcaOriginalEntry, _Digits),
-            " SL=", DoubleToString(g_dcaOriginalSL, _Digits),
+            " refSL=", DoubleToString(g_dcaOriginalSL, _Digits),
             " TP1=", DoubleToString(g_dcaOriginalTP1, _Digits));
 
    return INIT_SUCCEEDED;
@@ -1582,6 +1603,12 @@ void OnTick()
       if(adjTP2 > 0 && adjTP2 >= bidPrice - stoplevel) adjTP2 = NormalizeDouble(bidPrice - stoplevel - _Point, _Digits);
    }
 
+   // DCA manages exits itself (half-close SL-lock, basket breakeven, drawdown
+   // cap) — no literal SL sent to the broker for any DCA-active leg. adjSL is
+   // still kept as the reference price for g_dcaOriginalSL below.
+   bool   dcaGateActive = (InpUsePositiveDCA || InpUseNegativeDCA);
+   double sendSL = dcaGateActive ? 0.0 : adjSL;
+
    // --- Place order(s) ---
    string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
    bool   useSplit = InpUsePartialClose && adjTP2 > 0
@@ -1601,13 +1628,13 @@ void OnTick()
       bool r1 = false, r2 = false;
       if(direction > 0)
       {
-         r1 = g_trade.Buy(lot1, Symbol(), 0, adjSL, adjTP1, comment1);
-         r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, adjSL, adjTP2, comment2);
+         r1 = g_trade.Buy(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
+         r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
       }
       else
       {
-         r1 = g_trade.Sell(lot1, Symbol(), 0, adjSL, adjTP1, comment1);
-         r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, adjSL, adjTP2, comment2);
+         r1 = g_trade.Sell(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
+         r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
       }
 
       if(!r1) Print("[QuantEdge EA] TP1 order failed: ", g_trade.ResultRetcodeDescription());
@@ -1622,9 +1649,9 @@ void OnTick()
    {
       bool result = false;
       if(direction > 0)
-         result = g_trade.Buy(lot, Symbol(), 0, adjSL, adjTP1, comment1);
+         result = g_trade.Buy(lot, Symbol(), 0, sendSL, adjTP1, comment1);
       else
-         result = g_trade.Sell(lot, Symbol(), 0, adjSL, adjTP1, comment1);
+         result = g_trade.Sell(lot, Symbol(), 0, sendSL, adjTP1, comment1);
 
       if(!result)
          Print("[QuantEdge EA] Order failed: ", g_trade.ResultRetcodeDescription());
@@ -1648,7 +1675,9 @@ void OnTick()
       SaveDCAState();
 
       Print("[QuantEdge EA] DCA state initialized: entry=", DoubleToString(marketPrice, _Digits),
-            " SL=", DoubleToString(adjSL, _Digits), " TP1=", DoubleToString(adjTP1, _Digits),
+            " refSL=", DoubleToString(adjSL, _Digits),
+            " (order SL sent=", DoubleToString(sendSL, _Digits), ")",
+            " TP1=", DoubleToString(adjTP1, _Digits),
             " lot=", DoubleToString(lot, 2));
    }
 }
