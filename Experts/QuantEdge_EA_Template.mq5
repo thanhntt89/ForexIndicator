@@ -118,6 +118,7 @@ input int    InpNegDCAMaxOrders   = 5;                   // Max negative DCA ord
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
 input double InpNegDCAATRMult     = 0.5;                 // DCA spacing = ATR × this multiplier
 input double InpNegDCAMaxDDPct    = 5.0;                 // Hard drawdown cap (% of balance) — applies to ENTIRE basket whenever ANY DCA mode is active, close all if exceeded
+input double InpDCAProfitLockR    = 0.2;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Risk & Lot Sizing                                    |
@@ -813,7 +814,7 @@ bool CheckEntryReturnProfitClose()
       if(tickVal > 0)
       {
          double oneR = (slDistance / _Point) * tickVal * g_dcaOriginalLot;
-         minProfitTarget = oneR * 0.2;
+         minProfitTarget = oneR * InpDCAProfitLockR;
       }
    }
 
@@ -822,7 +823,7 @@ bool CheckEntryReturnProfitClose()
       Print("[QuantEdge EA] ENTRY-RETURN PROFIT LOCK: price back near original entry (",
             DoubleToString(g_dcaOriginalEntry, _Digits), "), basket P/L=",
             DoubleToString(basketPnL, 2), " > target ", DoubleToString(minProfitTarget, 2),
-            " (0.2R). CLOSING ENTIRE BASKET.");
+            " (", DoubleToString(InpDCAProfitLockR, 2), "R). CLOSING ENTIRE BASKET.");
       CloseEntireBasket();
       ClearDCAState();
       return true;
