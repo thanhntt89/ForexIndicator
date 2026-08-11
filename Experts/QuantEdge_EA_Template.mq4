@@ -745,22 +745,18 @@ void ManagePositiveDCA()
 }
 
 //+------------------------------------------------------------------+
-//| Close original positions + negative DCA orders (basket breakeven)|
-//| Positive DCA positions are left untouched.                        |
+//| Close the ENTIRE EA basket on negative-DCA breakeven — original,  |
+//| negative DCA, AND positive DCA (if running concurrently). Ends    |
+//| the DCA cycle completely so the next signal starts clean.         |
 //+------------------------------------------------------------------+
 void CloseNegDCABasket()
 {
-   int magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
       if(OrderSymbol() != Symbol()) continue;
       int mag = OrderMagicNumber();
-
-      bool isOriginal = (mag == InpMagicNumber || mag == magicTP2);
-      bool isNegDCA   = (mag >= InpMagicNumber + MAGIC_NEG_DCA_OFFSET &&
-                         mag <  InpMagicNumber + MAGIC_NEG_DCA_OFFSET + 100);
-      if(!isOriginal && !isNegDCA) continue;
+      if(!IsOurMagic(mag)) continue;
 
       int ticket = OrderTicket();
       double closePrice = (OrderType() == OP_BUY) ? Bid : Ask;
@@ -770,6 +766,7 @@ void CloseNegDCABasket()
          Print("[QuantEdge EA] Neg DCA basket close FAILED: ticket=", ticket,
                " error ", GetLastError());
    }
+   ClearDCAState();
 }
 
 //+------------------------------------------------------------------+
@@ -842,7 +839,7 @@ void ManageNegativeDCA()
          if(atBreakeven)
          {
             Print("[QuantEdge EA] Negative DCA basket breakeven reached at avg=",
-                  DoubleToString(avgEntry, Digits), ". Closing original + neg DCA.");
+                  DoubleToString(avgEntry, Digits), ". Closing entire basket.");
             CloseNegDCABasket();
             return;
          }

@@ -779,23 +779,19 @@ void ManagePositiveDCA()
 }
 
 //+------------------------------------------------------------------+
-//| Close original positions + negative DCA orders (basket breakeven)|
-//| Positive DCA positions are left untouched.                        |
+//| Close the ENTIRE EA basket on negative-DCA breakeven — original,  |
+//| negative DCA, AND positive DCA (if running concurrently). Ends    |
+//| the DCA cycle completely so the next signal starts clean.         |
 //+------------------------------------------------------------------+
 void CloseNegDCABasket()
 {
-   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
       if(ticket == 0) continue;
       if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
       long mag = PositionGetInteger(POSITION_MAGIC);
-
-      bool isOriginal = (mag == (long)InpMagicNumber || mag == (long)magicTP2);
-      bool isNegDCA   = (mag >= (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET) &&
-                         mag <  (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET + 100));
-      if(!isOriginal && !isNegDCA) continue;
+      if(!IsOurMagic(mag)) continue;
 
       if(g_trade.PositionClose(ticket))
          Print("[QuantEdge EA] Neg DCA basket close: ticket=", ticket, " magic=", mag);
@@ -803,6 +799,7 @@ void CloseNegDCABasket()
          Print("[QuantEdge EA] Neg DCA basket close FAILED: ticket=", ticket,
                " ", g_trade.ResultRetcodeDescription());
    }
+   ClearDCAState();
 }
 
 //+------------------------------------------------------------------+
@@ -878,7 +875,7 @@ void ManageNegativeDCA()
          if(atBreakeven)
          {
             Print("[QuantEdge EA] Negative DCA basket breakeven reached at avg=",
-                  DoubleToString(avgEntry, _Digits), ". Closing original + neg DCA.");
+                  DoubleToString(avgEntry, _Digits), ". Closing entire basket.");
             CloseNegDCABasket();
             return;
          }
