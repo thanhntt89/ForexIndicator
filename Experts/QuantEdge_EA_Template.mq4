@@ -768,11 +768,32 @@ bool CheckEntryReturnProfitClose()
       return false;
 
    double basketPnL = CalculateBasketPnL();
-   if(basketPnL > 0)
+
+   // Require at least 0.2R of basket profit before locking in — a bare
+   // P/L > 0 was closing baskets on a few cents of cross-leg price
+   // skew (e.g. a losing original leg offset by a slightly-more-profitable
+   // DCA- leg), which is too thin given the risk already taken on by
+   // adding to the position. Falls back to "any profit" only when the
+   // original SL/tick value can't be resolved (e.g. positive-DCA-only
+   // setups with no SL on any leg).
+   double minProfitTarget = 0;
+   double slDistance = MathAbs(g_dcaOriginalEntry - g_dcaOriginalSL);
+   if(slDistance > 0)
+   {
+      double tickVal = MarketInfo(Symbol(), MODE_TICKVALUE);
+      if(tickVal > 0)
+      {
+         double oneR = (slDistance / Point) * tickVal * g_dcaOriginalLot;
+         minProfitTarget = oneR * 0.2;
+      }
+   }
+
+   if(basketPnL > minProfitTarget)
    {
       Print("[QuantEdge EA] ENTRY-RETURN PROFIT LOCK: price back near original entry (",
             DoubleToString(g_dcaOriginalEntry, Digits), "), basket P/L=",
-            DoubleToString(basketPnL, 2), " > 0. CLOSING ENTIRE BASKET.");
+            DoubleToString(basketPnL, 2), " > target ", DoubleToString(minProfitTarget, 2),
+            " (0.2R). CLOSING ENTIRE BASKET.");
       CloseEntireBasket();
       ClearDCAState();
       return true;
