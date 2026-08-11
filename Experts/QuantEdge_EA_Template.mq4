@@ -1417,8 +1417,15 @@ void OnTick()
    if(survival != EMPTY_VALUE && survival < InpMaxSurvivalFloor)
       g3_pass = false;
 
-   // --- Gate 4: No Duplicate Position ---
-   bool g4_pass = !HasOpenPosition(direction);
+   // --- Gate 4: No Duplicate Position (also blocks ANY new signal while a  ---
+   // --- DCA basket is active, regardless of direction — the DCA system    ---
+   // --- tracks only one basket at a time; an opposite-direction fill would ---
+   // --- overwrite that basket's state and orphan it.                       ---
+   bool g4_pass = !HasOpenPosition(direction) && !g_dcaActive;
+   if(g_dcaActive && !HasOpenPosition(direction))
+      Print("[QuantEdge EA] Gate 4 blocked: DCA basket active (dir=",
+            (g_dcaDirection > 0 ? "BUY" : "SELL"),
+            ") — waiting for basket to close before accepting new signal.");
 
    // --- Gate 5: Spread ---
    bool g5_pass = true;
