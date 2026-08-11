@@ -827,6 +827,13 @@ int OnCalculate(const int rates_total,
             slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
          if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
             suppressDisplay = true;
+         // Keep chart zone lines in sync with dashboard: dashboard hides its
+         // Entry Zones section once SL is breached (PanelDrawing.mqh isInvalidated),
+         // so suppress chart zone lines on the same condition.
+         bool isInvalidated = false;
+         if(activeSig.isBuySignal  && curPrice <= activeSig.stopLoss) isInvalidated = true;
+         if(!activeSig.isBuySignal && curPrice >= activeSig.stopLoss) isInvalidated = true;
+         if(isInvalidated) suppressDisplay = true;
 
          if(InpEnableSignalLog && activeSig.signalTime != s_lastLoggedScoreTime)
          {
