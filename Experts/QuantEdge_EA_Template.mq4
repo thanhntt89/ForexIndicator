@@ -1414,10 +1414,20 @@ void OnTick()
    // --- now so this tick's signal can pass Gate 4 immediately after.   ---
    if(g_dcaActive && direction != g_dcaDirection)
    {
-      Print("[QuantEdge EA] Opposite-direction signal (new=", (direction > 0 ? "BUY" : "SELL"),
-            ", basket=", (g_dcaDirection > 0 ? "BUY" : "SELL"), "). CLOSING ENTIRE BASKET.");
-      CloseEntireBasket();
-      ClearDCAState();
+      double basketPnL = CalculateBasketPnL();
+      if(basketPnL > 0)
+      {
+         Print("[QuantEdge EA] Opposite-direction signal (new=", (direction > 0 ? "BUY" : "SELL"),
+               ", basket=", (g_dcaDirection > 0 ? "BUY" : "SELL"), "), basket P/L=",
+               DoubleToString(basketPnL, 2), " > 0. CLOSING ENTIRE BASKET.");
+         CloseEntireBasket();
+         ClearDCAState();
+      }
+      else
+      {
+         Print("[QuantEdge EA] Opposite-direction signal ignored — basket P/L=",
+               DoubleToString(basketPnL, 2), " <= 0, keeping basket open.");
+      }
    }
 
    // --- Gate 1: Recommendation Level ---
