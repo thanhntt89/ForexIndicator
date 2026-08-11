@@ -769,17 +769,32 @@ bool CheckDrawdownCap()
 }
 
 //+------------------------------------------------------------------+
-//| Basket-wide profit lock — close everything once total floating   |
-//| P/L across original + all DCA legs turns positive. Symmetric to  |
-//| CheckDrawdownCap() but on the profit side.                        |
+//| Close everything if price has returned to the original entry     |
+//| zone (within current spread) AND the basket is still profitable. |
+//| Covers both: positive-DCA that ran toward TP1 then reversed back |
+//| to entry, and negative-DCA that recovered back up to entry —     |
+//| either way, lock the profit before it erodes further.            |
 //+------------------------------------------------------------------+
-bool CheckBasketProfitClose()
+bool CheckEntryReturnProfitClose()
 {
+   if(g_dcaOriginalEntry <= 0)
+      return false;
+
+   double spread = SymbolInfoInteger(Symbol(), SYMBOL_SPREAD) * _Point;
+   double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+   double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+   double price = (g_dcaDirection > 0) ? bid : ask;
+
+   bool nearEntry = MathAbs(price - g_dcaOriginalEntry) <= MathMax(spread, _Point);
+   if(!nearEntry)
+      return false;
+
    double basketPnL = CalculateBasketPnL();
    if(basketPnL > 0)
    {
-      Print("[QuantEdge EA] BASKET PROFIT LOCK: basket P/L=", DoubleToString(basketPnL, 2),
-            " > 0. CLOSING ENTIRE BASKET.");
+      Print("[QuantEdge EA] ENTRY-RETURN PROFIT LOCK: price back near original entry (",
+            DoubleToString(g_dcaOriginalEntry, _Digits), "), basket P/L=",
+            DoubleToString(basketPnL, 2), " > 0. CLOSING ENTIRE BASKET.");
       CloseEntireBasket();
       ClearDCAState();
       return true;
@@ -922,8 +937,10 @@ void ManageDCA()
    if(CheckDrawdownCap())
       return;
 
-   // --- Basket-wide profit lock (priority 2) ---
-   if(CheckBasketProfitClose())
+   // --- Entry-return profit lock (priority 2): price back near the      ---
+   // --- original entry AND basket still profitable — lock it in before  ---
+   // --- further reversal erodes the gain.                               ---
+   if(CheckEntryReturnProfitClose())
       return;
 
    // --- TP1 reached: close the entire basket — original + all DCA legs ---
