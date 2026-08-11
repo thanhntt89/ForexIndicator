@@ -598,75 +598,6 @@ void ManageTrailing()
 //+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
-//| Close half of positive DCA orders (least profitable first) and   |
-//| move SL of remaining to 50% of Entry→TP1 distance                |
-//+------------------------------------------------------------------+
-void ExecutePosDCAHalfClose()
-{
-   int    dcaTickets[16];
-   double dcaEntries[16];
-   int    count = 0;
-
-   for(int i = OrdersTotal() - 1; i >= 0; i--)
-   {
-      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-      if(OrderSymbol() != Symbol()) continue;
-      int mag = OrderMagicNumber();
-      if(mag < InpMagicNumber + MAGIC_POS_DCA_OFFSET ||
-         mag >= InpMagicNumber + MAGIC_POS_DCA_OFFSET + 100)
-         continue;
-
-      if(count >= ArraySize(dcaTickets)) break; // 16 DCA orders is far beyond any configured max
-      dcaTickets[count] = OrderTicket();
-      dcaEntries[count] = OrderOpenPrice();
-      count++;
-   }
-
-   if(count == 0) return;
-
-   // Sort by entry price: BUY -> highest entry (least profitable) first
-   for(int a = 0; a < count - 1; a++)
-   {
-      for(int b = a + 1; b < count; b++)
-      {
-         bool swap = (g_dcaDirection > 0) ? (dcaEntries[b] > dcaEntries[a])
-                                           : (dcaEntries[b] < dcaEntries[a]);
-         if(swap)
-         {
-            double tmpE = dcaEntries[a]; dcaEntries[a] = dcaEntries[b]; dcaEntries[b] = tmpE;
-            int    tmpT = dcaTickets[a]; dcaTickets[a] = dcaTickets[b]; dcaTickets[b] = tmpT;
-         }
-      }
-   }
-
-   int closeCount = (int)MathCeil((double)count / 2.0);
-   for(int i = 0; i < closeCount; i++)
-   {
-      if(!OrderSelect(dcaTickets[i], SELECT_BY_TICKET)) continue;
-      double closePrice = (OrderType() == OP_BUY) ? Bid : Ask;
-      if(OrderClose(dcaTickets[i], OrderLots(), closePrice, InpSlippage, clrYellow))
-         Print("[QuantEdge EA] DCA+ half-close: closed ticket=", dcaTickets[i]);
-      else
-         Print("[QuantEdge EA] DCA+ half-close FAILED: ticket=", dcaTickets[i],
-               " error ", GetLastError());
-   }
-
-   double newSL = NormalizeDouble(
-      g_dcaOriginalEntry + (g_dcaOriginalTP1 - g_dcaOriginalEntry) * 0.5, Digits);
-
-   for(int i = closeCount; i < count; i++)
-   {
-      if(!OrderSelect(dcaTickets[i], SELECT_BY_TICKET)) continue;
-      if(OrderModify(dcaTickets[i], OrderOpenPrice(), newSL, OrderTakeProfit(), 0, clrLime))
-         Print("[QuantEdge EA] DCA+ trailing lock: ticket=", dcaTickets[i],
-               " SL moved to ", DoubleToString(newSL, Digits));
-      else
-         Print("[QuantEdge EA] DCA+ trailing lock FAILED: ticket=", dcaTickets[i],
-               " error ", GetLastError());
-   }
-}
-
-//+------------------------------------------------------------------+
 //| Positive DCA: add orders as price moves toward TP1               |
 //+------------------------------------------------------------------+
 void ManagePositiveDCA()
@@ -680,18 +611,9 @@ void ManagePositiveDCA()
 
    double price = (g_dcaDirection > 0) ? Ask : Bid;
 
-   if(!g_dcaTP1HalfClosed)
-   {
-      bool tp1Reached = (g_dcaDirection > 0) ? (Bid >= g_dcaOriginalTP1)
-                                              : (Ask <= g_dcaOriginalTP1);
-      if(tp1Reached)
-      {
-         ExecutePosDCAHalfClose();
-         g_dcaTP1HalfClosed = true;
-         SaveDCAState();
-         return;
-      }
-   }
+   // TP1 now closes the entire basket (see ManageDCA() -> TP1 basket-close),
+   // so grid orders stop being added past that point without needing a
+   // separate half-close/lock step here.
 
    if(InpPosDCAMaxOrders <= 0)
       return;
@@ -812,6 +734,25 @@ bool CheckDrawdownCap()
       Print("[QuantEdge EA] DRAWDOWN CAP HIT: basket P/L=", DoubleToString(basketPnL, 2),
             " exceeds ", DoubleToString(InpNegDCAMaxDDPct, 1), "% of balance (",
             DoubleToString(maxLoss, 2), "). CLOSING ENTIRE BASKET.");
+      CloseEntireBasket();
+      ClearDCAState();
+      return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Basket-wide profit lock — close everything once total floating   |
+//| P/L across original + all DCA legs turns positive. Symmetric to  |
+//| CheckDrawdownCap() but on the profit side.                        |
+//+------------------------------------------------------------------+
+bool CheckBasketProfitClose()
+{
+   double basketPnL = CalculateBasketPnL();
+   if(basketPnL > 0)
+   {
+      Print("[QuantEdge EA] BASKET PROFIT LOCK: basket P/L=", DoubleToString(basketPnL, 2),
+            " > 0. CLOSING ENTIRE BASKET.");
       CloseEntireBasket();
       ClearDCAState();
       return true;
@@ -944,6 +885,29 @@ void ManageDCA()
    // loss limit. See CheckDrawdownCap().
    if(CheckDrawdownCap())
       return;
+
+   // --- Basket-wide profit lock (priority 2) ---
+   if(CheckBasketProfitClose())
+      return;
+
+   // --- TP1 reached: close the entire basket — original + all DCA legs ---
+   // (priority 3). g_dcaTP1HalfClosed doubles as a guard here: if
+   // CloseEntireBasket() only partially fills (broker reject on one leg),
+   // it stays false and this check retries next tick instead of ClearDCAState()
+   // masking a stuck position.
+   if(!g_dcaTP1HalfClosed && g_dcaOriginalTP1 > 0)
+   {
+      bool tp1Reached = (g_dcaDirection > 0) ? (Bid >= g_dcaOriginalTP1)
+                                              : (Ask <= g_dcaOriginalTP1);
+      if(tp1Reached)
+      {
+         Print("[QuantEdge EA] TP1 reached at basket level (TP1=",
+               DoubleToString(g_dcaOriginalTP1, Digits), "). CLOSING ENTIRE BASKET.");
+         CloseEntireBasket();
+         ClearDCAState();
+         return;
+      }
+   }
 
    ManagePositiveDCA();
    ManageNegativeDCA();
@@ -1401,6 +1365,17 @@ void OnTick()
    }
 
    int recLevelInt = (int)MathRound(recLevel);
+
+   // --- Opposite-signal basket close: if a new signal appears in the   ---
+   // --- opposite direction of an active DCA basket, close everything   ---
+   // --- now so this tick's signal can pass Gate 4 immediately after.   ---
+   if(g_dcaActive && direction != g_dcaDirection)
+   {
+      Print("[QuantEdge EA] Opposite-direction signal (new=", (direction > 0 ? "BUY" : "SELL"),
+            ", basket=", (g_dcaDirection > 0 ? "BUY" : "SELL"), "). CLOSING ENTIRE BASKET.");
+      CloseEntireBasket();
+      ClearDCAState();
+   }
 
    // --- Gate 1: Recommendation Level ---
    bool g1_pass = false;
