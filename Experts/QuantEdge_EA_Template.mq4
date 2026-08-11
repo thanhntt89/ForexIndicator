@@ -753,6 +753,13 @@ bool CheckEntryReturnProfitClose()
    if(g_dcaOriginalEntry <= 0)
       return false;
 
+   // Only meaningful once price has actually moved far enough to trigger
+   // at least one DCA leg — otherwise the original position always starts
+   // "near entry" and would close instantly on the first tick it ticks
+   // positive.
+   if(!HasAnyDCAPosition())
+      return false;
+
    double spread = MarketInfo(Symbol(), MODE_SPREAD) * Point;
    double price = (g_dcaDirection > 0) ? Bid : Ask;
 
