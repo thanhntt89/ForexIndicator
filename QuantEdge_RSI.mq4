@@ -853,9 +853,14 @@ int OnCalculate(const int rates_total,
                g_us10y.isAvailable ? g_us10y.trend : 0.0);
          }
 
-         DrawDashboard(g_activeSignalIndex);
-         if(InpDashboardMode != DASHBOARD_MANUAL && InpShowProbExplain && g_activeSignalIndex >= 0)
-            DrawExplainPanel();
+         // Indicator's own panel/dashboard only makes sense on a live chart;
+         // when driven by an EA in Strategy Tester, suppress it entirely.
+         if(!IsBacktestMode())
+         {
+            DrawDashboard(g_activeSignalIndex);
+            if(InpDashboardMode != DASHBOARD_MANUAL && InpShowProbExplain && g_activeSignalIndex >= 0)
+               DrawExplainPanel();
+         }
 
          bool modeChanged = (suppressDisplay != s_lastSuppressMode);
          s_lastSuppressMode = suppressDisplay;
@@ -915,9 +920,12 @@ int OnCalculate(const int rates_total,
    else
    {
       if(InpShowMTF) RefreshMTFData();
-      DrawDashboard(-1);
-      if(InpDashboardMode != DASHBOARD_MANUAL && InpShowProbExplain)
-         DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+      if(!IsBacktestMode())
+      {
+         DrawDashboard(-1);
+         if(InpDashboardMode != DASHBOARD_MANUAL && InpShowProbExplain)
+            DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+      }
    }
 
    // Flush scoring queue immediately Ã¢â‚¬â€ LogScoringSnapshot() runs after both new-bar
