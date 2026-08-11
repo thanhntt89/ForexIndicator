@@ -1849,7 +1849,7 @@ void DrawManualPanel(int signalIndex)
 //+------------------------------------------------------------------+
 void DrawExplainPanel()
 {
-   if(!InpShowProbExplain) return;
+   if(InpEAMode || !InpShowProbExplain) return;
 
    int pw = 380;
    int fs = InpPanelFontSize;
