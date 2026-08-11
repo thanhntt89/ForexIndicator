@@ -102,6 +102,24 @@ input double InpTrailATRMult     = 1.5;                 // Trailing distance = A
 input int    InpTrailATRPeriod   = 14;                  // ATR period for trailing calculation
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Positive DCA (Trend Direction)                       |
+//+------------------------------------------------------------------+
+input string inp_grp_posdca       = "========== Positive DCA =========="; // ---
+input bool   InpUsePositiveDCA    = false;               // Enable positive DCA (add in trend direction)
+input int    InpPosDCAMaxOrders   = 4;                   // Max positive DCA orders (1-10)
+input double InpPosDCAHalfClosePct= 50.0;                // Stop adding DCA above this % of Entry→TP1 distance
+
+//+------------------------------------------------------------------+
+//| INPUT GROUP: Negative DCA (Against Trend / Recovery)              |
+//+------------------------------------------------------------------+
+input string inp_grp_negdca       = "========== Negative DCA =========="; // ---
+input bool   InpUseNegativeDCA    = false;               // Enable negative DCA (add against trend)
+input int    InpNegDCAMaxOrders   = 5;                   // Max negative DCA orders (1-10)
+input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
+input double InpNegDCAATRMult     = 0.5;                 // DCA spacing = ATR × this multiplier
+input double InpNegDCAMaxDDPct    = 5.0;                 // Hard drawdown cap (% of balance) — close all if exceeded
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Risk & Lot Sizing                                    |
 //+------------------------------------------------------------------+
 input string inp_grp_risk        = "========== Risk & Lot Sizing =========="; // ---
@@ -170,10 +188,26 @@ int      g_dragOffsetX = 0;
 int      g_dragOffsetY = 0;
 bool     g_panelCollapsed = false;
 
-#define MAGIC_TP2_OFFSET  100000
+#define MAGIC_TP2_OFFSET      100000
+#define MAGIC_POS_DCA_OFFSET  200000
+#define MAGIC_NEG_DCA_OFFSET  300000
+
 int      g_dailyLossCount   = 0;
 double   g_dailyLossAmount  = 0;
 datetime g_dailyResetDate   = 0;
+
+//+------------------------------------------------------------------+
+//| DCA state tracking                                                |
+//+------------------------------------------------------------------+
+bool     g_dcaActive          = false;   // Is DCA state tracking active
+int      g_dcaDirection       = 0;       // 1=BUY basket, -1=SELL basket
+double   g_dcaOriginalEntry   = 0;       // Original signal entry price (market-adjusted)
+double   g_dcaOriginalSL      = 0;       // Original signal SL price (market-adjusted)
+double   g_dcaOriginalTP1     = 0;       // Original signal TP1 price (market-adjusted)
+double   g_dcaOriginalLot     = 0;       // Original total lot size (pre-split)
+bool     g_dcaTP1HalfClosed   = false;   // Has the TP1-level half-close been executed
+bool     g_dcaNegTriggered    = false;   // Has negative DCA trigger fired
+double   g_dcaNegTriggerPrice = 0;       // Price at which negative DCA was first triggered
 
 //+------------------------------------------------------------------+
 //| Read one indicator buffer value at shift=1                        |
@@ -258,6 +292,206 @@ bool HasOpenPosition(int direction)
 }
 
 //+------------------------------------------------------------------+
+//| DCA HELPER FUNCTIONS                                              |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Check if a magic number belongs to our EA (any leg type)          |
+//+------------------------------------------------------------------+
+bool IsOurMagic(long magic)
+{
+   if(magic == (long)InpMagicNumber)                      return true;
+   if(magic == (long)(InpMagicNumber + MAGIC_TP2_OFFSET))  return true;
+   if(magic >= (long)(InpMagicNumber + MAGIC_POS_DCA_OFFSET) &&
+      magic <  (long)(InpMagicNumber + MAGIC_POS_DCA_OFFSET + 100))
+      return true;
+   if(magic >= (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET) &&
+      magic <  (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET + 100))
+      return true;
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Count open DCA positions of a specific type (POS or NEG offset)   |
+//+------------------------------------------------------------------+
+int CountDCAPositions(int dcaType)
+{
+   int count = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+      if(mag >= (long)(InpMagicNumber + dcaType) &&
+         mag <  (long)(InpMagicNumber + dcaType + 100))
+         count++;
+   }
+   return count;
+}
+
+//+------------------------------------------------------------------+
+//| Check if ANY original position (TP1 or TP2 leg) exists           |
+//+------------------------------------------------------------------+
+bool HasAnyOriginalPosition()
+{
+   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+      if(mag == (long)InpMagicNumber || mag == (long)magicTP2)
+         return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Check if ANY DCA position (positive or negative) exists          |
+//+------------------------------------------------------------------+
+bool HasAnyDCAPosition()
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+      if(mag >= (long)(InpMagicNumber + MAGIC_POS_DCA_OFFSET) &&
+         mag <  (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET + 100))
+         return true;
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
+//| Sum floating P/L (profit + swap) for all positions of our EA     |
+//+------------------------------------------------------------------+
+double CalculateBasketPnL()
+{
+   double total = 0;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+      if(!IsOurMagic(mag)) continue;
+      total += PositionGetDouble(POSITION_PROFIT) + PositionGetDouble(POSITION_SWAP);
+   }
+   return total;
+}
+
+//+------------------------------------------------------------------+
+//| Weighted average entry price for original + negative DCA basket   |
+//+------------------------------------------------------------------+
+double CalculateNegDCAAvgEntry()
+{
+   double totalLots = 0;
+   double weightedPrice = 0;
+   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+
+      bool isOriginal = (mag == (long)InpMagicNumber || mag == (long)magicTP2);
+      bool isNegDCA   = (mag >= (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET) &&
+                         mag <  (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET + 100));
+      if(!isOriginal && !isNegDCA) continue;
+
+      double lots  = PositionGetDouble(POSITION_VOLUME);
+      double entry = PositionGetDouble(POSITION_PRICE_OPEN);
+      totalLots     += lots;
+      weightedPrice += lots * entry;
+   }
+
+   if(totalLots <= 0) return 0;
+   return weightedPrice / totalLots;
+}
+
+//+------------------------------------------------------------------+
+//| Lot ratio for negative DCA order at given index (1-based)        |
+//| idx 1 -> 75%, idx 2 -> 50%, idx 3+ -> 25%                        |
+//+------------------------------------------------------------------+
+double NegDCALotRatio(int index)
+{
+   switch(index)
+   {
+      case 1:  return 0.75;
+      case 2:  return 0.50;
+      default: return 0.25;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| DCA state persistence via terminal GlobalVariables                |
+//+------------------------------------------------------------------+
+string DCA_GVPrefix()
+{
+   return "QE_DCA_" + Symbol() + "_" + IntegerToString(InpMagicNumber) + "_";
+}
+
+void SaveDCAState()
+{
+   string pfx = DCA_GVPrefix();
+   GlobalVariableSet(pfx + "Active",        g_dcaActive ? 1.0 : 0.0);
+   GlobalVariableSet(pfx + "Direction",     (double)g_dcaDirection);
+   GlobalVariableSet(pfx + "Entry",         g_dcaOriginalEntry);
+   GlobalVariableSet(pfx + "SL",            g_dcaOriginalSL);
+   GlobalVariableSet(pfx + "TP1",           g_dcaOriginalTP1);
+   GlobalVariableSet(pfx + "Lot",           g_dcaOriginalLot);
+   GlobalVariableSet(pfx + "TP1HalfClosed", g_dcaTP1HalfClosed ? 1.0 : 0.0);
+   GlobalVariableSet(pfx + "NegTriggered",  g_dcaNegTriggered ? 1.0 : 0.0);
+   GlobalVariableSet(pfx + "NegTrigPrice",  g_dcaNegTriggerPrice);
+}
+
+void LoadDCAState()
+{
+   string pfx = DCA_GVPrefix();
+   if(!GlobalVariableCheck(pfx + "Active"))
+      return;
+   g_dcaActive          = (GlobalVariableGet(pfx + "Active") != 0.0);
+   g_dcaDirection        = (int)GlobalVariableGet(pfx + "Direction");
+   g_dcaOriginalEntry    = GlobalVariableGet(pfx + "Entry");
+   g_dcaOriginalSL       = GlobalVariableGet(pfx + "SL");
+   g_dcaOriginalTP1      = GlobalVariableGet(pfx + "TP1");
+   g_dcaOriginalLot      = GlobalVariableGet(pfx + "Lot");
+   g_dcaTP1HalfClosed    = (GlobalVariableGet(pfx + "TP1HalfClosed") != 0.0);
+   g_dcaNegTriggered     = (GlobalVariableGet(pfx + "NegTriggered") != 0.0);
+   g_dcaNegTriggerPrice  = GlobalVariableGet(pfx + "NegTrigPrice");
+}
+
+void ClearDCAState()
+{
+   g_dcaActive           = false;
+   g_dcaDirection        = 0;
+   g_dcaOriginalEntry    = 0;
+   g_dcaOriginalSL       = 0;
+   g_dcaOriginalTP1      = 0;
+   g_dcaOriginalLot      = 0;
+   g_dcaTP1HalfClosed    = false;
+   g_dcaNegTriggered     = false;
+   g_dcaNegTriggerPrice  = 0;
+
+   string pfx = DCA_GVPrefix();
+   GlobalVariableDel(pfx + "Active");
+   GlobalVariableDel(pfx + "Direction");
+   GlobalVariableDel(pfx + "Entry");
+   GlobalVariableDel(pfx + "SL");
+   GlobalVariableDel(pfx + "TP1");
+   GlobalVariableDel(pfx + "Lot");
+   GlobalVariableDel(pfx + "TP1HalfClosed");
+   GlobalVariableDel(pfx + "NegTriggered");
+   GlobalVariableDel(pfx + "NegTrigPrice");
+}
+
+//+------------------------------------------------------------------+
 //| Session filter: check if current GMT hour is within trade window   |
 //+------------------------------------------------------------------+
 bool IsWithinSession()
@@ -306,7 +540,7 @@ void UpdateDailyLossTracking()
       if(dealSym != Symbol()) continue;
 
       long dealMagic = HistoryDealGetInteger(dealTicket, DEAL_MAGIC);
-      if(dealMagic != (long)InpMagicNumber && dealMagic != (long)magicTP2) continue;
+      if(!IsOurMagic(dealMagic)) continue;
 
       double pnl = HistoryDealGetDouble(dealTicket, DEAL_PROFIT)
                   + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
@@ -378,6 +612,365 @@ void ManageTrailing()
             g_tradeTP2.PositionModify(ticket, newSL, curTP);
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| DCA MANAGEMENT — positive (trend) + negative (recovery) baskets   |
+//| See document/DCA_Flowcharts.md and DCA_Function_Specs.md          |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
+//| Close half of positive DCA orders (least profitable first) and   |
+//| move SL of remaining to 50% of Entry→TP1 distance                |
+//+------------------------------------------------------------------+
+void ExecutePosDCAHalfClose()
+{
+   ulong  dcaTickets[];
+   double dcaEntries[];
+   int    count = 0;
+   ArrayResize(dcaTickets, 16);
+   ArrayResize(dcaEntries, 16);
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+      if(mag < (long)(InpMagicNumber + MAGIC_POS_DCA_OFFSET) ||
+         mag >= (long)(InpMagicNumber + MAGIC_POS_DCA_OFFSET + 100))
+         continue;
+
+      if(count >= ArraySize(dcaTickets))
+      {
+         ArrayResize(dcaTickets, count + 8);
+         ArrayResize(dcaEntries, count + 8);
+      }
+      dcaTickets[count] = ticket;
+      dcaEntries[count] = PositionGetDouble(POSITION_PRICE_OPEN);
+      count++;
+   }
+
+   if(count == 0) return;
+
+   // Sort by entry price: BUY -> highest entry (least profitable) first
+   for(int a = 0; a < count - 1; a++)
+   {
+      for(int b = a + 1; b < count; b++)
+      {
+         bool swap = (g_dcaDirection > 0) ? (dcaEntries[b] > dcaEntries[a])
+                                           : (dcaEntries[b] < dcaEntries[a]);
+         if(swap)
+         {
+            double tmpE = dcaEntries[a]; dcaEntries[a] = dcaEntries[b]; dcaEntries[b] = tmpE;
+            ulong  tmpT = dcaTickets[a]; dcaTickets[a] = dcaTickets[b]; dcaTickets[b] = tmpT;
+         }
+      }
+   }
+
+   int closeCount = (int)MathCeil((double)count / 2.0);
+   for(int i = 0; i < closeCount; i++)
+   {
+      if(g_trade.PositionClose(dcaTickets[i]))
+         Print("[QuantEdge EA] DCA+ half-close: closed ticket=", dcaTickets[i]);
+      else
+         Print("[QuantEdge EA] DCA+ half-close FAILED: ticket=", dcaTickets[i],
+               " ", g_trade.ResultRetcodeDescription());
+   }
+
+   double newSL = NormalizeDouble(
+      g_dcaOriginalEntry + (g_dcaOriginalTP1 - g_dcaOriginalEntry) * 0.5, _Digits);
+
+   for(int i = closeCount; i < count; i++)
+   {
+      if(!PositionSelectByTicket(dcaTickets[i])) continue;
+      double curTP = PositionGetDouble(POSITION_TP);
+      if(g_trade.PositionModify(dcaTickets[i], newSL, curTP))
+         Print("[QuantEdge EA] DCA+ trailing lock: ticket=", dcaTickets[i],
+               " SL moved to ", DoubleToString(newSL, _Digits));
+      else
+         Print("[QuantEdge EA] DCA+ trailing lock FAILED: ticket=", dcaTickets[i],
+               " ", g_trade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Positive DCA: add orders as price moves toward TP1               |
+//+------------------------------------------------------------------+
+void ManagePositiveDCA()
+{
+   if(!InpUsePositiveDCA || !g_dcaActive)
+      return;
+
+   double entryToTP1 = g_dcaOriginalTP1 - g_dcaOriginalEntry;
+   if(MathAbs(entryToTP1) < _Point)
+      return;
+
+   double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+   double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+   double price = (g_dcaDirection > 0) ? ask : bid;
+
+   if(!g_dcaTP1HalfClosed)
+   {
+      bool tp1Reached = (g_dcaDirection > 0) ? (bid >= g_dcaOriginalTP1)
+                                              : (ask <= g_dcaOriginalTP1);
+      if(tp1Reached)
+      {
+         ExecutePosDCAHalfClose();
+         g_dcaTP1HalfClosed = true;
+         SaveDCAState();
+         return;
+      }
+   }
+
+   if(InpPosDCAMaxOrders <= 0)
+      return;
+
+   double halfwayPrice = g_dcaOriginalEntry + entryToTP1 * (InpPosDCAHalfClosePct / 100.0);
+   bool beyondHalf = (g_dcaDirection > 0) ? (price > halfwayPrice) : (price < halfwayPrice);
+   if(beyondHalf)
+      return;
+
+   double gridStep = entryToTP1 / (InpPosDCAMaxOrders + 1);
+
+   for(int idx = 1; idx <= InpPosDCAMaxOrders; idx++)
+   {
+      ulong dcaMagic = InpMagicNumber + MAGIC_POS_DCA_OFFSET + idx;
+
+      bool exists = false;
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
+      {
+         ulong ticket = PositionGetTicket(i);
+         if(ticket == 0) continue;
+         if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+         if(PositionGetInteger(POSITION_MAGIC) == (long)dcaMagic) { exists = true; break; }
+      }
+      if(exists) continue;
+
+      double level = g_dcaOriginalEntry + idx * gridStep;
+      bool triggered = (g_dcaDirection > 0) ? (price >= level) : (price <= level);
+      if(!triggered) continue;
+
+      double lotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
+      if(lotStep <= 0) continue;
+      double minLot  = MathMax(SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN), InpMinLotSize);
+      double dcaLot  = MathFloor(g_dcaOriginalLot / lotStep) * lotStep;
+      dcaLot = MathMax(dcaLot, minLot);
+      dcaLot = MathMin(dcaLot, InpMaxLotSize);
+
+      string comment = StringFormat("QE DCA+%d", idx);
+
+      CTrade dcaTrade;
+      dcaTrade.SetExpertMagicNumber(dcaMagic);
+      dcaTrade.SetDeviationInPoints(InpSlippage);
+
+      bool result = (g_dcaDirection > 0)
+                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, g_dcaOriginalSL, 0, comment)
+                    : dcaTrade.Sell(dcaLot, Symbol(), 0, g_dcaOriginalSL, 0, comment);
+
+      if(result)
+         Print("[QuantEdge EA] Positive DCA+", idx, " placed: ",
+               (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
+               " lot, magic=", dcaMagic);
+      else
+         Print("[QuantEdge EA] Positive DCA+", idx, " FAILED: ",
+               dcaTrade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Close original positions + negative DCA orders (basket breakeven)|
+//| Positive DCA positions are left untouched.                        |
+//+------------------------------------------------------------------+
+void CloseNegDCABasket()
+{
+   ulong magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+
+      bool isOriginal = (mag == (long)InpMagicNumber || mag == (long)magicTP2);
+      bool isNegDCA   = (mag >= (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET) &&
+                         mag <  (long)(InpMagicNumber + MAGIC_NEG_DCA_OFFSET + 100));
+      if(!isOriginal && !isNegDCA) continue;
+
+      if(g_trade.PositionClose(ticket))
+         Print("[QuantEdge EA] Neg DCA basket close: ticket=", ticket, " magic=", mag);
+      else
+         Print("[QuantEdge EA] Neg DCA basket close FAILED: ticket=", ticket,
+               " ", g_trade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Emergency: close ALL positions belonging to our EA (drawdown cap)|
+//+------------------------------------------------------------------+
+void CloseEntireBasket()
+{
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long mag = PositionGetInteger(POSITION_MAGIC);
+      if(!IsOurMagic(mag)) continue;
+
+      if(g_trade.PositionClose(ticket))
+         Print("[QuantEdge EA] Basket emergency close: ticket=", ticket);
+      else
+         Print("[QuantEdge EA] Basket emergency close FAILED: ticket=", ticket,
+               " ", g_trade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Negative DCA: add orders as price moves against position          |
+//+------------------------------------------------------------------+
+void ManageNegativeDCA()
+{
+   if(!InpUseNegativeDCA || !g_dcaActive)
+      return;
+
+   double bid = SymbolInfoDouble(Symbol(), SYMBOL_BID);
+   double ask = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
+
+   // --- Drawdown Cap Check (priority 1 — safety valve) ---
+   double basketPnL = CalculateBasketPnL();
+   double balance   = AccountInfoDouble(ACCOUNT_BALANCE);
+   if(balance > 0 && InpNegDCAMaxDDPct > 0)
+   {
+      double maxLoss = balance * InpNegDCAMaxDDPct / 100.0;
+      if(basketPnL < 0 && MathAbs(basketPnL) >= maxLoss)
+      {
+         Print("[QuantEdge EA] DRAWDOWN CAP HIT: basket P/L=", DoubleToString(basketPnL, 2),
+               " exceeds ", DoubleToString(InpNegDCAMaxDDPct, 1), "% of balance (",
+               DoubleToString(maxLoss, 2), "). CLOSING ENTIRE BASKET.");
+         CloseEntireBasket();
+         ClearDCAState();
+         return;
+      }
+   }
+
+   // --- Basket Breakeven Check (priority 2) ---
+   if(g_dcaNegTriggered && CountDCAPositions(MAGIC_NEG_DCA_OFFSET) > 0)
+   {
+      double avgEntry = CalculateNegDCAAvgEntry();
+      if(avgEntry > 0)
+      {
+         bool atBreakeven = (g_dcaDirection > 0) ? (bid >= avgEntry) : (ask <= avgEntry);
+         if(atBreakeven)
+         {
+            Print("[QuantEdge EA] Negative DCA basket breakeven reached at avg=",
+                  DoubleToString(avgEntry, _Digits), ". Closing original + neg DCA.");
+            CloseNegDCABasket();
+            return;
+         }
+      }
+   }
+
+   // --- Trigger Check (priority 3) ---
+   double entryToSL = g_dcaOriginalSL - g_dcaOriginalEntry;
+   double triggerPrice = g_dcaOriginalEntry + entryToSL * (InpNegDCATriggerPct / 100.0);
+
+   if(!g_dcaNegTriggered)
+   {
+      bool triggered = (g_dcaDirection > 0) ? (ask <= triggerPrice) : (bid >= triggerPrice);
+      if(!triggered)
+         return;
+
+      g_dcaNegTriggered    = true;
+      g_dcaNegTriggerPrice = triggerPrice;
+      SaveDCAState();
+      Print("[QuantEdge EA] Negative DCA TRIGGERED at price ",
+            DoubleToString((g_dcaDirection > 0 ? ask : bid), _Digits),
+            " (trigger level=", DoubleToString(triggerPrice, _Digits), ")");
+   }
+
+   // --- Place orders (priority 4) ---
+   double atrBuf[1];
+   if(g_hATR == INVALID_HANDLE || CopyBuffer(g_hATR, 0, 0, 1, atrBuf) != 1)
+      return;
+   double atrSpacing = atrBuf[0] * InpNegDCAATRMult;
+   if(atrSpacing <= 0)
+      return;
+
+   double price = (g_dcaDirection > 0) ? ask : bid;
+
+   for(int idx = 1; idx <= InpNegDCAMaxOrders; idx++)
+   {
+      ulong dcaMagic = InpMagicNumber + MAGIC_NEG_DCA_OFFSET + idx;
+
+      bool exists = false;
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
+      {
+         ulong ticket = PositionGetTicket(i);
+         if(ticket == 0) continue;
+         if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+         if(PositionGetInteger(POSITION_MAGIC) == (long)dcaMagic) { exists = true; break; }
+      }
+      if(exists) continue;
+
+      double level = (g_dcaDirection > 0)
+                      ? g_dcaNegTriggerPrice - (idx - 1) * atrSpacing
+                      : g_dcaNegTriggerPrice + (idx - 1) * atrSpacing;
+
+      bool triggered = (g_dcaDirection > 0) ? (price <= level) : (price >= level);
+      if(!triggered) continue;
+
+      double ratio   = NegDCALotRatio(idx);
+      double lotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
+      if(lotStep <= 0) continue;
+      double minLot  = MathMax(SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN), InpMinLotSize);
+      double dcaLot  = MathFloor(g_dcaOriginalLot * ratio / lotStep) * lotStep;
+      dcaLot = MathMax(dcaLot, minLot);
+      dcaLot = MathMin(dcaLot, InpMaxLotSize);
+
+      string comment = StringFormat("QE DCA-%d", idx);
+
+      CTrade dcaTrade;
+      dcaTrade.SetExpertMagicNumber(dcaMagic);
+      dcaTrade.SetDeviationInPoints(InpSlippage);
+
+      bool result = (g_dcaDirection > 0)
+                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, 0, comment)
+                    : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, 0, comment);
+
+      if(result)
+         Print("[QuantEdge EA] Negative DCA-", idx, " placed: ",
+               (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
+               " lot (", DoubleToString(ratio * 100, 0), "%), magic=", dcaMagic);
+      else
+         Print("[QuantEdge EA] Negative DCA-", idx, " FAILED: ",
+               dcaTrade.ResultRetcodeDescription());
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Main DCA management — called every tick, before bar guard        |
+//+------------------------------------------------------------------+
+void ManageDCA()
+{
+   if(!InpUsePositiveDCA && !InpUseNegativeDCA)
+      return;
+
+   if(g_dcaActive)
+   {
+      if(!HasAnyOriginalPosition() && !HasAnyDCAPosition())
+      {
+         Print("[QuantEdge EA] All positions closed — resetting DCA state.");
+         ClearDCAState();
+         return;
+      }
+   }
+
+   if(!g_dcaActive)
+      return;
+
+   ManagePositiveDCA();
+   ManageNegativeDCA();
 }
 
 //+------------------------------------------------------------------+
@@ -782,6 +1375,7 @@ int OnInit()
          " MaxSpread=", InpMaxSpreadPoints);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
    Print("[QuantEdge EA] PartialClose=", InpUsePartialClose, " Trailing=", InpUseTrailing);
+   Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " NegativeDCA=", InpUseNegativeDCA);
    Print("[QuantEdge EA] ===================");
 
    if(!InpEnableAutoTrading)
@@ -796,6 +1390,14 @@ int OnInit()
    QEEA_CreatePanel();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
 
+   // Restore DCA state (survives EA reload / chart change / terminal restart)
+   LoadDCAState();
+   if(g_dcaActive)
+      Print("[QuantEdge EA] DCA state restored: dir=", (g_dcaDirection > 0 ? "BUY" : "SELL"),
+            " entry=", DoubleToString(g_dcaOriginalEntry, _Digits),
+            " SL=", DoubleToString(g_dcaOriginalSL, _Digits),
+            " TP1=", DoubleToString(g_dcaOriginalTP1, _Digits));
+
    return INIT_SUCCEEDED;
 }
 
@@ -805,6 +1407,7 @@ int OnInit()
 void OnTick()
 {
    ManageTrailing();
+   ManageDCA();
    UpdateDailyLossTracking();
 
    // Poll for close commands from indicator's Manual Trading panel
@@ -1029,6 +1632,25 @@ void OnTick()
          Print("[QuantEdge EA] Order placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
                DoubleToString(lot, 2), " lot @ ", DoubleToString(g_trade.ResultPrice(), _Digits));
    }
+
+   // --- Initialize DCA state after successful order placement ---
+   if(InpUsePositiveDCA || InpUseNegativeDCA)
+   {
+      g_dcaActive          = true;
+      g_dcaDirection       = direction;
+      g_dcaOriginalEntry   = marketPrice;   // actual fill, not indicator entry
+      g_dcaOriginalSL      = adjSL;
+      g_dcaOriginalTP1     = adjTP1;
+      g_dcaOriginalLot     = lot;           // total lot, pre-split
+      g_dcaTP1HalfClosed   = false;
+      g_dcaNegTriggered    = false;
+      g_dcaNegTriggerPrice = 0;
+      SaveDCAState();
+
+      Print("[QuantEdge EA] DCA state initialized: entry=", DoubleToString(marketPrice, _Digits),
+            " SL=", DoubleToString(adjSL, _Digits), " TP1=", DoubleToString(adjTP1, _Digits),
+            " lot=", DoubleToString(lot, 2));
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -1036,6 +1658,9 @@ void OnTick()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   if(g_dcaActive)
+      SaveDCAState();
+
    if(g_hIndicator != INVALID_HANDLE)
    {
       IndicatorRelease(g_hIndicator);
@@ -1176,7 +1801,7 @@ double OnTester()
       if(dealSym != Symbol()) continue;
 
       long dealMagic = HistoryDealGetInteger(dealTicket, DEAL_MAGIC);
-      if(dealMagic != (long)InpMagicNumber && dealMagic != (long)magicTP2) continue;
+      if(!IsOurMagic(dealMagic)) continue;
 
       double pnl = HistoryDealGetDouble(dealTicket, DEAL_PROFIT)
                   + HistoryDealGetDouble(dealTicket, DEAL_SWAP)
