@@ -14,6 +14,8 @@
 //+------------------------------------------------------------------+
 void CalculateRSILines(int startBar, int rates_total)
 {
+   if(ArraySize(g_rawRSI) < rates_total) return;
+
    // Raw RSI — route through normalized GMT+0 H4 candles when active
    for(int i = startBar; i < rates_total; i++)
    {
