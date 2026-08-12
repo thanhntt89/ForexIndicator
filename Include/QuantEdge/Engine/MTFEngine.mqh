@@ -313,4 +313,48 @@ int GetMTFContextScore(bool isBuySignal)
    return(MathMax(-100, MathMin(100, (int)MathRound((score / totalWeight) * 100.0))));
 }
 
+//+------------------------------------------------------------------+
+//| MTF edge adjustment for ProbabilityEngine Step 3                   |
+//| Two modes: strength-weighted (default) or binary vote (legacy)     |
+//+------------------------------------------------------------------+
+double GetMTFEdgeAdjustment(bool isBuy)
+{
+   if(!InpShowMTF || g_mtfCount == 0) return(0.0);
+
+   if(InpMTFEdgeMode == MTF_EDGE_BINARY)
+   {
+      int agreeCount = 0;
+      for(int t = 0; t < g_mtfCount; t++)
+      {
+         if(isBuy  && g_mtfData[t].trend ==  1) agreeCount++;
+         if(!isBuy && g_mtfData[t].trend == -1) agreeCount++;
+      }
+      double alignRatio = ((double)agreeCount / (double)g_mtfCount) * 2.0 - 1.0;
+      return(alignRatio * 0.03);
+   }
+
+   double numerator   = 0.0;
+   double denominator = 0.0;
+
+   for(int t = 0; t < g_mtfCount; t++)
+   {
+      double direction = isBuy ? (double)g_mtfData[t].trend
+                               : -(double)g_mtfData[t].trend;
+      double strength  = MathAbs(g_mtfData[t].greenValue - 50.0) / 50.0;
+
+      double w = 1.0;
+      if(g_mtfData[t].timeframe >= TF_H4)       w = 3.0;
+      else if(g_mtfData[t].timeframe >= TF_H1)  w = 2.0;
+      else if(g_mtfData[t].timeframe >= TF_M30) w = 1.5;
+
+      numerator   += direction * strength * w;
+      denominator += strength * w;
+   }
+
+   if(denominator < 0.01) return(0.0);
+
+   double weightedAlign = numerator / denominator;
+   return(weightedAlign * 0.04);
+}
+
 #endif

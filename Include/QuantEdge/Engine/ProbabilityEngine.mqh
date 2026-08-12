@@ -1260,18 +1260,8 @@ void CalculateProbability(int currentSignalIndex,
    double edgeAdjustment = 0;
    double _exMtfAdj = 0, _exInterAdj = 0, _exAngleAdj = 0;
 
-   if(InpShowMTF && g_mtfCount > 0)
-   {
-      int agreeCount = 0;
-      for(int t = 0; t < g_mtfCount; t++)
-      {
-         if(curSig.isBuySignal && g_mtfData[t].trend == 1) agreeCount++;
-         if(!curSig.isBuySignal && g_mtfData[t].trend == -1) agreeCount++;
-      }
-      double alignRatio = ((double)agreeCount / (double)g_mtfCount) * 2.0 - 1.0;
-      _exMtfAdj = alignRatio * 0.03;
-      edgeAdjustment += _exMtfAdj;
-   }
+   _exMtfAdj = GetMTFEdgeAdjustment(curSig.isBuySignal);
+   edgeAdjustment += _exMtfAdj;
 
    if(g_intermarket.isAvailable)
    {

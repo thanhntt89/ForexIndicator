@@ -61,6 +61,12 @@ enum ENUM_PROB_MODE
    PROB_ENSEMBLE   = 2   // Ensemble (Bayesian + XGBoost)
 };
 
+enum ENUM_MTF_EDGE_MODE
+{
+   MTF_EDGE_STRENGTH = 0,  // Strength-weighted (recommended)
+   MTF_EDGE_BINARY   = 1   // Binary vote (legacy)
+};
+
 //+------------------------------------------------------------------+
 //| INPUT GROUP: RSI Core Settings                                     |
 //+------------------------------------------------------------------+
@@ -211,6 +217,7 @@ input color  InpMTF_BullColor   = clrLime;        // Bullish color
 input color  InpMTF_BearColor   = clrRed;         // Bearish color
 input color  InpMTF_NeutralColor= clrGray;        // Neutral color
 input int    InpMinMTFAgreement = 40;              // Min MTF agreement % to confirm signal (0=off)
+input ENUM_MTF_EDGE_MODE InpMTFEdgeMode = MTF_EDGE_STRENGTH; // MTF edge adjustment mode
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Probability Engine                                    |
