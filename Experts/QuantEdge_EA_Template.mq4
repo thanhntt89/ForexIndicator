@@ -92,6 +92,12 @@ input double InpMaxDailyLossPct  = 2.0;                 // Max daily loss % of b
 //| Note: MT4 has no calendar API — indicator always publishes 0       |
 //| (clear) for QE_EconBlackout_<symbol>, so Gate 9 always passes.     |
 //+------------------------------------------------------------------+
+input string inp_grp_priceloc     = "========== Price Location Gate (10) =========="; // ---
+input bool   InpUsePriceLocSLSide  = true;              // Case 1: Allow entry when price between SL-Entry (probSL<50%, within 50%)
+input bool   InpUsePriceLocTPSide  = true;              // Case 2: Allow entry when price between Entry-TP1 (probSL<50%, within 50%)
+input double InpPriceLocMaxPct     = 50.0;              // Max % distance from reference edge (0-100)
+input double InpPriceLocMaxProbSL  = 50.0;              // Max prob SL % allowed (0-100)
+
 input string inp_grp_advgates    = "========== Advanced Gates =========="; // ---
 input bool   InpUseADXGate       = false;               // Enable ADX trend-strength gate (Gate 8)
 input bool   InpUseEconCalGate   = false;               // Enable economic calendar blackout gate (Gate 9)
@@ -1328,6 +1334,8 @@ int OnInit()
    Print("[QuantEdge EA] MinRecLevel=", InpMinRecLevel, " AllowCaution=", InpAllowCaution,
          " MinConfidence=", InpMinConfidence, " MaxSurvivalFloor=", InpMaxSurvivalFloor,
          " MaxSpread=", InpMaxSpreadPoints);
+   Print("[QuantEdge EA] PriceLocSLSide=", InpUsePriceLocSLSide, " PriceLocTPSide=", InpUsePriceLocTPSide,
+         " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
    Print("[QuantEdge EA] PartialClose=", InpUsePartialClose, " Trailing=", InpUseTrailing);
    Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " NegativeDCA=", InpUseNegativeDCA);
@@ -1497,13 +1505,75 @@ void OnTick()
          g9_pass = (GlobalVariableGet(econGateVar) == 0.0);
    }
 
-   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass && g7_pass && g8_pass && g9_pass;
+   // --- Gate 10: Price Location — allow entry when price has drifted       ---
+   // --- from the indicator's ideal entry, provided prob SL is acceptable   ---
+   // --- and price hasn't moved too far (within InpPriceLocMaxPct %).       ---
+   bool g10_pass = true;
+   {
+      double mktNow   = (direction > 0) ? Ask : Bid;
+      double probSL   = (probTP1 != EMPTY_VALUE) ? (100.0 - probTP1) : 100.0;
+      double distES   = MathAbs(entry - sl);   // entry-to-SL distance
+      double distET   = MathAbs(tp1 - entry);  // entry-to-TP1 distance
+
+      bool priceBetweenSLEntry = false;
+      bool priceBetweenEntryTP = false;
+
+      if(direction > 0)
+      {
+         priceBetweenSLEntry = (mktNow < entry && mktNow > sl);
+         priceBetweenEntryTP = (mktNow > entry && mktNow < tp1);
+      }
+      else
+      {
+         priceBetweenSLEntry = (mktNow > entry && mktNow < sl);
+         priceBetweenEntryTP = (mktNow < entry && mktNow > tp1);
+      }
+
+      if(priceBetweenSLEntry)
+      {
+         if(InpUsePriceLocSLSide)
+         {
+            double driftFromEntry = MathAbs(mktNow - entry);
+            double driftPct = (distES > 0) ? (driftFromEntry / distES * 100.0) : 100.0;
+            g10_pass = (probSL < InpPriceLocMaxProbSL && driftPct <= InpPriceLocMaxPct);
+            if(!g10_pass)
+               Print("[QuantEdge EA] Gate 10 FAIL (SL-side): probSL=", DoubleToString(probSL, 1),
+                     "% drift=", DoubleToString(driftPct, 1), "% of Entry→SL");
+         }
+         else
+         {
+            g10_pass = false;
+            Print("[QuantEdge EA] Gate 10 FAIL: price between SL-Entry but Case 1 disabled");
+         }
+      }
+      else if(priceBetweenEntryTP)
+      {
+         if(InpUsePriceLocTPSide)
+         {
+            double driftFromEntry = MathAbs(mktNow - entry);
+            double driftPct = (distET > 0) ? (driftFromEntry / distET * 100.0) : 100.0;
+            g10_pass = (probSL < InpPriceLocMaxProbSL && driftPct <= InpPriceLocMaxPct);
+            if(!g10_pass)
+               Print("[QuantEdge EA] Gate 10 FAIL (TP-side): probSL=", DoubleToString(probSL, 1),
+                     "% drift=", DoubleToString(driftPct, 1), "% of Entry→TP1");
+         }
+         else
+         {
+            g10_pass = false;
+            Print("[QuantEdge EA] Gate 10 FAIL: price between Entry-TP1 but Case 2 disabled");
+         }
+      }
+      // else: price is at or beyond entry (exact match) — no location gate needed, pass
+   }
+
+   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass && g7_pass && g8_pass && g9_pass && g10_pass;
 
    string dirStr  = (direction > 0) ? "BUY" : "SELL";
-   string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s",
+   string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s G10:%s",
       g1_pass?"PASS":"FAIL", g2_pass?"PASS":"FAIL", g3_pass?"PASS":"FAIL",
       g4_pass?"PASS":"FAIL", g5_pass?"PASS":"FAIL", g6_pass?"PASS":"FAIL",
-      g7_pass?"PASS":"FAIL", g8_pass?"PASS":"FAIL", g9_pass?"PASS":"FAIL");
+      g7_pass?"PASS":"FAIL", g8_pass?"PASS":"FAIL", g9_pass?"PASS":"FAIL",
+      g10_pass?"PASS":"FAIL");
 
    Print("[QuantEdge EA] ", dirStr, " Case=", caseNum,
          " Rec=", RecLevelName(recLevelInt), " Conf=", (int)MathRound(confidence),
