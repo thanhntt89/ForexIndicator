@@ -92,6 +92,10 @@ input double InpMaxDailyLossPct  = 2.0;                 // Max daily loss % of b
 //| Note: MT4 has no calendar API — indicator always publishes 0       |
 //| (clear) for QE_EconBlackout_<symbol>, so Gate 9 always passes.     |
 //+------------------------------------------------------------------+
+input string inp_grp_retry        = "========== Signal Retry =========="; // ---
+input bool   InpUseSignalRetry    = true;               // Retry cached signal every tick while still valid
+input int    InpRetryMaxBars      = 5;                  // Max bars to keep retrying after signal appeared
+
 input string inp_grp_priceloc     = "========== Price Location Gate (10) =========="; // ---
 input bool   InpUsePriceLocSLSide  = true;              // Case 1: Allow entry when price between SL-Entry (probSL<50%, within 50%)
 input bool   InpUsePriceLocTPSide  = true;              // Case 2: Allow entry when price between Entry-TP1 (probSL<50%, within 50%)
@@ -202,6 +206,22 @@ bool g_panelCollapsed = false;
 int      g_dailyLossCount   = 0;
 double   g_dailyLossAmount  = 0;
 datetime g_dailyResetDate   = 0;
+
+//+------------------------------------------------------------------+
+//| Signal retry state — cached from last valid signal for tick retry  |
+//+------------------------------------------------------------------+
+bool     g_sigValid       = false;
+int      g_sigDirection   = 0;
+int      g_sigCaseNum     = 0;
+double   g_sigEntry       = 0;
+double   g_sigSL          = 0;
+double   g_sigTP1         = 0;
+double   g_sigTP2         = 0;
+double   g_sigRecLevel    = 0;
+double   g_sigConfidence  = 0;
+double   g_sigEV          = 0;
+double   g_sigRiskPct     = 0;
+double   g_sigProbTP1     = 0;
 
 //+------------------------------------------------------------------+
 //| DCA state tracking                                                |
@@ -1334,6 +1354,7 @@ int OnInit()
    Print("[QuantEdge EA] MinRecLevel=", InpMinRecLevel, " AllowCaution=", InpAllowCaution,
          " MinConfidence=", InpMinConfidence, " MaxSurvivalFloor=", InpMaxSurvivalFloor,
          " MaxSpread=", InpMaxSpreadPoints);
+   Print("[QuantEdge EA] SignalRetry=", InpUseSignalRetry, " RetryMaxBars=", InpRetryMaxBars);
    Print("[QuantEdge EA] PriceLocSLSide=", InpUsePriceLocSLSide, " PriceLocTPSide=", InpUsePriceLocTPSide,
          " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
@@ -1365,67 +1386,61 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
-//| Expert tick function                                               |
+//| Check if the cached signal is still valid (price hasn't hit SL,   |
+//| survival not expired, within max retry bars).                      |
 //+------------------------------------------------------------------+
-void OnTick()
+bool IsSignalStillValid()
 {
-   ManageTrailing();
-   ManageDCA();
-   UpdateDailyLossTracking();
+   if(!g_sigValid)
+      return false;
 
-   // Poll for close commands from indicator's Manual Trading panel
-   string closeGV = "QE_CloseCmd_" + Symbol();
-   if(GlobalVariableCheck(closeGV))
+   double mktNow = (g_sigDirection > 0) ? Bid : Ask;
+   bool slHit = (g_sigDirection > 0) ? (mktNow <= g_sigSL) : (mktNow >= g_sigSL);
+   if(slHit)
    {
-      int cmd = (int)GlobalVariableGet(closeGV) - 1;
-      GlobalVariableDel(closeGV);
-      if(cmd >= 0 && cmd <= 4)
+      Print("[QuantEdge EA] Retry: signal invalidated — price hit SL (",
+            DoubleToString(g_sigSL, Digits), ")");
+      g_sigValid = false;
+      return false;
+   }
+
+   if(InpUseGate3Staleness)
+   {
+      double survival = ReadBuffer(BUF_PROB_SURVIVAL);
+      if(survival != EMPTY_VALUE && survival < InpMaxSurvivalFloor)
       {
-         Print("[QuantEdge EA] Close command received from indicator: criteria=", cmd);
-         ClosePositionsByCriteria(cmd, false);
+         Print("[QuantEdge EA] Retry: signal invalidated — survival expired (",
+               DoubleToString(survival, 3), " < ", DoubleToString(InpMaxSurvivalFloor, 3), ")");
+         g_sigValid = false;
+         return false;
       }
    }
 
-   datetime currentBarTime = iTime(Symbol(), Period(), 0);
-   if(currentBarTime == g_lastBarTime)
-      return;
-   g_lastBarTime = currentBarTime;
+   return true;
+}
 
-   double buyCase  = ReadBuffer(BUF_BUY_SIGNAL);
-   double sellCase = ReadBuffer(BUF_SELL_SIGNAL);
+//+------------------------------------------------------------------+
+//| Run all gates and place order if passed. Returns true if order     |
+//| was placed (signal consumed).                                      |
+//| isRetry: true when called from tick-level retry (suppresses log   |
+//| spam — only logs on state changes, not every tick).                |
+//+------------------------------------------------------------------+
+bool TryExecuteSignal(bool isRetry)
+{
+   int    direction  = g_sigDirection;
+   int    caseNum    = g_sigCaseNum;
+   double entry      = g_sigEntry;
+   double sl         = g_sigSL;
+   double tp1        = g_sigTP1;
+   double tp2        = g_sigTP2;
+   int    recLevelInt= (int)MathRound(g_sigRecLevel);
+   double confidence = g_sigConfidence;
+   double ev         = g_sigEV;
+   double riskPct    = g_sigRiskPct;
+   double probTP1    = g_sigProbTP1;
 
-   bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
-   bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
-
-   if(!hasBuy && !hasSell)
-      return;
-
-   int    direction = hasBuy ? 1 : -1;
-   int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
-   double entry     = ReadBuffer(BUF_ENTRY);
-   double sl        = ReadBuffer(BUF_SL);
-   double tp1       = ReadBuffer(BUF_TP1);
-   double tp2       = ReadBuffer(BUF_TP2);
-   double recLevel  = ReadBuffer(BUF_REC_LEVEL);
-   double confidence= ReadBuffer(BUF_REC_CONFIDENCE);
-   double ev        = ReadBuffer(BUF_REC_EV);
-   double riskPct   = ReadBuffer(BUF_REC_RISK);
-   double survival  = ReadBuffer(BUF_PROB_SURVIVAL);
-   double expiresMin= ReadBuffer(BUF_PROB_EXPIRES_MIN);
-   double probTP1   = ReadBuffer(BUF_PROB_TP1);
-
-   if(recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE)
-   {
-      Print("[QuantEdge EA] Signal detected (Case ", caseNum, ") but probability buffers empty — skipping.");
-      return;
-   }
-
-   int recLevelInt = (int)MathRound(recLevel);
-
-   // --- Opposite-signal basket close: if a new signal appears in the   ---
-   // --- opposite direction of an active DCA basket, close everything   ---
-   // --- now so this tick's signal can pass Gate 4 immediately after.   ---
-   if(g_dcaActive && direction != g_dcaDirection)
+   // --- Opposite-signal basket close ---
+   if(!isRetry && g_dcaActive && direction != g_dcaDirection)
    {
       double basketPnL = CalculateBasketPnL();
       if(basketPnL > 0)
@@ -1457,17 +1472,15 @@ void OnTick()
    // --- Gate 2: Confidence ---
    bool g2_pass = !InpUseGate2Confidence || ((int)MathRound(confidence) >= InpMinConfidence);
 
-   // --- Gate 3: Staleness ---
+   // --- Gate 3: Staleness (re-read live survival for retry) ---
    bool g3_pass = true;
+   double survival = ReadBuffer(BUF_PROB_SURVIVAL);
    if(InpUseGate3Staleness && survival != EMPTY_VALUE && survival < InpMaxSurvivalFloor)
       g3_pass = false;
 
-   // --- Gate 4: No Duplicate Position (also blocks ANY new signal while a  ---
-   // --- DCA basket is active, regardless of direction — the DCA system    ---
-   // --- tracks only one basket at a time; an opposite-direction fill would ---
-   // --- overwrite that basket's state and orphan it.                       ---
+   // --- Gate 4: No Duplicate Position ---
    bool g4_pass = !HasOpenPosition(direction) && !g_dcaActive;
-   if(g_dcaActive && !HasOpenPosition(direction))
+   if(!isRetry && g_dcaActive && !HasOpenPosition(direction))
       Print("[QuantEdge EA] Gate 4 blocked: DCA basket active (dir=",
             (g_dcaDirection > 0 ? "BUY" : "SELL"),
             ") — waiting for basket to close before accepting new signal.");
@@ -1487,7 +1500,7 @@ void OnTick()
    // --- Gate 7: Daily Loss Cap ---
    bool g7_pass = !IsDailyLossCapHit();
 
-   // --- Gate 8: ADX Trend Strength (indicator publishes via GlobalVariable) ---
+   // --- Gate 8: ADX Trend Strength ---
    bool g8_pass = true;
    if(InpUseADXGate)
    {
@@ -1496,7 +1509,7 @@ void OnTick()
          g8_pass = (GlobalVariableGet(adxGateVar) != 0.0);
    }
 
-   // --- Gate 9: Economic Calendar Blackout (indicator publishes via GlobalVariable; MT4 always Clear) ---
+   // --- Gate 9: Economic Calendar Blackout ---
    bool g9_pass = true;
    if(InpUseEconCalGate)
    {
@@ -1505,15 +1518,13 @@ void OnTick()
          g9_pass = (GlobalVariableGet(econGateVar) == 0.0);
    }
 
-   // --- Gate 10: Price Location — allow entry when price has drifted       ---
-   // --- from the indicator's ideal entry, provided prob SL is acceptable   ---
-   // --- and price hasn't moved too far (within InpPriceLocMaxPct %).       ---
+   // --- Gate 10: Price Location ---
    bool g10_pass = true;
    {
       double mktNow   = (direction > 0) ? Ask : Bid;
       double probSL   = (probTP1 != EMPTY_VALUE) ? (100.0 - probTP1) : 100.0;
-      double distES   = MathAbs(entry - sl);   // entry-to-SL distance
-      double distET   = MathAbs(tp1 - entry);  // entry-to-TP1 distance
+      double distES   = MathAbs(entry - sl);
+      double distET   = MathAbs(tp1 - entry);
 
       bool priceBetweenSLEntry = false;
       bool priceBetweenEntryTP = false;
@@ -1536,14 +1547,13 @@ void OnTick()
             double driftFromEntry = MathAbs(mktNow - entry);
             double driftPct = (distES > 0) ? (driftFromEntry / distES * 100.0) : 100.0;
             g10_pass = (probSL < InpPriceLocMaxProbSL && driftPct <= InpPriceLocMaxPct);
-            if(!g10_pass)
+            if(!g10_pass && !isRetry)
                Print("[QuantEdge EA] Gate 10 FAIL (SL-side): probSL=", DoubleToString(probSL, 1),
                      "% drift=", DoubleToString(driftPct, 1), "% of Entry→SL");
          }
          else
          {
             g10_pass = false;
-            Print("[QuantEdge EA] Gate 10 FAIL: price between SL-Entry but Case 1 disabled");
          }
       }
       else if(priceBetweenEntryTP)
@@ -1553,36 +1563,38 @@ void OnTick()
             double driftFromEntry = MathAbs(mktNow - entry);
             double driftPct = (distET > 0) ? (driftFromEntry / distET * 100.0) : 100.0;
             g10_pass = (probSL < InpPriceLocMaxProbSL && driftPct <= InpPriceLocMaxPct);
-            if(!g10_pass)
+            if(!g10_pass && !isRetry)
                Print("[QuantEdge EA] Gate 10 FAIL (TP-side): probSL=", DoubleToString(probSL, 1),
                      "% drift=", DoubleToString(driftPct, 1), "% of Entry→TP1");
          }
          else
          {
             g10_pass = false;
-            Print("[QuantEdge EA] Gate 10 FAIL: price between Entry-TP1 but Case 2 disabled");
          }
       }
-      // else: price is at or beyond entry (exact match) — no location gate needed, pass
    }
 
    bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass && g7_pass && g8_pass && g9_pass && g10_pass;
 
    string dirStr  = (direction > 0) ? "BUY" : "SELL";
-   string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s G10:%s",
-      g1_pass?"PASS":"FAIL", g2_pass?"PASS":"FAIL", g3_pass?"PASS":"FAIL",
-      g4_pass?"PASS":"FAIL", g5_pass?"PASS":"FAIL", g6_pass?"PASS":"FAIL",
-      g7_pass?"PASS":"FAIL", g8_pass?"PASS":"FAIL", g9_pass?"PASS":"FAIL",
-      g10_pass?"PASS":"FAIL");
 
-   Print("[QuantEdge EA] ", dirStr, " Case=", caseNum,
-         " Rec=", RecLevelName(recLevelInt), " Conf=", (int)MathRound(confidence),
-         " EV=", DoubleToString(ev, 2), "R Prob=", DoubleToString(probTP1, 1), "%",
-         " Risk=", DoubleToString(riskPct, 2), "% | ", gateStr,
-         " => ", (allPass ? "TRADE" : "SKIP"));
+   if(!isRetry)
+   {
+      string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s G10:%s",
+         g1_pass?"PASS":"FAIL", g2_pass?"PASS":"FAIL", g3_pass?"PASS":"FAIL",
+         g4_pass?"PASS":"FAIL", g5_pass?"PASS":"FAIL", g6_pass?"PASS":"FAIL",
+         g7_pass?"PASS":"FAIL", g8_pass?"PASS":"FAIL", g9_pass?"PASS":"FAIL",
+         g10_pass?"PASS":"FAIL");
+
+      Print("[QuantEdge EA] ", dirStr, " Case=", caseNum,
+            " Rec=", RecLevelName(recLevelInt), " Conf=", (int)MathRound(confidence),
+            " EV=", DoubleToString(ev, 2), "R Prob=", DoubleToString(probTP1, 1), "%",
+            " Risk=", DoubleToString(riskPct, 2), "% | ", gateStr,
+            " => ", (allPass ? "TRADE" : "SKIP"));
+   }
 
    if(!allPass)
-      return;
+      return false;
 
    // --- Compute lot size ---
    double effectiveRisk = riskPct;
@@ -1594,7 +1606,7 @@ void OnTick()
    if(lot <= 0)
    {
       Print("[QuantEdge EA] Lot calculation returned 0 — cannot trade.");
-      return;
+      return false;
    }
 
    double lotStep = MarketInfo(Symbol(), MODE_LOTSTEP);
@@ -1611,8 +1623,12 @@ void OnTick()
          Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot @ ",
                DoubleToString(entry, Digits), " SL=", DoubleToString(sl, Digits),
                " TP=", DoubleToString(tp1, Digits), " — auto-trading OFF.");
-      return;
+      return false;
    }
+
+   if(isRetry)
+      Print("[QuantEdge EA] RETRY fill: cached signal Case=", caseNum, " ", dirStr,
+            " gates now PASS — placing order.");
 
    // --- Adjust SL/TP relative to current market price ---
    double marketPrice = (direction > 0) ? Ask : Bid;
@@ -1636,9 +1652,6 @@ void OnTick()
       if(adjTP2 > 0 && adjTP2 >= Bid - stoplevel) adjTP2 = NormalizeDouble(Bid - stoplevel - Point, Digits);
    }
 
-   // DCA manages exits itself (half-close SL-lock, basket breakeven, drawdown
-   // cap) — no literal SL sent to the broker for any DCA-active leg. adjSL is
-   // still kept as the reference price for g_dcaOriginalSL below.
    bool   dcaGateActive = (InpUsePositiveDCA || InpUseNegativeDCA);
    double sendSL = dcaGateActive ? 0.0 : adjSL;
 
@@ -1697,10 +1710,10 @@ void OnTick()
    {
       g_dcaActive          = true;
       g_dcaDirection       = direction;
-      g_dcaOriginalEntry   = marketPrice;   // actual fill, not indicator entry
+      g_dcaOriginalEntry   = marketPrice;
       g_dcaOriginalSL      = adjSL;
       g_dcaOriginalTP1     = adjTP1;
-      g_dcaOriginalLot     = lot;           // total lot, pre-split
+      g_dcaOriginalLot     = lot;
       g_dcaTP1HalfClosed   = false;
       g_dcaNegTriggered    = false;
       g_dcaNegTriggerPrice = 0;
@@ -1711,6 +1724,105 @@ void OnTick()
             " (order SL sent=", DoubleToString(sendSL, Digits), ")",
             " TP1=", DoubleToString(adjTP1, Digits),
             " lot=", DoubleToString(lot, 2));
+   }
+
+   g_sigValid = false;
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                               |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   ManageTrailing();
+   ManageDCA();
+   UpdateDailyLossTracking();
+
+   // Poll for close commands from indicator's Manual Trading panel
+   string closeGV = "QE_CloseCmd_" + Symbol();
+   if(GlobalVariableCheck(closeGV))
+   {
+      int cmd = (int)GlobalVariableGet(closeGV) - 1;
+      GlobalVariableDel(closeGV);
+      if(cmd >= 0 && cmd <= 4)
+      {
+         Print("[QuantEdge EA] Close command received from indicator: criteria=", cmd);
+         ClosePositionsByCriteria(cmd, false);
+      }
+   }
+
+   // --- New bar: check for fresh signal from indicator ---
+   datetime currentBarTime = iTime(Symbol(), Period(), 0);
+   bool isNewBar = (currentBarTime != g_lastBarTime);
+
+   if(isNewBar)
+   {
+      g_lastBarTime = currentBarTime;
+
+      double buyCase  = ReadBuffer(BUF_BUY_SIGNAL);
+      double sellCase = ReadBuffer(BUF_SELL_SIGNAL);
+
+      bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
+      bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
+
+      if(hasBuy || hasSell)
+      {
+         int    direction = hasBuy ? 1 : -1;
+         int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
+         double entry     = ReadBuffer(BUF_ENTRY);
+         double sl2       = ReadBuffer(BUF_SL);
+         double tp1       = ReadBuffer(BUF_TP1);
+         double tp2       = ReadBuffer(BUF_TP2);
+         double recLevel  = ReadBuffer(BUF_REC_LEVEL);
+         double confidence= ReadBuffer(BUF_REC_CONFIDENCE);
+         double ev        = ReadBuffer(BUF_REC_EV);
+         double riskPct   = ReadBuffer(BUF_REC_RISK);
+         double probTP1   = ReadBuffer(BUF_PROB_TP1);
+
+         if(recLevel != EMPTY_VALUE && confidence != EMPTY_VALUE)
+         {
+            g_sigValid      = true;
+            g_sigDirection  = direction;
+            g_sigCaseNum    = caseNum;
+            g_sigEntry      = entry;
+            g_sigSL         = sl2;
+            g_sigTP1        = tp1;
+            g_sigTP2        = tp2;
+            g_sigRecLevel   = recLevel;
+            g_sigConfidence = confidence;
+            g_sigEV         = ev;
+            g_sigRiskPct    = riskPct;
+            g_sigProbTP1    = probTP1;
+
+            if(TryExecuteSignal(false))
+               return;
+         }
+         else
+         {
+            Print("[QuantEdge EA] Signal detected (Case ", caseNum,
+                  ") but probability buffers empty — skipping.");
+         }
+      }
+   }
+
+   // --- Tick-level retry: cached signal still valid, no position yet ---
+   if(InpUseSignalRetry && g_sigValid && !HasOpenPosition(g_sigDirection))
+   {
+      if(InpRetryMaxBars > 0)
+      {
+         int barsSinceSignal = iBarShift(Symbol(), Period(), g_lastBarTime, false);
+         if(barsSinceSignal > InpRetryMaxBars)
+         {
+            Print("[QuantEdge EA] Retry expired: ", barsSinceSignal,
+                  " bars since signal (max ", InpRetryMaxBars, ")");
+            g_sigValid = false;
+            return;
+         }
+      }
+
+      if(IsSignalStillValid())
+         TryExecuteSignal(true);
    }
 }
 
