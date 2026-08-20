@@ -39,12 +39,15 @@
 //+------------------------------------------------------------------+
 //| Recommendation level ordinals (mirrors ENUM_RECOMMENDATION)       |
 //+------------------------------------------------------------------+
-#define REC_STRONG_ENTRY  0
-#define REC_ENTRY         1
-#define REC_CAUTION_ENTRY 2
-#define REC_WAIT          3
-#define REC_AVOID         4
-#define REC_COUNTER_TREND 5
+enum ENUM_REC_LEVEL
+{
+   REC_STRONG_ENTRY  = 0,  // STRONG — Best quality
+   REC_ENTRY         = 1,  // ENTRY — Good
+   REC_CAUTION_ENTRY = 2,  // CAUTION — Acceptable
+   REC_WAIT          = 3,  // WAIT — Low quality
+   REC_AVOID         = 4,  // AVOID — Skip
+   REC_COUNTER_TREND = 5   // COUNTER_TREND — Opposite
+};
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: EA Settings                                          |
@@ -60,7 +63,7 @@ input int    InpSlippage         = 3;                   // Max slippage (points)
 //+------------------------------------------------------------------+
 input string inp_grp_gates       = "========== Decision Gates =========="; // ---
 input bool   InpUseGate1RecLevel = true;                // Enable Gate 1: Recommendation Level check
-input int    InpMinRecLevel      = REC_WAIT;             // Min recommendation level (0=STRONG, 1=ENTRY, 2=CAUTION, 3=WAIT)
+input ENUM_REC_LEVEL InpMinRecLevel = REC_WAIT;           // Min recommendation level (worst allowed)
 input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
 input bool   InpUseGate2Confidence = true;              // Enable Gate 2: Confidence check
 input int    InpMinConfidence    = 0;                   // Min confidence score (0-100)
