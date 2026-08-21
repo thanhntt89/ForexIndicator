@@ -225,6 +225,8 @@ double   g_sigConfidence  = 0;
 double   g_sigEV          = 0;
 double   g_sigRiskPct     = 0;
 double   g_sigProbTP1     = 0;
+bool     g_sigTP1Hit      = false;
+bool     g_sigSLHit       = false;
 
 //+------------------------------------------------------------------+
 //| DCA state tracking                                                |
@@ -1398,13 +1400,28 @@ bool IsSignalStillValid()
       return false;
 
    double mktNow = (g_sigDirection > 0) ? Bid : Ask;
+
+   // Track SL hit — invalidates signal entirely
    bool slHit = (g_sigDirection > 0) ? (mktNow <= g_sigSL) : (mktNow >= g_sigSL);
    if(slHit)
    {
       Print("[QuantEdge EA] Retry: signal invalidated — price hit SL (",
             DoubleToString(g_sigSL, Digits), ")");
       g_sigValid = false;
+      g_sigSLHit = true;
       return false;
+   }
+
+   // Track TP1 hit — doesn't invalidate signal but blocks TP-side entry
+   if(!g_sigTP1Hit && g_sigTP1 > 0)
+   {
+      bool tp1Hit = (g_sigDirection > 0) ? (mktNow >= g_sigTP1) : (mktNow <= g_sigTP1);
+      if(tp1Hit)
+      {
+         Print("[QuantEdge EA] Retry: TP1 reached (",
+               DoubleToString(g_sigTP1, Digits), ") — TP-side entry disabled");
+         g_sigTP1Hit = true;
+      }
    }
 
    if(InpUseGate3Staleness)
@@ -1545,7 +1562,7 @@ bool TryExecuteSignal(bool isRetry)
 
       if(priceBetweenSLEntry)
       {
-         if(InpUsePriceLocSLSide)
+         if(InpUsePriceLocSLSide && !g_sigSLHit)
          {
             double driftFromEntry = MathAbs(mktNow - entry);
             double driftPct = (distES > 0) ? (driftFromEntry / distES * 100.0) : 100.0;
@@ -1557,11 +1574,13 @@ bool TryExecuteSignal(bool isRetry)
          else
          {
             g10_pass = false;
+            if(g_sigSLHit && !isRetry)
+               Print("[QuantEdge EA] Gate 10 FAIL: SL was already hit — SL-side entry disabled");
          }
       }
       else if(priceBetweenEntryTP)
       {
-         if(InpUsePriceLocTPSide)
+         if(InpUsePriceLocTPSide && !g_sigTP1Hit)
          {
             double driftFromEntry = MathAbs(mktNow - entry);
             double driftPct = (distET > 0) ? (driftFromEntry / distET * 100.0) : 100.0;
@@ -1573,6 +1592,8 @@ bool TryExecuteSignal(bool isRetry)
          else
          {
             g10_pass = false;
+            if(g_sigTP1Hit && !isRetry)
+               Print("[QuantEdge EA] Gate 10 FAIL: TP1 was already hit — TP-side entry disabled");
          }
       }
    }
@@ -1786,6 +1807,8 @@ void OnTick()
          if(recLevel != EMPTY_VALUE && confidence != EMPTY_VALUE)
          {
             g_sigValid      = true;
+            g_sigTP1Hit     = false;
+            g_sigSLHit      = false;
             g_sigDirection  = direction;
             g_sigCaseNum    = caseNum;
             g_sigEntry      = entry;
