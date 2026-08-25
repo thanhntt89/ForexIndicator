@@ -57,6 +57,11 @@ input string InpIndicatorName    = "QuantEdge_RSI";     // Indicator name (compi
 input bool   InpEnableAutoTrading= true;                // Enable live order placement
 input int    InpMagicNumber      = 20260805;            // Magic number for order identification
 input int    InpSlippage         = 3;                   // Max slippage (points)
+input bool   InpShowSignalArrows = true;                // Draw signal arrows on chart
+input int    InpArrowSize        = 2;                   // Arrow size (1-5)
+input int    InpArrowOffsetPts   = 10;                  // Arrow offset from price (points)
+input color  InpBuyArrowColor    = clrLime;             // Buy arrow color
+input color  InpSellArrowColor   = clrRed;              // Sell arrow color
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Decision Gates                                       |
@@ -1399,6 +1404,51 @@ int OnInit()
 }
 
 //+------------------------------------------------------------------+
+//| Signal arrow drawing — EA draws arrows so indicator can run in    |
+//| headless iCustom mode (InpEAMode=true) without visual overhead.   |
+//+------------------------------------------------------------------+
+#define EA_ARROW_PREFIX  "QEEA_Arr_"
+
+void DrawSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
+{
+   if(!InpShowSignalArrows) return;
+
+   string name = EA_ARROW_PREFIX + (isBuy ? "B_" : "S_")
+               + IntegerToString(caseNum) + "_"
+               + IntegerToString((int)barTime);
+   if(ObjectFind(name) >= 0) return;
+
+   double offset = InpArrowOffsetPts * Point;
+
+   if(isBuy)
+   {
+      ObjectCreate(name, OBJ_ARROW, 0, barTime, price - offset);
+      ObjectSet(name, OBJPROP_ARROWCODE, 233);
+      ObjectSet(name, OBJPROP_COLOR, InpBuyArrowColor);
+   }
+   else
+   {
+      ObjectCreate(name, OBJ_ARROW, 0, barTime, price + offset);
+      ObjectSet(name, OBJPROP_ARROWCODE, 234);
+      ObjectSet(name, OBJPROP_COLOR, InpSellArrowColor);
+   }
+   ObjectSet(name, OBJPROP_WIDTH, InpArrowSize);
+   ObjectSet(name, OBJPROP_SELECTABLE, false);
+   ObjectSet(name, OBJPROP_HIDDEN, false);
+}
+
+void CleanupSignalArrows()
+{
+   int total = ObjectsTotal();
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(i);
+      if(StringFind(name, EA_ARROW_PREFIX) == 0)
+         ObjectDelete(name);
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Check if the cached signal is still valid (price hasn't hit SL,   |
 //| survival not expired, within max retry bars).                      |
 //+------------------------------------------------------------------+
@@ -1829,6 +1879,10 @@ void OnTick()
             g_sigRiskPct    = riskPct;
             g_sigProbTP1    = probTP1;
 
+            double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), 1)
+                                                : iHigh(Symbol(), Period(), 1);
+            DrawSignalArrow(iTime(Symbol(), Period(), 1), arrowPrice, direction > 0, caseNum);
+
             if(TryExecuteSignal(false))
                return;
          }
@@ -1869,6 +1923,7 @@ void OnDeinit(const int reason)
       SaveDCAState();
 
    QEEA_DeletePanel();
+   CleanupSignalArrows();
    Print("[QuantEdge EA] Deinit, reason=", reason);
 }
 
