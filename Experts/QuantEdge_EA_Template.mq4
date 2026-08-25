@@ -136,6 +136,8 @@ input int    InpNegDCAMaxOrders   = 5;                   // Max negative DCA ord
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
 input double InpNegDCAATRMult     = 0.5;                 // DCA spacing = ATR × this multiplier
 input double InpNegDCAMaxDDPct    = 5.0;                 // Hard drawdown cap (% of balance) — applies to ENTIRE basket whenever ANY DCA mode is active, close all if exceeded
+input bool   InpNegDCABEClose     = true;                // Close negative DCA basket when price returns to avg entry (breakeven)
+input double InpNegDCABEOffsetPip = 0.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
 input double InpDCAProfitLockR    = 0.2;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
 
 //+------------------------------------------------------------------+
@@ -767,9 +769,9 @@ bool CheckDrawdownCap()
    double maxLoss    = balance * InpNegDCAMaxDDPct / 100.0;
    if(basketPnL < 0 && MathAbs(basketPnL) >= maxLoss)
    {
-      Print("[QuantEdge EA] DRAWDOWN CAP HIT: basket P/L=", DoubleToString(basketPnL, 2),
+      Print("[QuantEdge EA] EXIT: DRAWDOWN CAP — basket P/L=", DoubleToString(basketPnL, 2),
             " exceeds ", DoubleToString(InpNegDCAMaxDDPct, 1), "% of balance (",
-            DoubleToString(maxLoss, 2), "). CLOSING ENTIRE BASKET.");
+            DoubleToString(maxLoss, 2), "). Closing entire basket.");
       CloseEntireBasket();
       ClearDCAState();
       return true;
@@ -826,10 +828,10 @@ bool CheckEntryReturnProfitClose()
 
    if(basketPnL > minProfitTarget)
    {
-      Print("[QuantEdge EA] ENTRY-RETURN PROFIT LOCK: price back near original entry (",
+      Print("[QuantEdge EA] EXIT: ENTRY-RETURN PROFIT LOCK — price near entry (",
             DoubleToString(g_dcaOriginalEntry, Digits), "), basket P/L=",
             DoubleToString(basketPnL, 2), " > target ", DoubleToString(minProfitTarget, 2),
-            " (", DoubleToString(InpDCAProfitLockR, 2), "R). CLOSING ENTIRE BASKET.");
+            " (", DoubleToString(InpDCAProfitLockR, 2), "R). Closing entire basket.");
       CloseEntireBasket();
       ClearDCAState();
       return true;
@@ -846,18 +848,22 @@ void ManageNegativeDCA()
       return;
 
    // --- Basket Breakeven Check (priority 1) ---
-   // Drawdown cap is checked once, basket-wide, in ManageDCA() -> CheckDrawdownCap()
-   // (applies regardless of which DCA mode is active, not just negative DCA).
-   if(g_dcaNegTriggered && CountDCAPositions(MAGIC_NEG_DCA_OFFSET) > 0)
+   if(InpNegDCABEClose && g_dcaNegTriggered && CountDCAPositions(MAGIC_NEG_DCA_OFFSET) > 0)
    {
       double avgEntry = CalculateNegDCAAvgEntry();
       if(avgEntry > 0)
       {
-         bool atBreakeven = (g_dcaDirection > 0) ? (Bid >= avgEntry) : (Ask <= avgEntry);
+         double beTarget = (g_dcaDirection > 0)
+                           ? avgEntry + InpNegDCABEOffsetPip * Point * 10
+                           : avgEntry - InpNegDCABEOffsetPip * Point * 10;
+         bool atBreakeven = (g_dcaDirection > 0) ? (Bid >= beTarget) : (Ask <= beTarget);
          if(atBreakeven)
          {
-            Print("[QuantEdge EA] Negative DCA basket breakeven reached at avg=",
-                  DoubleToString(avgEntry, Digits), ". Closing entire basket.");
+            double basketPnL = CalculateBasketPnL();
+            Print("[QuantEdge EA] EXIT: Negative DCA breakeven — avg=",
+                  DoubleToString(avgEntry, Digits), " target=",
+                  DoubleToString(beTarget, Digits), " basket P/L=",
+                  DoubleToString(basketPnL, 2), ". Closing entire basket.");
             CloseNegDCABasket();
             return;
          }
@@ -947,7 +953,7 @@ void ManageDCA()
    {
       if(!HasAnyOriginalPosition() && !HasAnyDCAPosition())
       {
-         Print("[QuantEdge EA] All positions closed — resetting DCA state.");
+         Print("[QuantEdge EA] EXIT: All positions closed externally — resetting DCA state.");
          ClearDCAState();
          return;
       }
@@ -980,8 +986,10 @@ void ManageDCA()
                                               : (Ask <= g_dcaOriginalTP1);
       if(tp1Reached)
       {
-         Print("[QuantEdge EA] TP1 reached at basket level (TP1=",
-               DoubleToString(g_dcaOriginalTP1, Digits), "). CLOSING ENTIRE BASKET.");
+         double basketPnL2 = CalculateBasketPnL();
+         Print("[QuantEdge EA] EXIT: TP1 REACHED — TP1=",
+               DoubleToString(g_dcaOriginalTP1, Digits), " basket P/L=",
+               DoubleToString(basketPnL2, 2), ". Closing entire basket.");
          CloseEntireBasket();
          ClearDCAState();
          return;
