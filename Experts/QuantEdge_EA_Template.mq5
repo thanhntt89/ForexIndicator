@@ -143,6 +143,8 @@ input double InpNegDCAMaxDDPct    = 5.0;                 // Hard drawdown cap (%
 input bool   InpNegDCABEClose     = true;                // Close negative DCA basket when price returns to avg entry (breakeven)
 input double InpNegDCABEOffsetPip = 0.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
 input double InpDCAProfitLockR    = 0.2;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
+input double InpDCAMinSpacingPts = 0;                   // Min distance between DCA orders (points, 0=no check)
+input int    InpDCAMinIntervalMin= 5;                   // Min time between DCA orders (minutes, 0=no check)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Risk & Lot Sizing                                    |
@@ -251,6 +253,7 @@ double   g_dcaOriginalLot     = 0;       // Original total lot size (pre-split)
 bool     g_dcaTP1HalfClosed   = false;   // Has the TP1-level half-close been executed
 bool     g_dcaNegTriggered    = false;   // Has negative DCA trigger fired
 double   g_dcaNegTriggerPrice = 0;       // Price at which negative DCA was first triggered
+datetime g_dcaLastOrderTime   = 0;       // Time of last DCA order placed
 
 //+------------------------------------------------------------------+
 //| Read one indicator buffer value at shift=1                        |
@@ -492,6 +495,7 @@ void SaveDCAState()
    GlobalVariableSet(pfx + "TP1HalfClosed", g_dcaTP1HalfClosed ? 1.0 : 0.0);
    GlobalVariableSet(pfx + "NegTriggered",  g_dcaNegTriggered ? 1.0 : 0.0);
    GlobalVariableSet(pfx + "NegTrigPrice",  g_dcaNegTriggerPrice);
+   GlobalVariableSet(pfx + "LastDCATime",   (double)g_dcaLastOrderTime);
 }
 
 void LoadDCAState()
@@ -508,6 +512,7 @@ void LoadDCAState()
    g_dcaTP1HalfClosed    = (GlobalVariableGet(pfx + "TP1HalfClosed") != 0.0);
    g_dcaNegTriggered     = (GlobalVariableGet(pfx + "NegTriggered") != 0.0);
    g_dcaNegTriggerPrice  = GlobalVariableGet(pfx + "NegTrigPrice");
+   g_dcaLastOrderTime    = (datetime)GlobalVariableGet(pfx + "LastDCATime");
 }
 
 void ClearDCAState()
@@ -521,6 +526,7 @@ void ClearDCAState()
    g_dcaTP1HalfClosed    = false;
    g_dcaNegTriggered     = false;
    g_dcaNegTriggerPrice  = 0;
+   g_dcaLastOrderTime    = 0;
 
    string pfx = DCA_GVPrefix();
    GlobalVariableDel(pfx + "Active");
@@ -532,6 +538,7 @@ void ClearDCAState()
    GlobalVariableDel(pfx + "TP1HalfClosed");
    GlobalVariableDel(pfx + "NegTriggered");
    GlobalVariableDel(pfx + "NegTrigPrice");
+   GlobalVariableDel(pfx + "LastDCATime");
 }
 
 //+------------------------------------------------------------------+
@@ -662,6 +669,32 @@ void ManageTrailing()
 //| See document/DCA_Flowcharts.md and DCA_Function_Specs.md          |
 //+------------------------------------------------------------------+
 
+bool IsDCACooldownOK()
+{
+   if(InpDCAMinIntervalMin <= 0)
+      return true;
+   if(g_dcaLastOrderTime == 0)
+      return true;
+   return (TimeCurrent() - g_dcaLastOrderTime) >= InpDCAMinIntervalMin * 60;
+}
+
+bool IsDCASpacingOK(double currentPrice)
+{
+   if(InpDCAMinSpacingPts <= 0)
+      return true;
+   double minDist = InpDCAMinSpacingPts * _Point;
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      if(!IsOurMagic(PositionGetInteger(POSITION_MAGIC))) continue;
+      if(MathAbs(currentPrice - PositionGetDouble(POSITION_PRICE_OPEN)) < minDist)
+         return false;
+   }
+   return true;
+}
+
 //+------------------------------------------------------------------+
 //| Positive DCA: add orders as price moves toward TP1               |
 //+------------------------------------------------------------------+
@@ -710,6 +743,9 @@ void ManagePositiveDCA()
       bool triggered = (g_dcaDirection > 0) ? (price >= level) : (price <= level);
       if(!triggered) continue;
 
+      if(!IsDCACooldownOK() || !IsDCASpacingOK(price))
+         continue;
+
       double lotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
       if(lotStep <= 0) continue;
       double minLot  = MathMax(SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN), InpMinLotSize);
@@ -728,9 +764,13 @@ void ManagePositiveDCA()
                     : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, 0, comment);
 
       if(result)
+      {
+         g_dcaLastOrderTime = TimeCurrent();
+         SaveDCAState();
          Print("[QuantEdge EA] Positive DCA+", idx, " placed: ",
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
                " lot, magic=", dcaMagic);
+      }
       else
          Print("[QuantEdge EA] Positive DCA+", idx, " FAILED: ",
                dcaTrade.ResultRetcodeDescription());
@@ -956,6 +996,9 @@ void ManageNegativeDCA()
       bool triggered = (g_dcaDirection > 0) ? (price <= level) : (price >= level);
       if(!triggered) continue;
 
+      if(!IsDCACooldownOK() || !IsDCASpacingOK(price))
+         continue;
+
       double ratio   = NegDCALotRatio(idx);
       double lotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
       if(lotStep <= 0) continue;
@@ -975,9 +1018,13 @@ void ManageNegativeDCA()
                     : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, 0, comment);
 
       if(result)
+      {
+         g_dcaLastOrderTime = TimeCurrent();
+         SaveDCAState();
          Print("[QuantEdge EA] Negative DCA-", idx, " placed: ",
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
                " lot (", DoubleToString(ratio * 100, 0), "%), magic=", dcaMagic);
+      }
       else
          Print("[QuantEdge EA] Negative DCA-", idx, " FAILED: ",
                dcaTrade.ResultRetcodeDescription());
