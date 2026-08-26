@@ -104,6 +104,7 @@ input bool   InpUseSignalRetry    = true;               // Retry cached signal e
 input int    InpRetryMaxBars      = 5;                  // Max bars to keep retrying after signal appeared
 
 input string inp_grp_priceloc     = "========== Price Location Gate (10) =========="; // ---
+input bool   InpUseGate10PriceLoc  = false;             // Enable Gate 10: Price Location filter (master switch)
 input bool   InpUsePriceLocSLSide  = true;              // Case 1: Allow entry when price between SL-Entry (probSL<50%, within 50%)
 input bool   InpUsePriceLocTPSide  = true;              // Case 2: Allow entry when price between Entry-TP1 (probSL<50%, within 50%)
 input double InpPriceLocMaxPct     = 50.0;              // Max % distance from reference edge (0-100)
@@ -1718,6 +1719,7 @@ bool TryExecuteSignal(bool isRetry)
 
    // --- Gate 10: Price Location ---
    bool g10_pass = true;
+   if(InpUseGate10PriceLoc)
    {
       double mktAsk2  = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
       double mktBid2  = SymbolInfoDouble(Symbol(), SYMBOL_BID);
