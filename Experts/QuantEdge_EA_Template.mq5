@@ -756,13 +756,16 @@ void ManagePositiveDCA()
 
       string comment = StringFormat("QE DCA+%d", idx);
 
+      double dcaSL = g_dcaOriginalSL;
+      double dcaTP = g_dcaOriginalTP1;
+
       CTrade dcaTrade;
       dcaTrade.SetExpertMagicNumber(dcaMagic);
       dcaTrade.SetDeviationInPoints(InpSlippage);
 
       bool result = (g_dcaDirection > 0)
-                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, 0, comment)
-                    : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, 0, comment);
+                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment)
+                    : dcaTrade.Sell(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment);
 
       if(result)
       {
@@ -770,7 +773,8 @@ void ManagePositiveDCA()
          SaveDCAState();
          Print("[QuantEdge EA] Positive DCA+", idx, " placed: ",
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
-               " lot, magic=", dcaMagic);
+               " lot, magic=", dcaMagic, " SL=", DoubleToString(dcaSL, _Digits),
+               " TP=", DoubleToString(dcaTP, _Digits));
       }
       else
          Print("[QuantEdge EA] Positive DCA+", idx, " FAILED: ",
@@ -1010,13 +1014,16 @@ void ManageNegativeDCA()
 
       string comment = StringFormat("QE DCA-%d", idx);
 
+      double dcaSL = g_dcaOriginalSL;
+      double dcaTP = g_dcaOriginalTP1;
+
       CTrade dcaTrade;
       dcaTrade.SetExpertMagicNumber(dcaMagic);
       dcaTrade.SetDeviationInPoints(InpSlippage);
 
       bool result = (g_dcaDirection > 0)
-                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, 0, comment)
-                    : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, 0, comment);
+                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment)
+                    : dcaTrade.Sell(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment);
 
       if(result)
       {
@@ -1024,7 +1031,9 @@ void ManageNegativeDCA()
          SaveDCAState();
          Print("[QuantEdge EA] Negative DCA-", idx, " placed: ",
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
-               " lot (", DoubleToString(ratio * 100, 0), "%), magic=", dcaMagic);
+               " lot (", DoubleToString(ratio * 100, 0), "%), magic=", dcaMagic,
+               " SL=", DoubleToString(dcaSL, _Digits),
+               " TP=", DoubleToString(dcaTP, _Digits));
       }
       else
          Print("[QuantEdge EA] Negative DCA-", idx, " FAILED: ",
