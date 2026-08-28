@@ -156,6 +156,15 @@ input double InpMaxLotSize       = 1.0;                 // Max lot size (hard ca
 input double InpMinLotSize       = 0.01;                // Min lot size
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Recovery Mode                                         |
+//+------------------------------------------------------------------+
+input string inp_grp_recovery    = "========== Recovery Mode =========="; // ---
+input bool   InpUseRecoveryMode  = true;                 // Enable Recovery Mode (boost lot after DCA cutloss)
+input double InpRecoveryLotMult  = 1.3;                  // Lot multiplier during recovery (1.1-2.0)
+input int    InpRecoveryMaxTrades= 5;                    // Max trades in recovery mode before auto-off
+input int    InpRecoveryMaxConsLoss = 2;                  // Max consecutive losses in recovery — auto-off (circuit breaker)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Indicator Params (must match loaded indicator)       |
 //+------------------------------------------------------------------+
 input string inp_grp_ind         = "========== Indicator Params =========="; // ---
@@ -255,6 +264,12 @@ bool     g_dcaTP1HalfClosed   = false;   // Has the TP1-level half-close been ex
 bool     g_dcaNegTriggered    = false;   // Has negative DCA trigger fired
 double   g_dcaNegTriggerPrice = 0;       // Price at which negative DCA was first triggered
 datetime g_dcaLastOrderTime   = 0;       // Time of last DCA order placed
+
+// Recovery Mode state
+bool     g_recoveryActive     = false;    // Is recovery mode currently active
+double   g_recoveryPreLossEq  = 0;        // Equity level before cutloss (recovery target)
+int      g_recoveryTradeCount = 0;        // Trades placed since recovery activated
+int      g_recoveryConsLoss   = 0;        // Consecutive losses during recovery
 
 //+------------------------------------------------------------------+
 //| Read one indicator buffer value at shift=1                        |
@@ -697,6 +712,94 @@ bool IsDCASpacingOK(double currentPrice)
 }
 
 //+------------------------------------------------------------------+
+//| Recovery Mode: activate after DCA cutloss                         |
+//+------------------------------------------------------------------+
+void ActivateRecoveryMode()
+{
+   if(!InpUseRecoveryMode) return;
+   g_recoveryActive     = true;
+   g_recoveryPreLossEq  = AccountInfoDouble(ACCOUNT_EQUITY);
+   g_recoveryTradeCount = 0;
+   g_recoveryConsLoss   = 0;
+   SaveRecoveryState();
+   Print("[QuantEdge EA] RECOVERY MODE ON — target equity=",
+         DoubleToString(g_recoveryPreLossEq, 2),
+         " lot×", DoubleToString(InpRecoveryLotMult, 2),
+         " max ", InpRecoveryMaxTrades, " trades, breaker ", InpRecoveryMaxConsLoss, " loss");
+}
+
+void DeactivateRecoveryMode(string reason)
+{
+   g_recoveryActive     = false;
+   g_recoveryPreLossEq  = 0;
+   g_recoveryTradeCount = 0;
+   g_recoveryConsLoss   = 0;
+   ClearRecoveryState();
+   Print("[QuantEdge EA] RECOVERY MODE OFF — ", reason);
+}
+
+void CheckRecoveryAutoOff()
+{
+   if(!g_recoveryActive) return;
+
+   if(AccountInfoDouble(ACCOUNT_EQUITY) >= g_recoveryPreLossEq)
+   {
+      DeactivateRecoveryMode("equity recovered to " + DoubleToString(g_recoveryPreLossEq, 2));
+      return;
+   }
+   if(g_recoveryTradeCount >= InpRecoveryMaxTrades)
+   {
+      DeactivateRecoveryMode("max trades reached (" + IntegerToString(InpRecoveryMaxTrades) + ")");
+      return;
+   }
+   if(g_recoveryConsLoss >= InpRecoveryMaxConsLoss)
+   {
+      DeactivateRecoveryMode("circuit breaker — " + IntegerToString(g_recoveryConsLoss) + " consecutive losses");
+      return;
+   }
+}
+
+double ApplyRecoveryMultiplier(double baseLot)
+{
+   if(!g_recoveryActive) return baseLot;
+   double boosted = baseLot * InpRecoveryLotMult;
+   boosted = MathMin(boosted, InpMaxLotSize);
+   return NormalizeDouble(boosted, 2);
+}
+
+void SaveRecoveryState()
+{
+   string pfx = "QE_Recovery_" + Symbol() + "_";
+   GlobalVariableSet(pfx + "Active",     g_recoveryActive ? 1.0 : 0.0);
+   GlobalVariableSet(pfx + "PreLossEq",  g_recoveryPreLossEq);
+   GlobalVariableSet(pfx + "TradeCount", (double)g_recoveryTradeCount);
+   GlobalVariableSet(pfx + "ConsLoss",   (double)g_recoveryConsLoss);
+}
+
+void LoadRecoveryState()
+{
+   string pfx = "QE_Recovery_" + Symbol() + "_";
+   if(!GlobalVariableCheck(pfx + "Active")) return;
+   g_recoveryActive     = (GlobalVariableGet(pfx + "Active") != 0.0);
+   g_recoveryPreLossEq  = GlobalVariableGet(pfx + "PreLossEq");
+   g_recoveryTradeCount = (int)GlobalVariableGet(pfx + "TradeCount");
+   g_recoveryConsLoss   = (int)GlobalVariableGet(pfx + "ConsLoss");
+   if(g_recoveryActive)
+      Print("[QuantEdge EA] Recovery state restored: target=",
+            DoubleToString(g_recoveryPreLossEq, 2),
+            " trades=", g_recoveryTradeCount, " consLoss=", g_recoveryConsLoss);
+}
+
+void ClearRecoveryState()
+{
+   string pfx = "QE_Recovery_" + Symbol() + "_";
+   GlobalVariableDel(pfx + "Active");
+   GlobalVariableDel(pfx + "PreLossEq");
+   GlobalVariableDel(pfx + "TradeCount");
+   GlobalVariableDel(pfx + "ConsLoss");
+}
+
+//+------------------------------------------------------------------+
 //| Positive DCA: add orders as price moves toward TP1               |
 //+------------------------------------------------------------------+
 void ManagePositiveDCA()
@@ -849,8 +952,10 @@ bool CheckDrawdownCap()
       Print("[QuantEdge EA] EXIT: DRAWDOWN CAP — basket P/L=", DoubleToString(basketPnL, 2),
             " exceeds ", DoubleToString(InpNegDCAMaxDDPct, 1), "% of balance (",
             DoubleToString(maxLoss, 2), "). Closing entire basket.");
+      g_recoveryPreLossEq = AccountInfoDouble(ACCOUNT_EQUITY);
       CloseEntireBasket();
       ClearDCAState();
+      ActivateRecoveryMode();
       return true;
    }
    return false;
@@ -1529,6 +1634,8 @@ int OnInit()
             " refSL=", DoubleToString(g_dcaOriginalSL, _Digits),
             " TP1=", DoubleToString(g_dcaOriginalTP1, _Digits));
 
+   LoadRecoveryState();
+
    return INIT_SUCCEEDED;
 }
 
@@ -1823,6 +1930,9 @@ bool TryExecuteSignal(bool isRetry)
       return false;
    }
 
+   CheckRecoveryAutoOff();
+   lot = ApplyRecoveryMultiplier(lot);
+
    double lotStep = SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_STEP);
    double minLot  = MathMax(SymbolInfoDouble(Symbol(), SYMBOL_VOLUME_MIN), InpMinLotSize);
 
@@ -1944,8 +2054,50 @@ bool TryExecuteSignal(bool isRetry)
             " lot=", DoubleToString(lot, 2));
    }
 
+   if(g_recoveryActive)
+   {
+      g_recoveryTradeCount++;
+      SaveRecoveryState();
+      Print("[QuantEdge EA] Recovery trade #", g_recoveryTradeCount,
+            "/", InpRecoveryMaxTrades, " lot=", DoubleToString(lot, 2));
+   }
+
    g_sigValid = false;
    return true;
+}
+
+//+------------------------------------------------------------------+
+//| Track recovery trade outcomes — detect consecutive losses          |
+//+------------------------------------------------------------------+
+void TrackRecoveryOutcome()
+{
+   if(!g_recoveryActive) return;
+
+   static int s_lastDealCount = 0;
+   if(!HistorySelect(0, TimeCurrent())) return;
+   int dealCount = HistoryDealsTotal();
+   if(dealCount <= s_lastDealCount)
+   {
+      s_lastDealCount = dealCount;
+      return;
+   }
+
+   for(int i = s_lastDealCount; i < dealCount; i++)
+   {
+      ulong dealTicket = HistoryDealGetTicket(i);
+      if(dealTicket == 0) continue;
+      if(HistoryDealGetString(dealTicket, DEAL_SYMBOL) != Symbol()) continue;
+      if(!IsOurMagic(HistoryDealGetInteger(dealTicket, DEAL_MAGIC))) continue;
+      if(HistoryDealGetInteger(dealTicket, DEAL_ENTRY) != DEAL_ENTRY_OUT) continue;
+
+      if(HistoryDealGetDouble(dealTicket, DEAL_PROFIT) >= 0)
+         g_recoveryConsLoss = 0;
+      else
+         g_recoveryConsLoss++;
+
+      SaveRecoveryState();
+   }
+   s_lastDealCount = dealCount;
 }
 
 //+------------------------------------------------------------------+
@@ -1956,6 +2108,8 @@ void OnTick()
    ManageTrailing();
    ManageDCA();
    UpdateDailyLossTracking();
+   TrackRecoveryOutcome();
+   CheckRecoveryAutoOff();
 
    // Poll for close commands from indicator's Manual Trading panel
    string closeGV = "QE_CloseCmd_" + Symbol();
