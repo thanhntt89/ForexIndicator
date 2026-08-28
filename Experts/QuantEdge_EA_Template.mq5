@@ -756,7 +756,6 @@ void ManagePositiveDCA()
 
       string comment = StringFormat("QE DCA+%d", idx);
 
-      double dcaSL = g_dcaOriginalSL;
       double dcaTP = g_dcaOriginalTP1;
 
       CTrade dcaTrade;
@@ -764,8 +763,8 @@ void ManagePositiveDCA()
       dcaTrade.SetDeviationInPoints(InpSlippage);
 
       bool result = (g_dcaDirection > 0)
-                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment)
-                    : dcaTrade.Sell(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment);
+                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, dcaTP, comment)
+                    : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, dcaTP, comment);
 
       if(result)
       {
@@ -773,7 +772,7 @@ void ManagePositiveDCA()
          SaveDCAState();
          Print("[QuantEdge EA] Positive DCA+", idx, " placed: ",
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
-               " lot, magic=", dcaMagic, " SL=", DoubleToString(dcaSL, _Digits),
+               " lot, magic=", dcaMagic,
                " TP=", DoubleToString(dcaTP, _Digits));
          break;
       }
