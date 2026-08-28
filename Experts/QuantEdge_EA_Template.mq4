@@ -978,14 +978,13 @@ void ManageNegativeDCA()
 
       string comment = StringFormat("QE DCA-%d", idx);
 
-      double dcaSL = g_dcaOriginalSL;
       double dcaTP = g_dcaOriginalTP1;
 
       int ticket = -1;
       if(g_dcaDirection > 0)
-         ticket = OrderSend(Symbol(), OP_BUY, dcaLot, Ask, InpSlippage, dcaSL, dcaTP, comment, dcaMagic, 0, clrLime);
+         ticket = OrderSend(Symbol(), OP_BUY, dcaLot, Ask, InpSlippage, 0, dcaTP, comment, dcaMagic, 0, clrLime);
       else
-         ticket = OrderSend(Symbol(), OP_SELL, dcaLot, Bid, InpSlippage, dcaSL, dcaTP, comment, dcaMagic, 0, clrRed);
+         ticket = OrderSend(Symbol(), OP_SELL, dcaLot, Bid, InpSlippage, 0, dcaTP, comment, dcaMagic, 0, clrRed);
 
       if(ticket >= 0)
       {
@@ -994,7 +993,6 @@ void ManageNegativeDCA()
          Print("[QuantEdge EA] Negative DCA-", idx, " placed: ",
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
                " lot (", DoubleToString(ratio * 100, 0), "%), magic=", dcaMagic,
-               " SL=", DoubleToString(dcaSL, Digits),
                " TP=", DoubleToString(dcaTP, Digits));
       }
       else

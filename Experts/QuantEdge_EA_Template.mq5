@@ -1014,7 +1014,6 @@ void ManageNegativeDCA()
 
       string comment = StringFormat("QE DCA-%d", idx);
 
-      double dcaSL = g_dcaOriginalSL;
       double dcaTP = g_dcaOriginalTP1;
 
       CTrade dcaTrade;
@@ -1022,8 +1021,8 @@ void ManageNegativeDCA()
       dcaTrade.SetDeviationInPoints(InpSlippage);
 
       bool result = (g_dcaDirection > 0)
-                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment)
-                    : dcaTrade.Sell(dcaLot, Symbol(), 0, dcaSL, dcaTP, comment);
+                    ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, dcaTP, comment)
+                    : dcaTrade.Sell(dcaLot, Symbol(), 0, 0, dcaTP, comment);
 
       if(result)
       {
@@ -1032,7 +1031,6 @@ void ManageNegativeDCA()
          Print("[QuantEdge EA] Negative DCA-", idx, " placed: ",
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
                " lot (", DoubleToString(ratio * 100, 0), "%), magic=", dcaMagic,
-               " SL=", DoubleToString(dcaSL, _Digits),
                " TP=", DoubleToString(dcaTP, _Digits));
       }
       else
