@@ -129,7 +129,7 @@ input int    InpTrailATRPeriod   = 14;                  // ATR period for traili
 //| INPUT GROUP: Positive DCA (Trend Direction)                       |
 //+------------------------------------------------------------------+
 input string inp_grp_posdca       = "========== Positive DCA =========="; // ---
-input bool   InpUsePositiveDCA    = false;               // Enable positive DCA (add in trend direction)
+input bool   InpUsePositiveDCA    = true;                // Enable positive DCA (add in trend direction)
 input int    InpPosDCAMaxOrders   = 4;                   // Max positive DCA orders (1-10)
 input double InpPosDCAHalfClosePct= 50.0;                // Stop adding DCA above this % of Entry→TP1 distance
 
@@ -137,7 +137,7 @@ input double InpPosDCAHalfClosePct= 50.0;                // Stop adding DCA abov
 //| INPUT GROUP: Negative DCA (Against Trend / Recovery)              |
 //+------------------------------------------------------------------+
 input string inp_grp_negdca       = "========== Negative DCA =========="; // ---
-input bool   InpUseNegativeDCA    = false;               // Enable negative DCA (add against trend)
+input bool   InpUseNegativeDCA    = true;                // Enable negative DCA (add against trend)
 input int    InpNegDCAMaxOrders   = 5;                   // Max negative DCA orders (1-10)
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
 input double InpNegDCAATRMult     = 0.5;                 // DCA spacing = ATR × this multiplier
@@ -145,7 +145,7 @@ input double InpNegDCAMaxDDPct    = 5.0;                 // Hard drawdown cap (%
 input bool   InpNegDCABEClose     = true;                // Close negative DCA basket when price returns to avg entry (breakeven)
 input double InpNegDCABEOffsetPip = 0.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
 input double InpDCAProfitLockR    = 0.2;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
-input double InpDCAMinSpacingPts = 0;                   // Min distance between DCA orders (points, 0=no check)
+input double InpDCAMinSpacingPts = 500;                 // Min distance between DCA orders (points, 500=$5 XAUUSD)
 input int    InpDCAMinIntervalMin= 5;                   // Min time between DCA orders (minutes, 0=no check)
 
 //+------------------------------------------------------------------+
