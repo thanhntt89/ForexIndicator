@@ -747,6 +747,7 @@ void ManagePositiveDCA()
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
                " lot, magic=", dcaMagic, " SL=", DoubleToString(dcaSL, Digits),
                " TP=", DoubleToString(dcaTP, Digits));
+         break;
       }
       else
          Print("[QuantEdge EA] Positive DCA+", idx, " FAILED: error ", GetLastError());
@@ -994,6 +995,7 @@ void ManageNegativeDCA()
                (g_dcaDirection > 0 ? "BUY" : "SELL"), " ", DoubleToString(dcaLot, 2),
                " lot (", DoubleToString(ratio * 100, 0), "%), magic=", dcaMagic,
                " TP=", DoubleToString(dcaTP, Digits));
+         break;
       }
       else
          Print("[QuantEdge EA] Negative DCA-", idx, " FAILED: error ", GetLastError());
