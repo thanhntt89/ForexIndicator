@@ -229,6 +229,8 @@ input int    InpProbMaxBars       = 1000;          // Max bars for probability s
 input color  InpProbTextColor     = clrWhite;      // Probability text color
 input int    InpProbFontSize      = 8;             // Probability font size
 input bool   InpShowProbExplain  = true;          // Show probability attribution panel
+input int    InpBrierMinSamples  = 20;            // Brier calibration: min resolved samples per case (0=disable shrink)
+input double InpBrierFloorShrink = 0.50;          // Brier calibration: uncertainty floor when samples=0 (0.50=halve, 0.75=mild, 1.0=off)
 input bool   InpEnableXGBShadow  = false;         // Enable A/B shadow model (loads XGBModels_shadow.bin, observational only)
 
 //+------------------------------------------------------------------+

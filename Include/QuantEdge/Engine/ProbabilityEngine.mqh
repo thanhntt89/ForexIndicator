@@ -1684,19 +1684,21 @@ void CalculateProbability(int currentSignalIndex,
       double caseBrier  = (cbn >= 0 && cbn <= 9) ? g_brierCaseScore[cbn]   : 0.0;
 
       double shrink = 1.0;   // 1.0 = no shrink
-      if(caseBrierN >= 20)
+      int brierMinN = MathMax(0, InpBrierMinSamples);
+      double brierFloor = MathMax(0.0, MathMin(1.0, InpBrierFloorShrink));
+      if(brierMinN > 0 && caseBrierN >= brierMinN)
       {
          if(caseBrier > 0.20)
             shrink = MathMax(0.0, 1.0 - (caseBrier - 0.20) / 0.15);
       }
-      else
+      else if(brierMinN > 0)
       {
          // (a) global Brier shrink (legacy behavior) when global is unreliable
-         if(g_brierMetrics.samples >= 20 && g_brierMetrics.brierScore > 0.20)
+         if(g_brierMetrics.samples >= brierMinN && g_brierMetrics.brierScore > 0.20)
             shrink = MathMax(0.0, 1.0 - (g_brierMetrics.brierScore - 0.20) / 0.15);
          // (b) uncertainty shrink for an unvalidated case (compounds with (a))
-         double valRatio = (double)caseBrierN / 20.0;   // 0..1
-         shrink *= (0.5 + 0.5 * valRatio);              // [0.5,1.0]
+         double valRatio = (double)caseBrierN / (double)brierMinN;   // 0..1
+         shrink *= (brierFloor + (1.0 - brierFloor) * valRatio);
       }
 
       if(shrink < 1.0)
