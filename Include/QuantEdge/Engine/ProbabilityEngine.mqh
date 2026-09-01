@@ -1684,8 +1684,14 @@ void CalculateProbability(int currentSignalIndex,
       double caseBrier  = (cbn >= 0 && cbn <= 9) ? g_brierCaseScore[cbn]   : 0.0;
 
       double shrink = 1.0;   // 1.0 = no shrink
-      int brierMinN = MathMax(0, InpBrierMinSamples);
-      double brierFloor = MathMax(0.0, MathMin(1.0, InpBrierFloorShrink));
+      string gvMinN  = "QE_BrierMinN_"  + Symbol();
+      string gvFloor = "QE_BrierFloor_" + Symbol();
+      int brierMinN = GlobalVariableCheck(gvMinN)
+         ? (int)GlobalVariableGet(gvMinN)
+         : MathMax(0, InpBrierMinSamples);
+      double brierFloor = GlobalVariableCheck(gvFloor)
+         ? MathMax(0.0, MathMin(1.0, GlobalVariableGet(gvFloor)))
+         : MathMax(0.0, MathMin(1.0, InpBrierFloorShrink));
       if(brierMinN > 0 && caseBrierN >= brierMinN)
       {
          if(caseBrier > 0.20)

@@ -179,6 +179,14 @@ input double Ind_BBDeviation     = 1.685;
 input bool   Ind_EAMode          = true;  // Always true — suppresses indicator visuals
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Indicator Probability Override                        |
+//| Passed to indicator via GlobalVariable (not iCustom params).       |
+//+------------------------------------------------------------------+
+input string inp_grp_indprob     = "========== Indicator Prob Override =========="; // ---
+input int    Ind_BrierMinSamples = 20;             // Brier: min resolved samples per case (0=disable shrink)
+input double Ind_BrierFloorShrink= 0.50;           // Brier: uncertainty floor when samples=0 (0.50=halve, 0.75=mild, 1.0=off)
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Close Panel                                          |
 //+------------------------------------------------------------------+
 input string inp_grp_panel       = "========== Close Panel =========="; // ---
@@ -1527,6 +1535,10 @@ int OnInit()
       return INIT_FAILED;
    }
 
+   // Pass Brier settings to indicator via GlobalVariable
+   GlobalVariableSet("QE_BrierMinN_"  + Symbol(), (double)Ind_BrierMinSamples);
+   GlobalVariableSet("QE_BrierFloor_" + Symbol(), Ind_BrierFloorShrink);
+
    Print("[QuantEdge EA] === SETTINGS DUMP ===");
    Print("[QuantEdge EA] AutoTrading=", InpEnableAutoTrading, " Magic=", InpMagicNumber);
    Print("[QuantEdge EA] MinRecLevel=", InpMinRecLevel, " AllowCaution=", InpAllowCaution,
@@ -2131,6 +2143,8 @@ void OnDeinit(const int reason)
 
    QEEA_DeletePanel();
    CleanupSignalArrows();
+   GlobalVariableDel("QE_BrierMinN_"  + Symbol());
+   GlobalVariableDel("QE_BrierFloor_" + Symbol());
    Print("[QuantEdge EA] Deinit, reason=", reason);
 }
 
