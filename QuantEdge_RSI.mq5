@@ -24,7 +24,7 @@
 #property indicator_minimum    0
 #property indicator_maximum    100
 #property indicator_buffers    25
-#property indicator_plots      25
+#property indicator_plots      7
 
 //--- Plot 1: RSI Fast (Green)
 #property indicator_label1     "RSI Fast"
@@ -69,50 +69,7 @@
 #property indicator_label7     "SellSignal"
 #property indicator_type7      DRAW_NONE
 
-//--- Plots 8-11: SLTP output buffers (hidden, readable by EA via iCustom)
-#property indicator_label8     "Entry"
-#property indicator_type8      DRAW_NONE
-#property indicator_label9     "SL"
-#property indicator_type9      DRAW_NONE
-#property indicator_label10    "TP1"
-#property indicator_type10     DRAW_NONE
-#property indicator_label11    "TP2"
-#property indicator_type11     DRAW_NONE
-
-//--- Plots 12-25: Probability/Recommendation output buffers (hidden, readable by
-//--- EA via iCustom). Valid ONLY at closed bars where a signal fired; EMPTY_VALUE
-//--- elsewhere (including the current forming bar, shift=0).
-//--- EA usage: read at shift=1 (last closed bar) when a new bar is detected
-//--- (Time[0] changed). Do not poll every tick — CalculateProbability() is only
-//--- invoked when a new signal bar closes, so intra-bar reads return cached values.
-#property indicator_label12    "ProbTP1"
-#property indicator_type12     DRAW_NONE
-#property indicator_label13    "ProbTP2"
-#property indicator_type13     DRAW_NONE
-#property indicator_label14    "ProbTP3"
-#property indicator_type14     DRAW_NONE
-#property indicator_label15    "ProbSL"
-#property indicator_type15     DRAW_NONE
-#property indicator_label16    "ProbSamples"
-#property indicator_type16     DRAW_NONE
-#property indicator_label17    "ProbDecayedTP1"
-#property indicator_type17     DRAW_NONE
-#property indicator_label18    "ProbSurvivalRatio"
-#property indicator_type18     DRAW_NONE
-#property indicator_label19    "ProbExpiresMin"
-#property indicator_type19     DRAW_NONE
-#property indicator_label20    "XGBProbTP1"
-#property indicator_type20     DRAW_NONE
-#property indicator_label21    "XGBActive"
-#property indicator_type21     DRAW_NONE
-#property indicator_label22    "RecLevel"
-#property indicator_type22     DRAW_NONE
-#property indicator_label23    "RecConfidence"
-#property indicator_type23     DRAW_NONE
-#property indicator_label24    "RecEV"
-#property indicator_type24     DRAW_NONE
-#property indicator_label25    "RecSuggestedRisk"
-#property indicator_type25     DRAW_NONE
+//--- Buffers 8-25: data-only (no plot), readable by EA via CopyBuffer/iCustom
 
 //--- Level lines
 #property indicator_level1     20
@@ -186,6 +143,12 @@ int OnInit()
    if(InpBBDeviation <= 0 || InpSLRatio <= 0 || InpTPRatio <= 0)
       return(INIT_PARAMETERS_INCORRECT);
 
+   int totalBars = Bars(_Symbol, _Period);
+   if(totalBars > 100000)
+      PrintFormat("[QuantEdge] WARNING: %d bars loaded — high memory usage (%d MB for %d buffers). "
+                  "Reduce Tools → Options → Charts → Max bars in chart to 50000-65000.",
+                  totalBars, totalBars * 25 * 8 / 1024 / 1024, 25);
+
    //--- MQL5 SetIndexBuffer requires INDICATOR_DATA / INDICATOR_CALCULATIONS
    SetIndexBuffer(0, BufferGreen,     INDICATOR_DATA);
    SetIndexBuffer(1, BufferRed,       INDICATOR_DATA);
@@ -199,15 +162,15 @@ int OnInit()
    SetIndexBuffer(9,  BufferTP1,      INDICATOR_DATA);
    SetIndexBuffer(10, BufferTP2,      INDICATOR_DATA);
    SetIndexBuffer(11, BufferProbTP1,           INDICATOR_DATA);
-   SetIndexBuffer(12, BufferProbTP2,           INDICATOR_DATA);
-   SetIndexBuffer(13, BufferProbTP3,           INDICATOR_DATA);
-   SetIndexBuffer(14, BufferProbSL,            INDICATOR_DATA);
+   SetIndexBuffer(12, BufferProbTP2,           INDICATOR_CALCULATIONS);
+   SetIndexBuffer(13, BufferProbTP3,           INDICATOR_CALCULATIONS);
+   SetIndexBuffer(14, BufferProbSL,            INDICATOR_CALCULATIONS);
    SetIndexBuffer(15, BufferProbSamples,       INDICATOR_DATA);
    SetIndexBuffer(16, BufferProbDecayedTP1,    INDICATOR_DATA);
    SetIndexBuffer(17, BufferProbSurvivalRatio, INDICATOR_DATA);
    SetIndexBuffer(18, BufferProbExpiresMin,    INDICATOR_DATA);
-   SetIndexBuffer(19, BufferXGBProbTP1,        INDICATOR_DATA);
-   SetIndexBuffer(20, BufferXGBActive,         INDICATOR_DATA);
+   SetIndexBuffer(19, BufferXGBProbTP1,        INDICATOR_CALCULATIONS);
+   SetIndexBuffer(20, BufferXGBActive,         INDICATOR_CALCULATIONS);
    SetIndexBuffer(21, BufferRecLevel,          INDICATOR_DATA);
    SetIndexBuffer(22, BufferRecConfidence,     INDICATOR_DATA);
    SetIndexBuffer(23, BufferRecEV,             INDICATOR_DATA);
