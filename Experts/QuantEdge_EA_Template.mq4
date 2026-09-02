@@ -2133,35 +2133,38 @@ void OnTick()
          double riskPct   = ReadBuffer(BUF_REC_RISK);
          double probTP1   = ReadBuffer(BUF_PROB_TP1);
 
-         if(recLevel != EMPTY_VALUE && confidence != EMPTY_VALUE)
+         if(recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE)
          {
-            g_sigValid      = true;
-            g_sigTP1Hit     = false;
-            g_sigSLHit      = false;
-            g_sigDirection  = direction;
-            g_sigCaseNum    = caseNum;
-            g_sigEntry      = entry;
-            g_sigSL         = sl2;
-            g_sigTP1        = tp1;
-            g_sigTP2        = tp2;
-            g_sigRecLevel   = recLevel;
-            g_sigConfidence = confidence;
-            g_sigEV         = ev;
-            g_sigRiskPct    = riskPct;
-            g_sigProbTP1    = probTP1;
-
-            double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), 1)
-                                                : iHigh(Symbol(), Period(), 1);
-            DrawSignalArrow(iTime(Symbol(), Period(), 1), arrowPrice, direction > 0, caseNum);
-
-            if(TryExecuteSignal(false))
-               return;
-         }
-         else
-         {
+            recLevel   = (recLevel   != EMPTY_VALUE) ? recLevel   : (double)REC_WAIT;
+            confidence = (confidence != EMPTY_VALUE) ? confidence : 0;
+            ev         = (ev         != EMPTY_VALUE) ? ev         : 0;
+            riskPct    = (riskPct    != EMPTY_VALUE) ? riskPct    : 0;
+            probTP1    = (probTP1    != EMPTY_VALUE) ? probTP1    : 0;
             Print("[QuantEdge EA] Signal detected (Case ", caseNum,
-                  ") but probability buffers empty — skipping.");
+                  ") — probability buffers pending, will retry on next tick.");
          }
+
+         g_sigValid      = true;
+         g_sigTP1Hit     = false;
+         g_sigSLHit      = false;
+         g_sigDirection  = direction;
+         g_sigCaseNum    = caseNum;
+         g_sigEntry      = entry;
+         g_sigSL         = sl2;
+         g_sigTP1        = tp1;
+         g_sigTP2        = tp2;
+         g_sigRecLevel   = recLevel;
+         g_sigConfidence = confidence;
+         g_sigEV         = ev;
+         g_sigRiskPct    = riskPct;
+         g_sigProbTP1    = probTP1;
+
+         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), 1)
+                                             : iHigh(Symbol(), Period(), 1);
+         DrawSignalArrow(iTime(Symbol(), Period(), 1), arrowPrice, direction > 0, caseNum);
+
+         if(TryExecuteSignal(false))
+            return;
       }
    }
 
@@ -2177,6 +2180,24 @@ void OnTick()
                   " bars since signal (max ", InpRetryMaxBars, ")");
             g_sigValid = false;
             return;
+         }
+      }
+
+      // Re-read probability buffers if they were initially empty
+      if(g_sigRecLevel == (double)REC_WAIT && g_sigConfidence == 0 && g_sigEV == 0)
+      {
+         double rl = ReadBuffer(BUF_REC_LEVEL);
+         double cf = ReadBuffer(BUF_REC_CONFIDENCE);
+         if(rl != EMPTY_VALUE && cf != EMPTY_VALUE)
+         {
+            g_sigRecLevel   = rl;
+            g_sigConfidence = cf;
+            double ev2 = ReadBuffer(BUF_REC_EV);
+            double rk2 = ReadBuffer(BUF_REC_RISK);
+            double pt2 = ReadBuffer(BUF_PROB_TP1);
+            if(ev2 != EMPTY_VALUE) g_sigEV      = ev2;
+            if(rk2 != EMPTY_VALUE) g_sigRiskPct  = rk2;
+            if(pt2 != EMPTY_VALUE) g_sigProbTP1  = pt2;
          }
       }
 
