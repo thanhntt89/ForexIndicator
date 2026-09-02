@@ -609,10 +609,8 @@ int OnCalculate(const int rates_total,
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
          BufferTP2[i]   = tp2;
-         // [PERF] Probability/recommendation ONLY for the just-closed bar (forward-only,
-         // same rationale as CSV logging below): avoids recomputing the ensemble for every
-         // historical bar on fullRecalc. Buffers stay EMPTY_VALUE everywhere else.
-         if(i >= rates_total - 2)
+         // [PERF] Probability/recommendation: forward-only in live, all bars in tester
+         if(i >= rates_total - 2 || IsBacktestMode())
          {
             int newSigIdx = g_signalCount - 1;
             CalculateProbability(newSigIdx, BufferOrange, BufferBBUpper, BufferBBLower);
@@ -704,8 +702,8 @@ int OnCalculate(const int rates_total,
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
          BufferTP2[i]   = tp2;
-         // [PERF] Probability/recommendation ONLY for the just-closed bar (see buy branch).
-         if(i >= rates_total - 2)
+         // [PERF] Probability/recommendation: forward-only in live, all bars in tester
+         if(i >= rates_total - 2 || IsBacktestMode())
          {
             int newSigIdx = g_signalCount - 1;
             CalculateProbability(newSigIdx, BufferOrange, BufferBBUpper, BufferBBLower);

@@ -543,10 +543,8 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1, (i >= rates_total - 2));
-         // [PERF] Probability/recommendation ONLY for the just-closed bar (forward-only,
-         // same rationale as CSV logging below): avoids recomputing the ensemble for every
-         // historical bar on fullRecalc. Buffers stay EMPTY_VALUE everywhere else.
-         if(i >= rates_total - 2)
+         // [PERF] Probability/recommendation: forward-only in live, all bars in tester
+         if(i >= rates_total - 2 || IsBacktestMode())
          {
             int newSigIdx = g_signalCount - 1;
             CalculateProbability(newSigIdx, BufferOrange, BufferBBUpper, BufferBBLower);
@@ -637,8 +635,8 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1, (i >= rates_total - 2));
-         // [PERF] Probability/recommendation ONLY for the just-closed bar (see buy branch).
-         if(i >= rates_total - 2)
+         // [PERF] Probability/recommendation: forward-only in live, all bars in tester
+         if(i >= rates_total - 2 || IsBacktestMode())
          {
             int newSigIdx = g_signalCount - 1;
             CalculateProbability(newSigIdx, BufferOrange, BufferBBUpper, BufferBBLower);
