@@ -281,12 +281,17 @@ int      g_recoveryConsLoss   = 0;        // Consecutive losses during recovery
 //+------------------------------------------------------------------+
 double ReadBuffer(int bufferIndex)
 {
+   return ReadBufferAt(bufferIndex, 1);
+}
+
+double ReadBufferAt(int bufferIndex, int shift)
+{
    return iCustom(Symbol(), Period(), InpIndicatorName,
                   "", // inp_grp_core separator
                   Ind_RSIPeriod, Ind_FastMAPeriod, Ind_SignalMAPeriod,
                   Ind_BBPeriod, Ind_BBDeviation, PRICE_CLOSE,
                   Ind_EAMode,
-                  bufferIndex, 1);
+                  bufferIndex, shift);
 }
 
 //+------------------------------------------------------------------+
@@ -1575,6 +1580,51 @@ int OnInit()
             " TP1=", DoubleToString(g_dcaOriginalTP1, Digits));
 
    LoadRecoveryState();
+
+   // Scan for existing active signal on startup (within RetryMaxBars)
+   if(InpUseSignalRetry && !HasOpenPosition(1) && !HasOpenPosition(-1))
+   {
+      int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
+      for(int i = 1; i <= scanLimit; i++)
+      {
+         double buyCase  = ReadBufferAt(BUF_BUY_SIGNAL, i);
+         double sellCase = ReadBufferAt(BUF_SELL_SIGNAL, i);
+         bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
+         bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
+         if(!hasBuy && !hasSell) continue;
+
+         double recLevel   = ReadBufferAt(BUF_REC_LEVEL, i);
+         double confidence = ReadBufferAt(BUF_REC_CONFIDENCE, i);
+         if(recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE) continue;
+
+         int    direction = hasBuy ? 1 : -1;
+         int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
+         g_sigValid      = true;
+         g_sigTP1Hit     = false;
+         g_sigSLHit      = false;
+         g_sigDirection  = direction;
+         g_sigCaseNum    = caseNum;
+         g_sigEntry      = ReadBufferAt(BUF_ENTRY, i);
+         g_sigSL         = ReadBufferAt(BUF_SL, i);
+         g_sigTP1        = ReadBufferAt(BUF_TP1, i);
+         g_sigTP2        = ReadBufferAt(BUF_TP2, i);
+         g_sigRecLevel   = recLevel;
+         g_sigConfidence = confidence;
+         g_sigEV         = ReadBufferAt(BUF_REC_EV, i);
+         g_sigRiskPct    = ReadBufferAt(BUF_REC_RISK, i);
+         g_sigProbTP1    = ReadBufferAt(BUF_PROB_TP1, i);
+         g_lastBarTime   = iTime(Symbol(), Period(), i);
+
+         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), i)
+                                             : iHigh(Symbol(), Period(), i);
+         DrawSignalArrow(iTime(Symbol(), Period(), i), arrowPrice, direction > 0, caseNum);
+
+         Print("[QuantEdge EA] Startup: found active signal at bar[", i, "] — ",
+               (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
+               " Conf=", (int)MathRound(confidence), " EV=", DoubleToString(g_sigEV, 2), "R");
+         break;
+      }
+   }
 
    return INIT_SUCCEEDED;
 }
