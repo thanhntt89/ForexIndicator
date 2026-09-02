@@ -132,6 +132,7 @@ input int    InpTrailATRPeriod   = 14;                  // ATR period for traili
 input string inp_grp_posdca       = "========== Positive DCA =========="; // ---
 input bool   InpUsePositiveDCA    = true;                // Enable positive DCA (add in trend direction)
 input int    InpPosDCAMaxOrders   = 4;                   // Max positive DCA orders (1-10)
+input double InpPosDCAATRMult    = 2.5;                  // Pos DCA spacing = ATR × this multiplier
 input double InpPosDCAHalfClosePct= 50.0;                // Stop adding DCA above this % of Entry→TP1 distance
 
 //+------------------------------------------------------------------+
@@ -141,7 +142,7 @@ input string inp_grp_negdca       = "========== Negative DCA =========="; // ---
 input bool   InpUseNegativeDCA    = true;                // Enable negative DCA (add against trend)
 input int    InpNegDCAMaxOrders   = 5;                   // Max negative DCA orders (1-10)
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
-input double InpNegDCAATRMult     = 0.5;                 // DCA spacing = ATR × this multiplier
+input double InpNegDCAATRMult     = 0.5;                 // Neg DCA spacing = ATR × this multiplier
 input double InpNegDCAMaxDDPct    = 15.0;                // Hard drawdown cap (% of balance) — applies to ENTIRE basket whenever ANY DCA mode is active, close all if exceeded
 input bool   InpNegDCABEClose     = true;                // Close negative DCA basket when price returns to avg entry (breakeven)
 input double InpNegDCABEOffsetPip = 0.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
@@ -817,7 +818,9 @@ void ManagePositiveDCA()
    if(beyondHalf)
       return;
 
-   double gridStep = entryToTP1 / (InpPosDCAMaxOrders + 1);
+   double atrSpacing = iATR(Symbol(), 0, 14, 0) * InpPosDCAATRMult;
+   if(atrSpacing <= 0)
+      return;
 
    for(int idx = 1; idx <= InpPosDCAMaxOrders; idx++)
    {
@@ -832,7 +835,9 @@ void ManagePositiveDCA()
       }
       if(exists) continue;
 
-      double level = g_dcaOriginalEntry + idx * gridStep;
+      double level = (g_dcaDirection > 0)
+                      ? g_dcaOriginalEntry + idx * atrSpacing
+                      : g_dcaOriginalEntry - idx * atrSpacing;
       bool triggered = (g_dcaDirection > 0) ? (price >= level) : (price <= level);
       if(!triggered) continue;
 
@@ -1556,7 +1561,8 @@ int OnInit()
          " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
    Print("[QuantEdge EA] PartialClose=", InpUsePartialClose, " Trailing=", InpUseTrailing);
-   Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " NegativeDCA=", InpUseNegativeDCA);
+   Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " PosDCA_ATR=", InpPosDCAATRMult,
+         " NegativeDCA=", InpUseNegativeDCA, " NegDCA_ATR=", InpNegDCAATRMult);
    Print("[QuantEdge EA] ===================");
 
    if(!InpEnableAutoTrading)
