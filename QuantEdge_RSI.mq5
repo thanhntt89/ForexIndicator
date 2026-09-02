@@ -143,7 +143,7 @@ int OnInit()
    if(InpBBDeviation <= 0 || InpSLRatio <= 0 || InpTPRatio <= 0)
       return(INIT_PARAMETERS_INCORRECT);
 
-   int totalBars = ::Bars(_Symbol, _Period);
+   int totalBars = iBars(_Symbol, 0);
    if(totalBars > 100000)
       PrintFormat("[QuantEdge] WARNING: %d bars loaded — high memory usage (%d MB for %d buffers). "
                   "Reduce Tools → Options → Charts → Max bars in chart to 50000-65000.",
