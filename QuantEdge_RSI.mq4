@@ -267,14 +267,20 @@ void OnDeinit(const int reason)
       ReleaseAllHandles();
    #endif
    SavePanelPosition();
-   DeleteObjectsByPrefix(PREFIX_ARROW);
-   DeleteObjectsByPrefix(PREFIX_OSMON);
-   DeleteObjectsByPrefix(PREFIX_PANEL);
-   DeleteObjectsByPrefix(PREFIX_EXPLAIN);
-   DeleteObjectsByPrefix(PREFIX_LINE);
-   DeleteObjectsByPrefix(PREFIX_PROB);
-   DeleteObjectsByPrefix(PREFIX_ZONE);
-   DeleteObjectsByPrefix(PREFIX_CLOSE);
+   // [TF-FIX] Only delete chart objects on full remove/close/recompile.
+   // CHARTCHANGE: fullRecalc in OnCalculate will clean up once ready,
+   // preventing the blank-chart window.
+   if(reason != REASON_CHARTCHANGE)
+   {
+      DeleteObjectsByPrefix(PREFIX_ARROW);
+      DeleteObjectsByPrefix(PREFIX_OSMON);
+      DeleteObjectsByPrefix(PREFIX_PANEL);
+      DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+      DeleteObjectsByPrefix(PREFIX_LINE);
+      DeleteObjectsByPrefix(PREFIX_PROB);
+      DeleteObjectsByPrefix(PREFIX_ZONE);
+      DeleteObjectsByPrefix(PREFIX_CLOSE);
+   }
    Comment("");
    ArrayFree(g_rawRSI);
    ArrayResize(g_signals, 0);

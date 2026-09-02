@@ -284,14 +284,20 @@ void OnDeinit(const int reason)
       ReleaseAllHandles();
 
    SavePanelPosition();
-   DeleteObjectsByPrefix(PREFIX_ARROW);
-   DeleteObjectsByPrefix(PREFIX_OSMON);
-   DeleteObjectsByPrefix(PREFIX_PANEL);
-   DeleteObjectsByPrefix(PREFIX_EXPLAIN);
-   DeleteObjectsByPrefix(PREFIX_LINE);
-   DeleteObjectsByPrefix(PREFIX_PROB);
-   DeleteObjectsByPrefix(PREFIX_ZONE);
-   DeleteObjectsByPrefix(PREFIX_CLOSE);
+   // [TF-FIX] Only delete chart objects on full remove/close/recompile.
+   // CHARTCHANGE: fullRecalc in OnCalculate will clean up once handles are ready,
+   // preventing the blank-chart window during BarsCalculated bounce.
+   if(reason != REASON_CHARTCHANGE)
+   {
+      DeleteObjectsByPrefix(PREFIX_ARROW);
+      DeleteObjectsByPrefix(PREFIX_OSMON);
+      DeleteObjectsByPrefix(PREFIX_PANEL);
+      DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+      DeleteObjectsByPrefix(PREFIX_LINE);
+      DeleteObjectsByPrefix(PREFIX_PROB);
+      DeleteObjectsByPrefix(PREFIX_ZONE);
+      DeleteObjectsByPrefix(PREFIX_CLOSE);
+   }
    Comment("");
    ArrayFree(g_rawRSI);
    ArrayResize(g_signals, 0);
@@ -341,6 +347,27 @@ int OnCalculate(const int rates_total,
    // fullRecalc only on first load or when history is shortened (bar indices would shift).
    // New bar added (rates_total increased) keeps cached signals Ã¢â‚¬â€ incremental path handles it.
    bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
+
+   // [TF-FIX] Check handle readiness BEFORE destructive cleanup.
+   // Without this, each return(0) bounce wipes objects/signals, leaving the chart blank
+   // for multiple ticks until BarsCalculated catches up.
+   if(fullRecalc)
+   {
+      InvalidatePriceCache();
+      int barsNeededPre = rates_total - MathMax(InpRSIPeriod, rates_total - InpMaxBars);
+      string rsiKeyPre = "RSI_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
+                         IntegerToString(InpRSIPeriod) + "_" + IntegerToString((int)InpPrice);
+      int rsiHandlePre = GetCachedIndicatorHandle(rsiKeyPre, 2, _Symbol, _Period, InpRSIPeriod, (int)InpPrice);
+      if(rsiHandlePre != INVALID_HANDLE && BarsCalculated(rsiHandlePre) < barsNeededPre)
+         return(0);
+
+      string atrKeyPre = "ATR_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
+                         IntegerToString(InpATRPeriod);
+      int atrHandlePre = GetCachedIndicatorHandle(atrKeyPre, 1, _Symbol, _Period, InpATRPeriod);
+      if(atrHandlePre != INVALID_HANDLE && BarsCalculated(atrHandlePre) < barsNeededPre)
+         return(0);
+   }
+
    if(fullRecalc)
    {
       g_tfGeneration++;
@@ -415,31 +442,7 @@ int OnCalculate(const int rates_total,
       startBar = MathMax(startBar, rates_total - InpMaxBars);
    }
 
-   //--- MT5: Ensure indicator handles are ready before calculation
-   if(fullRecalc)
-   {
-      InvalidatePriceCache();
-      int barsNeeded = rates_total - startBar;
-      string rsiKey = "RSI_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
-                      IntegerToString(InpRSIPeriod) + "_" + IntegerToString((int)InpPrice);
-      int rsiHandle = GetCachedIndicatorHandle(rsiKey, 2, _Symbol, _Period, InpRSIPeriod, (int)InpPrice);
-      if(rsiHandle != INVALID_HANDLE)
-      {
-         int barsCalc = BarsCalculated(rsiHandle);
-         if(barsCalc < barsNeeded)
-            return(0);
-      }
-      // ATR must also be ready Ã¢â‚¬â€ without it, SL/TP = 0 and all simulations fail.
-      string atrKey = "ATR_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
-                      IntegerToString(InpATRPeriod);
-      int atrHandle = GetCachedIndicatorHandle(atrKey, 1, _Symbol, _Period, InpATRPeriod);
-      if(atrHandle != INVALID_HANDLE)
-      {
-         int atrCalc = BarsCalculated(atrHandle);
-         if(atrCalc < barsNeeded)
-            return(0);
-      }
-   }
+   // [TF-FIX] Handle readiness check moved before destructive cleanup (see above).
    // [GMT-FIX-B3] Refresh normalized H4 candles (internal cache guard skips if no new H1 bar)
    if(g_gmtNormActive || g_gmtMTFNormNeeded) BuildNormalizedH4Candles();
 
