@@ -261,10 +261,9 @@ void OnDeinit(const int reason)
    }
    FlushLogQueues();
    CloseVirtualCSV();
-   // [PERF] Only release indicator handles on full remove/close Ã¢â‚¬â€ not TF switch.
+   // [TF-FIX] Release handles on ANY deinit, including CHARTCHANGE.
    #ifdef __MQL5__
-   if(reason == REASON_REMOVE || reason == REASON_CLOSE)
-      ReleaseAllHandles();
+   ReleaseAllHandles();
    #endif
    SavePanelPosition();
    // [TF-FIX] Only delete chart objects on full remove/close/recompile.

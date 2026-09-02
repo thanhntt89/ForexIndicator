@@ -276,12 +276,10 @@ void OnDeinit(const int reason)
    }
    FlushLogQueues();
    CloseVirtualCSV();
-   // [PERF] Only release indicator handles on full remove/close.
-   // CHARTCHANGE (TF switch) keeps handles alive Ã¢â‚¬â€ new TF creates its own keyed handles,
-   // old-TF handles are harmless. Releasing forces MT5 to re-create async Ã¢â€ â€™ return(0)
-   // bouncing in OnCalculate costs hundreds of ms per bounce.
-   if(reason == REASON_REMOVE || reason == REASON_CLOSE)
-      ReleaseAllHandles();
+   // [TF-FIX] Release handles on ANY deinit, including CHARTCHANGE.
+   // Stale handles from a prior TF session can return BarsCalculated=-1
+   // on switch-back, causing infinite return(0) bounce.
+   ReleaseAllHandles();
 
    SavePanelPosition();
    // [TF-FIX] Only delete chart objects on full remove/close/recompile.
@@ -351,7 +349,9 @@ int OnCalculate(const int rates_total,
    // [TF-FIX] Check handle readiness BEFORE destructive cleanup.
    // Without this, each return(0) bounce wipes objects/signals, leaving the chart blank
    // for multiple ticks until BarsCalculated catches up.
-   if(fullRecalc)
+   // Safety: cap bounces at 50 to avoid infinite loop on truly dead handles.
+   static int s_handleBounceCount = 0;
+   if(fullRecalc && s_handleBounceCount < 50)
    {
       InvalidatePriceCache();
       int barsNeededPre = rates_total - MathMax(InpRSIPeriod, rates_total - InpMaxBars);
@@ -359,13 +359,24 @@ int OnCalculate(const int rates_total,
                          IntegerToString(InpRSIPeriod) + "_" + IntegerToString((int)InpPrice);
       int rsiHandlePre = GetCachedIndicatorHandle(rsiKeyPre, 2, _Symbol, _Period, InpRSIPeriod, (int)InpPrice);
       if(rsiHandlePre != INVALID_HANDLE && BarsCalculated(rsiHandlePre) < barsNeededPre)
+      {
+         s_handleBounceCount++;
          return(0);
+      }
 
       string atrKeyPre = "ATR_" + _Symbol + "_" + IntegerToString((int)_Period) + "_" +
                          IntegerToString(InpATRPeriod);
       int atrHandlePre = GetCachedIndicatorHandle(atrKeyPre, 1, _Symbol, _Period, InpATRPeriod);
       if(atrHandlePre != INVALID_HANDLE && BarsCalculated(atrHandlePre) < barsNeededPre)
+      {
+         s_handleBounceCount++;
          return(0);
+      }
+      s_handleBounceCount = 0;
+   }
+   else if(fullRecalc)
+   {
+      s_handleBounceCount = 0;
    }
 
    if(fullRecalc)
