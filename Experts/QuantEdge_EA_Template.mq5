@@ -331,6 +331,7 @@ string RecLevelName(int level)
       case REC_WAIT:          return "WAIT";
       case REC_AVOID:         return "AVOID";
       case REC_COUNTER_TREND: return "COUNTER_TREND";
+      case REC_ANY:           return "ANY";
       default:                return "UNKNOWN(" + IntegerToString(level) + ")";
    }
 }

@@ -46,7 +46,8 @@ enum ENUM_REC_LEVEL
    REC_CAUTION_ENTRY = 2,  // CAUTION — Acceptable
    REC_WAIT          = 3,  // WAIT — Low quality
    REC_AVOID         = 4,  // AVOID — Skip
-   REC_COUNTER_TREND = 5   // COUNTER_TREND — Opposite
+   REC_COUNTER_TREND = 5,  // COUNTER_TREND — Opposite
+   REC_ANY           = 6   // ANY — Force entry on ALL signals
 };
 
 //+------------------------------------------------------------------+
@@ -328,6 +329,7 @@ string RecLevelName(int level)
       case REC_WAIT:          return "WAIT";
       case REC_AVOID:         return "AVOID";
       case REC_COUNTER_TREND: return "COUNTER_TREND";
+      case REC_ANY:           return "ANY";
       default:                return "UNKNOWN(" + IntegerToString(level) + ")";
    }
 }
@@ -1712,7 +1714,7 @@ bool TryExecuteSignal(bool isRetry)
 
    // --- Gate 1: Recommendation Level ---
    bool g1_pass = true;
-   if(InpUseGate1RecLevel)
+   if(InpUseGate1RecLevel && InpMinRecLevel != REC_ANY)
    {
       g1_pass = false;
       if(recLevelInt <= InpMinRecLevel)
