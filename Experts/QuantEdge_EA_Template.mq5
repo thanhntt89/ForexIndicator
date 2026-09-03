@@ -58,7 +58,7 @@ input string inp_grp_ea          = "========== EA Settings =========="; // ---
 input string InpIndicatorName    = "QuantEdge_RSI";     // Indicator name (compiled .ex5)
 input bool   InpEnableAutoTrading= true;                // Enable live order placement
 input ulong  InpMagicNumber      = 20260805;            // Magic number for order identification
-input ulong  InpSlippage         = 3;                   // Max slippage (points)
+input ulong  InpSlippage         = 10;                  // Max slippage (points)
 input bool   InpShowSignalArrows = true;                // Draw signal arrows on chart
 input int    InpArrowSize        = 2;                   // Arrow size (1-5)
 input int    InpArrowOffsetPts   = 10;                  // Arrow offset from price (points)
@@ -70,10 +70,10 @@ input color  InpSellArrowColor   = clrRed;              // Sell arrow color
 //+------------------------------------------------------------------+
 input string inp_grp_gates       = "========== Decision Gates =========="; // ---
 input bool   InpUseGate1RecLevel = true;                // Enable Gate 1: Recommendation Level check
-input ENUM_REC_LEVEL InpMinRecLevel = REC_WAIT;           // Min recommendation level (worst allowed)
+input ENUM_REC_LEVEL InpMinRecLevel = REC_ANY;           // Min recommendation level (worst allowed)
 input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
 input bool   InpUseGate2Confidence = true;              // Enable Gate 2: Confidence check
-input int    InpMinConfidence    = 0;                   // Min confidence score (0-100)
+input int    InpMinConfidence    = 50;                  // Min confidence score (0-100)
 input bool   InpUseGate3Staleness  = true;              // Enable Gate 3: Staleness check
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
 input bool   InpUseGate5Spread     = false;             // Enable Gate 5: Spread check (also requires InpMaxSpreadPoints > 0)
@@ -92,8 +92,8 @@ input int    InpSessionEndHour   = 20;                  // Session end hour (GMT
 //+------------------------------------------------------------------+
 input string inp_grp_daily       = "========== Daily Loss Cap =========="; // ---
 input bool   InpUseDailyLossCap  = false;               // Enable daily loss cap (Gate 7)
-input int    InpMaxDailyLosses   = 3;                   // Max consecutive losses per day (0=no limit)
-input double InpMaxDailyLossPct  = 2.0;                 // Max daily loss % of balance (0=no limit)
+input int    InpMaxDailyLosses   = 0;                   // Max consecutive losses per day (0=no limit)
+input double InpMaxDailyLossPct  = 0.0;                 // Max daily loss % of balance (0=no limit)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Advanced Gates (ADX / Economic Calendar)              |
@@ -139,14 +139,14 @@ input double InpPosDCAHalfClosePct= 50.0;                // Stop adding DCA abov
 //+------------------------------------------------------------------+
 input string inp_grp_negdca       = "========== Negative DCA =========="; // ---
 input bool   InpUseNegativeDCA    = true;                // Enable negative DCA (add against trend)
-input int    InpNegDCAMaxOrders   = 5;                   // Max negative DCA orders (1-10)
+input int    InpNegDCAMaxOrders   = 10;                  // Max negative DCA orders (1-10)
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
-input double InpNegDCAATRMult     = 0.5;                 // Neg DCA spacing = ATR × this multiplier
+input double InpNegDCAATRMult     = 2.5;                 // Neg DCA spacing = ATR × this multiplier
 input double InpNegDCAMaxDDPct    = 15.0;                // Hard drawdown cap (% of balance) — applies to ENTIRE basket whenever ANY DCA mode is active, close all if exceeded
 input bool   InpNegDCABEClose     = true;                // Close negative DCA basket when price returns to avg entry (breakeven)
-input double InpNegDCABEOffsetPip = 0.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
-input double InpDCAProfitLockR    = 0.2;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
-input double InpDCAMinSpacingPts = 500;                 // Min distance between DCA orders (points, 500=$5 XAUUSD)
+input double InpNegDCABEOffsetPip = 5.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
+input double InpDCAProfitLockR    = 1.0;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
+input double InpDCAMinSpacingPts = 1500;                 // Min distance between DCA orders (points, 500=$5 XAUUSD)
 input int    InpDCAMinIntervalMin= 5;                   // Min time between DCA orders (minutes, 0=no check)
 
 //+------------------------------------------------------------------+
@@ -154,8 +154,8 @@ input int    InpDCAMinIntervalMin= 5;                   // Min time between DCA 
 //+------------------------------------------------------------------+
 input string inp_grp_risk        = "========== Risk & Lot Sizing =========="; // ---
 input double InpDefaultRiskPct   = 0.5;                 // Fallback risk % when indicator returns 0
-input double InpMaxLotSize       = 1.0;                 // Max lot size (hard cap)
-input double InpMinLotSize       = 0.01;                // Min lot size
+input double InpMaxLotSize       = 0.1;                 // Max lot size (hard cap)
+input double InpMinLotSize       = 0.03;                // Min lot size
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Recovery Mode                                         |
@@ -182,8 +182,8 @@ input bool   Ind_EAMode          = true;  // Always true — suppresses indicato
 //| Passed to indicator via GlobalVariable (not iCustom params).       |
 //+------------------------------------------------------------------+
 input string inp_grp_indprob     = "========== Indicator Prob Override =========="; // ---
-input int    Ind_BrierMinSamples = 20;             // Brier: min resolved samples per case (0=disable shrink)
-input double Ind_BrierFloorShrink= 0.50;           // Brier: uncertainty floor when samples=0 (0.50=halve, 0.75=mild, 1.0=off)
+input int    Ind_BrierMinSamples = 0;              // Brier: min resolved samples per case (0=disable shrink)
+input double Ind_BrierFloorShrink= 1.00;           // Brier: uncertainty floor when samples=0 (0.50=halve, 0.75=mild, 1.0=off)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Close Panel                                          |
