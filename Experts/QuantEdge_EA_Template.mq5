@@ -2231,16 +2231,23 @@ void OnTick()
          double riskPct   = ReadBuffer(BUF_REC_RISK);
          double probTP1   = ReadBuffer(BUF_PROB_TP1);
 
-         if(recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE)
+         bool buffersIncomplete = (recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE
+                                   || entry == EMPTY_VALUE || sl2 == EMPTY_VALUE);
+         if(buffersIncomplete)
          {
-            // Buffers not ready yet (common in tester) — cache signal, retry will re-read
             recLevel   = (recLevel   != EMPTY_VALUE) ? recLevel   : (double)REC_WAIT;
             confidence = (confidence != EMPTY_VALUE) ? confidence : 0;
             ev         = (ev         != EMPTY_VALUE) ? ev         : 0;
             riskPct    = (riskPct    != EMPTY_VALUE) ? riskPct    : 0;
             probTP1    = (probTP1    != EMPTY_VALUE) ? probTP1    : 0;
+            if(entry == EMPTY_VALUE)
+               entry = (direction > 0) ? SymbolInfoDouble(Symbol(), SYMBOL_ASK)
+                                       : SymbolInfoDouble(Symbol(), SYMBOL_BID);
+            if(sl2 == EMPTY_VALUE) sl2 = 0;
+            if(tp1 == EMPTY_VALUE) tp1 = 0;
+            if(tp2 == EMPTY_VALUE) tp2 = 0;
             Print("[QuantEdge EA] Signal detected (Case ", caseNum,
-                  ") — probability buffers pending, will retry on next tick.");
+                  ") — buffers pending, will retry on next tick.");
          }
 
          g_sigValid      = true;
@@ -2282,7 +2289,7 @@ void OnTick()
          }
       }
 
-      // Re-read probability buffers if they were initially empty
+      // Re-read buffers if they were initially empty/fallback
       if(g_sigRecLevel == (double)REC_WAIT && g_sigConfidence == 0 && g_sigEV == 0)
       {
          double rl = ReadBuffer(BUF_REC_LEVEL);
@@ -2298,6 +2305,18 @@ void OnTick()
             if(rk2 != EMPTY_VALUE) g_sigRiskPct  = rk2;
             if(pt2 != EMPTY_VALUE) g_sigProbTP1  = pt2;
          }
+      }
+      // Re-read entry/sl/tp if they were fallback values
+      if(g_sigSL == 0 || g_sigTP1 == 0)
+      {
+         double en2 = ReadBuffer(BUF_ENTRY);
+         double sl3 = ReadBuffer(BUF_SL);
+         double t12 = ReadBuffer(BUF_TP1);
+         double t22 = ReadBuffer(BUF_TP2);
+         if(en2 != EMPTY_VALUE && en2 > 0) g_sigEntry = en2;
+         if(sl3 != EMPTY_VALUE && sl3 > 0) g_sigSL    = sl3;
+         if(t12 != EMPTY_VALUE && t12 > 0) g_sigTP1   = t12;
+         if(t22 != EMPTY_VALUE && t22 > 0) g_sigTP2   = t22;
       }
 
       if(IsSignalStillValid())
