@@ -1768,6 +1768,35 @@ bool TryExecuteSignal(bool isRetry)
       }
    }
 
+   // --- Validate signal data (reject garbage from indicator buffers) ---
+   {
+      double stopLevelPts = MarketInfo(Symbol(), MODE_STOPLEVEL);
+      double minTPDist = MathMax(stopLevelPts * Point, 100 * Point);
+
+      bool tpInvalid = (tp1 <= 0)
+                     || (MathAbs(tp1 - entry) < minTPDist)
+                     || (direction > 0 && tp1 <= entry)
+                     || (direction < 0 && tp1 >= entry);
+
+      bool slGarbage = (sl > 0 && MathAbs(sl - entry) / entry > 0.20);
+
+      if(tpInvalid || slGarbage)
+      {
+         if(!isRetry)
+            Print("[QuantEdge EA] Signal data not ready: entry=", DoubleToString(entry, Digits),
+                  " SL=", DoubleToString(sl, Digits),
+                  " TP1=", DoubleToString(tp1, Digits),
+                  " (TP dist=", DoubleToString(MathAbs(tp1 - entry) / Point, 0), " pts",
+                  " min=", DoubleToString(minTPDist / Point, 0), " pts)",
+                  tpInvalid ? " [TP invalid]" : "",
+                  slGarbage ? " [SL garbage]" : "",
+                  " — will retry.");
+         if(tpInvalid) g_sigTP1 = 0;
+         if(slGarbage) g_sigSL  = 0;
+         return false;
+      }
+   }
+
    // --- Gate 1: Recommendation Level ---
    bool g1_pass = true;
    if(InpUseGate1RecLevel && InpMinRecLevel != REC_ANY)
