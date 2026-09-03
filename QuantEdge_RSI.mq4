@@ -25,7 +25,7 @@
 #property indicator_separate_window
 #property indicator_minimum  0
 #property indicator_maximum  100
-#property indicator_buffers  25
+#property indicator_buffers  26
 #property indicator_label1  "RSI Fast"
 #property indicator_type1   DRAW_LINE
 #property indicator_color1  clrLime
@@ -96,6 +96,7 @@ double BufferRecLevel[];           // 21
 double BufferRecConfidence[];      // 22
 double BufferRecEV[];              // 23
 double BufferRecSuggestedRisk[];   // 24
+double BufferTP3[];                // 25: take profit 3 price
 //--- Includes
 #include <QuantEdge/Core/Config.mqh>
 #include <QuantEdge/Core/Structs.mqh>
@@ -151,6 +152,7 @@ int OnInit()
    SetIndexBuffer(22, BufferRecConfidence);
    SetIndexBuffer(23, BufferRecEV);
    SetIndexBuffer(24, BufferRecSuggestedRisk);
+   SetIndexBuffer(25, BufferTP3);
    ArraySetAsSeries(BufferGreen, false);
    ArraySetAsSeries(BufferRed, false);
    ArraySetAsSeries(BufferBBUpper, false);
@@ -428,6 +430,7 @@ int OnCalculate(const int rates_total,
       BufferSL[i]         = EMPTY_VALUE;
       BufferTP1[i]        = EMPTY_VALUE;
       BufferTP2[i]        = EMPTY_VALUE;
+      BufferTP3[i]        = EMPTY_VALUE;
       // [PROB-FIX] Probability/recommendation are NOT persisted in SignalData, so
       // fullRecalc cannot replay them for historical bars (accepted tradeoff — see
       // plan). Reset to EMPTY_VALUE here; only the newest closed signal bar (below)
@@ -458,6 +461,7 @@ int OnCalculate(const int rates_total,
             BufferSL[i]    = g_signals[_storedIdx].stopLoss;
             BufferTP1[i]   = g_signals[_storedIdx].takeProfit1;
             BufferTP2[i]   = g_signals[_storedIdx].takeProfit2;
+            BufferTP3[i]   = g_signals[_storedIdx].takeProfit3;
             _storedIdx++;
          }
          continue;
@@ -537,6 +541,7 @@ int OnCalculate(const int rates_total,
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
          BufferTP2[i]   = tp2;
+         BufferTP3[i]   = tp3;
          double angleZ = signal.angleStrength;
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);
@@ -629,6 +634,7 @@ int OnCalculate(const int rates_total,
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
          BufferTP2[i]   = tp2;
+         BufferTP3[i]   = tp3;
          double angleZ = signal.angleStrength;
          double curSpread = MarketInfo(Symbol(), MODE_SPREAD) * _Point;
          int sigSessBlock = GetSessionBlock(time[i]);

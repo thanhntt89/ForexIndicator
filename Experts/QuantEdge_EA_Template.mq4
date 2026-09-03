@@ -35,6 +35,7 @@
 #define BUF_REC_CONFIDENCE   22
 #define BUF_REC_EV           23
 #define BUF_REC_RISK         24
+#define BUF_TP3              25
 
 //+------------------------------------------------------------------+
 //| Recommendation level ordinals (mirrors ENUM_RECOMMENDATION)       |
@@ -120,9 +121,10 @@ input bool   InpUseEconCalGate   = false;               // Enable economic calen
 //| INPUT GROUP: Trade Management                                      |
 //+------------------------------------------------------------------+
 input string inp_grp_mgmt        = "========== Trade Management =========="; // ---
-input bool   InpUsePartialClose  = true;                // Split into TP1 (60%) + TP2 (40%) legs
-input double InpTP1LotRatio      = 0.6;                 // TP1 leg lot ratio (0.1-0.9)
-input bool   InpUseTrailing      = true;                // Enable ATR trailing stop on TP2 leg
+input bool   InpUsePartialClose  = true;                // Split into TP1 + TP2 (+ optional TP3) legs
+input double InpTP1LotRatio      = 0.6;                 // TP1 leg lot ratio (of total)
+input double InpTP2LotRatio      = 0.0;                 // TP2 leg lot ratio (0=remainder, >0=explicit; TP3 gets rest)
+input bool   InpUseTrailing      = true;                // Enable ATR trailing stop on TP2/TP3 legs
 input double InpTrailATRMult     = 1.5;                 // Trailing distance = ATR × this multiplier
 input int    InpTrailATRPeriod   = 14;                  // ATR period for trailing calculation
 
@@ -232,6 +234,7 @@ int  g_dragOffsetY    = 0;
 bool g_panelCollapsed = false;
 
 #define MAGIC_TP2_OFFSET      100000
+#define MAGIC_TP3_OFFSET      150000
 #define MAGIC_POS_DCA_OFFSET  200000
 #define MAGIC_NEG_DCA_OFFSET  300000
 
@@ -249,6 +252,7 @@ double   g_sigEntry       = 0;
 double   g_sigSL          = 0;
 double   g_sigTP1         = 0;
 double   g_sigTP2         = 0;
+double   g_sigTP3         = 0;
 double   g_sigRecLevel    = 0;
 double   g_sigConfidence  = 0;
 double   g_sigEV          = 0;
@@ -347,6 +351,7 @@ string RecLevelName(int level)
 bool HasOpenPosition(int direction)
 {
    int magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   int magicTP3 = InpMagicNumber + MAGIC_TP3_OFFSET;
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
@@ -354,7 +359,7 @@ bool HasOpenPosition(int direction)
       if(OrderSymbol() != Symbol())
          continue;
       int mag = OrderMagicNumber();
-      if(mag != InpMagicNumber && mag != magicTP2)
+      if(mag != InpMagicNumber && mag != magicTP2 && mag != magicTP3)
          continue;
 
       if(direction > 0 && OrderType() == OP_BUY)
@@ -376,6 +381,7 @@ bool IsOurMagic(int magic)
 {
    if(magic == InpMagicNumber)                      return true;
    if(magic == InpMagicNumber + MAGIC_TP2_OFFSET)    return true;
+   if(magic == InpMagicNumber + MAGIC_TP3_OFFSET)    return true;
    if(magic >= InpMagicNumber + MAGIC_POS_DCA_OFFSET &&
       magic <  InpMagicNumber + MAGIC_POS_DCA_OFFSET + 100)
       return true;
@@ -409,12 +415,13 @@ int CountDCAPositions(int dcaType)
 bool HasAnyOriginalPosition()
 {
    int magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   int magicTP3 = InpMagicNumber + MAGIC_TP3_OFFSET;
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
       if(OrderSymbol() != Symbol()) continue;
       int mag = OrderMagicNumber();
-      if(mag == InpMagicNumber || mag == magicTP2)
+      if(mag == InpMagicNumber || mag == magicTP2 || mag == magicTP3)
          return true;
    }
    return false;
@@ -461,6 +468,7 @@ double CalculateNegDCAAvgEntry()
    double totalLots = 0;
    double weightedPrice = 0;
    int magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   int magicTP3 = InpMagicNumber + MAGIC_TP3_OFFSET;
 
    for(int i = OrdersTotal() - 1; i >= 0; i--)
    {
@@ -468,7 +476,7 @@ double CalculateNegDCAAvgEntry()
       if(OrderSymbol() != Symbol()) continue;
       int mag = OrderMagicNumber();
 
-      bool isOriginal = (mag == InpMagicNumber || mag == magicTP2);
+      bool isOriginal = (mag == InpMagicNumber || mag == magicTP2 || mag == magicTP3);
       bool isNegDCA   = (mag >= InpMagicNumber + MAGIC_NEG_DCA_OFFSET &&
                          mag <  InpMagicNumber + MAGIC_NEG_DCA_OFFSET + 100);
       if(!isOriginal && !isNegDCA) continue;
@@ -637,7 +645,7 @@ bool IsDailyLossCapHit()
 }
 
 //+------------------------------------------------------------------+
-//| ATR trailing stop for TP2 legs                                     |
+//| ATR trailing stop for TP2 and TP3 legs                            |
 //+------------------------------------------------------------------+
 void ManageTrailing()
 {
@@ -645,6 +653,7 @@ void ManageTrailing()
       return;
 
    int magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   int magicTP3 = InpMagicNumber + MAGIC_TP3_OFFSET;
    double atr = iATR(Symbol(), 0, InpTrailATRPeriod, 0);
    if(atr <= 0)
       return;
@@ -656,7 +665,8 @@ void ManageTrailing()
          continue;
       if(OrderSymbol() != Symbol())
          continue;
-      if(OrderMagicNumber() != magicTP2)
+      int mag = OrderMagicNumber();
+      if(mag != magicTP2 && mag != magicTP3)
          continue;
 
       if(OrderType() == OP_BUY)
@@ -1560,7 +1570,9 @@ int OnInit()
    Print("[QuantEdge EA] PriceLocSLSide=", InpUsePriceLocSLSide, " PriceLocTPSide=", InpUsePriceLocTPSide,
          " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
-   Print("[QuantEdge EA] PartialClose=", InpUsePartialClose, " Trailing=", InpUseTrailing);
+   Print("[QuantEdge EA] PartialClose=", InpUsePartialClose,
+         " TP1Ratio=", InpTP1LotRatio, " TP2Ratio=", InpTP2LotRatio,
+         " Trailing=", InpUseTrailing);
    Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " PosDCA_ATR=", InpPosDCAATRMult,
          " NegativeDCA=", InpUseNegativeDCA, " NegDCA_ATR=", InpNegDCAATRMult);
    Print("[QuantEdge EA] ===================");
@@ -1614,6 +1626,7 @@ int OnInit()
          g_sigSL         = ReadBufferAt(BUF_SL, i);
          g_sigTP1        = ReadBufferAt(BUF_TP1, i);
          g_sigTP2        = ReadBufferAt(BUF_TP2, i);
+         g_sigTP3        = ReadBufferAt(BUF_TP3, i);
          g_sigRecLevel   = recLevel;
          g_sigConfidence = confidence;
          g_sigEV         = ReadBufferAt(BUF_REC_EV, i);
@@ -1743,6 +1756,7 @@ bool TryExecuteSignal(bool isRetry)
    double sl         = g_sigSL;
    double tp1        = g_sigTP1;
    double tp2        = g_sigTP2;
+   double tp3        = g_sigTP3;
    int    recLevelInt= (int)MathRound(g_sigRecLevel);
    double confidence = g_sigConfidence;
    double ev         = g_sigEV;
@@ -1990,6 +2004,8 @@ bool TryExecuteSignal(bool isRetry)
    double adjTP1 = NormalizeDouble(tp1 + priceShift, Digits);
    double adjTP2 = (tp2 != EMPTY_VALUE && tp2 > 0)
                    ? NormalizeDouble(tp2 + priceShift, Digits) : 0;
+   double adjTP3 = (tp3 != EMPTY_VALUE && tp3 > 0)
+                   ? NormalizeDouble(tp3 + priceShift, Digits) : 0;
 
    double stoplevel = MarketInfo(Symbol(), MODE_STOPLEVEL) * Point;
    if(direction > 0)
@@ -1997,12 +2013,14 @@ bool TryExecuteSignal(bool isRetry)
       if(adjSL >= Bid - stoplevel)  adjSL  = NormalizeDouble(Bid - stoplevel - Point, Digits);
       if(adjTP1 <= Ask + stoplevel) adjTP1 = NormalizeDouble(Ask + stoplevel + Point, Digits);
       if(adjTP2 > 0 && adjTP2 <= Ask + stoplevel) adjTP2 = NormalizeDouble(Ask + stoplevel + Point, Digits);
+      if(adjTP3 > 0 && adjTP3 <= Ask + stoplevel) adjTP3 = NormalizeDouble(Ask + stoplevel + Point, Digits);
    }
    else
    {
       if(adjSL <= Ask + stoplevel)  adjSL  = NormalizeDouble(Ask + stoplevel + Point, Digits);
       if(adjTP1 >= Bid - stoplevel) adjTP1 = NormalizeDouble(Bid - stoplevel - Point, Digits);
       if(adjTP2 > 0 && adjTP2 >= Bid - stoplevel) adjTP2 = NormalizeDouble(Bid - stoplevel - Point, Digits);
+      if(adjTP3 > 0 && adjTP3 >= Bid - stoplevel) adjTP3 = NormalizeDouble(Bid - stoplevel - Point, Digits);
    }
 
    bool   dcaGateActive = (InpUsePositiveDCA || InpUseNegativeDCA);
@@ -2010,17 +2028,57 @@ bool TryExecuteSignal(bool isRetry)
 
    // --- Place order(s) ---
    string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
-   bool   useSplit = InpUsePartialClose && adjTP2 > 0
-                     && lot >= minLot * 2.0;
 
-   if(useSplit)
+   double tp2Ratio = InpTP2LotRatio;
+   bool   useTP3   = InpUsePartialClose && adjTP3 > 0 && adjTP2 > 0
+                      && tp2Ratio > 0 && lot >= minLot * 3.0;
+   bool   useTP2   = !useTP3 && InpUsePartialClose && adjTP2 > 0
+                      && lot >= minLot * 2.0;
+
+   if(useTP3)
+   {
+      double tp3Ratio = MathMax(1.0 - InpTP1LotRatio - tp2Ratio, 0.0);
+      double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
+      double lot2 = MathFloor(lot * tp2Ratio       / lotStep) * lotStep;
+      double lot3 = MathFloor(lot * tp3Ratio        / lotStep) * lotStep;
+      lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
+      lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
+      lot3 = MathMax(lot3, minLot); lot3 = MathMin(lot3, InpMaxLotSize);
+
+      string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
+      string comment3 = StringFormat("QE3 C%d %s", caseNum, RecLevelName(recLevelInt));
+      int magicTP2    = InpMagicNumber + MAGIC_TP2_OFFSET;
+      int magicTP3    = InpMagicNumber + MAGIC_TP3_OFFSET;
+
+      int t1 = -1, t2 = -1, t3 = -1;
+      if(direction > 0)
+      {
+         t1 = OrderSend(Symbol(), OP_BUY, lot1, Ask, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
+         t2 = OrderSend(Symbol(), OP_BUY, lot2, Ask, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrGreen);
+         t3 = OrderSend(Symbol(), OP_BUY, lot3, Ask, InpSlippage, sendSL, adjTP3, comment3, magicTP3, 0, clrAqua);
+      }
+      else
+      {
+         t1 = OrderSend(Symbol(), OP_SELL, lot1, Bid, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
+         t2 = OrderSend(Symbol(), OP_SELL, lot2, Bid, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrMaroon);
+         t3 = OrderSend(Symbol(), OP_SELL, lot3, Bid, InpSlippage, sendSL, adjTP3, comment3, magicTP3, 0, clrMagenta);
+      }
+
+      if(t1 < 0) Print("[QuantEdge EA] TP1 OrderSend failed: error ", GetLastError());
+      else       Print("[QuantEdge EA] TP1 placed: ticket=", t1, " ", dirStr, " ", DoubleToString(lot1, 2), " lot");
+
+      if(t2 < 0) Print("[QuantEdge EA] TP2 OrderSend failed: error ", GetLastError());
+      else       Print("[QuantEdge EA] TP2 placed: ticket=", t2, " ", dirStr, " ", DoubleToString(lot2, 2), " lot (trailing)");
+
+      if(t3 < 0) Print("[QuantEdge EA] TP3 OrderSend failed: error ", GetLastError());
+      else       Print("[QuantEdge EA] TP3 placed: ticket=", t3, " ", dirStr, " ", DoubleToString(lot3, 2), " lot (trailing)");
+   }
+   else if(useTP2)
    {
       double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
       double lot2 = MathFloor(lot * (1.0 - InpTP1LotRatio) / lotStep) * lotStep;
-      lot1 = MathMax(lot1, minLot);
-      lot2 = MathMax(lot2, minLot);
-      lot1 = MathMin(lot1, InpMaxLotSize);
-      lot2 = MathMin(lot2, InpMaxLotSize);
+      lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
+      lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
 
       string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
       int magicTP2    = InpMagicNumber + MAGIC_TP2_OFFSET;
@@ -2168,6 +2226,7 @@ void OnTick()
          double sl2       = ReadBuffer(BUF_SL);
          double tp1       = ReadBuffer(BUF_TP1);
          double tp2       = ReadBuffer(BUF_TP2);
+         double tp3       = ReadBuffer(BUF_TP3);
          double recLevel  = ReadBuffer(BUF_REC_LEVEL);
          double confidence= ReadBuffer(BUF_REC_CONFIDENCE);
          double ev        = ReadBuffer(BUF_REC_EV);
@@ -2188,9 +2247,11 @@ void OnTick()
             if(sl2 == EMPTY_VALUE) sl2 = 0;
             if(tp1 == EMPTY_VALUE) tp1 = 0;
             if(tp2 == EMPTY_VALUE) tp2 = 0;
+            if(tp3 == EMPTY_VALUE) tp3 = 0;
             Print("[QuantEdge EA] Signal detected (Case ", caseNum,
                   ") — buffers pending, will retry on next tick.");
          }
+         if(tp3 == EMPTY_VALUE) tp3 = 0;
 
          g_sigValid      = true;
          g_sigTP1Hit     = false;
@@ -2201,6 +2262,7 @@ void OnTick()
          g_sigSL         = sl2;
          g_sigTP1        = tp1;
          g_sigTP2        = tp2;
+         g_sigTP3        = tp3;
          g_sigRecLevel   = recLevel;
          g_sigConfidence = confidence;
          g_sigEV         = ev;
@@ -2255,10 +2317,12 @@ void OnTick()
          double sl3 = ReadBuffer(BUF_SL);
          double t12 = ReadBuffer(BUF_TP1);
          double t22 = ReadBuffer(BUF_TP2);
+         double t32 = ReadBuffer(BUF_TP3);
          if(en2 != EMPTY_VALUE && en2 > 0) g_sigEntry = en2;
          if(sl3 != EMPTY_VALUE && sl3 > 0) g_sigSL    = sl3;
          if(t12 != EMPTY_VALUE && t12 > 0) g_sigTP1   = t12;
          if(t22 != EMPTY_VALUE && t22 > 0) g_sigTP2   = t22;
+         if(t32 != EMPTY_VALUE && t32 > 0) g_sigTP3   = t32;
       }
 
       if(IsSignalStillValid())

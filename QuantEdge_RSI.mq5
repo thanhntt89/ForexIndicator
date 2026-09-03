@@ -23,7 +23,7 @@
 #property indicator_separate_window
 #property indicator_minimum    0
 #property indicator_maximum    100
-#property indicator_buffers    25
+#property indicator_buffers    26
 #property indicator_plots      7
 
 //--- Plot 1: RSI Fast (Green)
@@ -109,6 +109,7 @@ double BufferRecLevel[];           // 21
 double BufferRecConfidence[];      // 22
 double BufferRecEV[];              // 23
 double BufferRecSuggestedRisk[];   // 24
+double BufferTP3[];                // 25: take profit 3 price
 
 //--- Includes: MQLCompat MUST be first (wraps MQL4 functions)
 #include <QuantEdge/Core/MQLCompat.mqh>
@@ -175,6 +176,7 @@ int OnInit()
    SetIndexBuffer(22, BufferRecConfidence,     INDICATOR_DATA);
    SetIndexBuffer(23, BufferRecEV,             INDICATOR_DATA);
    SetIndexBuffer(24, BufferRecSuggestedRisk,  INDICATOR_DATA);
+   SetIndexBuffer(25, BufferTP3,              INDICATOR_DATA);
 
    //--- MQL5: arrays are non-series by default in indicators
    //--- Match MQL4 behavior (non-series)
@@ -496,6 +498,7 @@ int OnCalculate(const int rates_total,
       BufferSL[i]         = EMPTY_VALUE;
       BufferTP1[i]        = EMPTY_VALUE;
       BufferTP2[i]        = EMPTY_VALUE;
+      BufferTP3[i]        = EMPTY_VALUE;
       BufferProbTP1[i]           = EMPTY_VALUE;
       BufferProbTP2[i]           = EMPTY_VALUE;
       BufferProbTP3[i]           = EMPTY_VALUE;
@@ -522,6 +525,7 @@ int OnCalculate(const int rates_total,
             BufferSL[i]    = g_signals[_storedIdx].stopLoss;
             BufferTP1[i]   = g_signals[_storedIdx].takeProfit1;
             BufferTP2[i]   = g_signals[_storedIdx].takeProfit2;
+            BufferTP3[i]   = g_signals[_storedIdx].takeProfit3;
             _storedIdx++;
          }
          continue;
@@ -609,6 +613,7 @@ int OnCalculate(const int rates_total,
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
          BufferTP2[i]   = tp2;
+         BufferTP3[i]   = tp3;
          // [PERF] Probability/recommendation: forward-only in live, all bars in tester
          if(i >= rates_total - 2 || IsBacktestMode())
          {
@@ -702,6 +707,7 @@ int OnCalculate(const int rates_total,
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
          BufferTP2[i]   = tp2;
+         BufferTP3[i]   = tp3;
          // [PERF] Probability/recommendation: forward-only in live, all bars in tester
          if(i >= rates_total - 2 || IsBacktestMode())
          {
