@@ -692,7 +692,7 @@ void ManageTrailing()
       long mag = PositionGetInteger(POSITION_MAGIC);
       if(mag != (long)magicTP2 && mag != (long)magicTP3) continue;
 
-      CTrade &trailTrade = (mag == (long)magicTP3) ? g_tradeTP3 : g_tradeTP2;
+      CTrade *trailTrade = (mag == (long)magicTP3) ? &g_tradeTP3 : &g_tradeTP2;
       double openPrice = PositionGetDouble(POSITION_PRICE_OPEN);
       double curSL     = PositionGetDouble(POSITION_SL);
       double curTP     = PositionGetDouble(POSITION_TP);
