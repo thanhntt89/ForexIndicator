@@ -735,10 +735,11 @@ void AutoFixMissingTP()
 
    double tp = g_dcaOriginalTP1;
    if(tp <= 0 || tp == EMPTY_VALUE)
-   {
+      tp = g_sigTP1;
+   if(tp <= 0 || tp == EMPTY_VALUE)
       tp = ReadBuffer(BUF_TP1);
-      if(tp <= 0 || tp == EMPTY_VALUE) return;
-   }
+   if(tp <= 0 || tp == EMPTY_VALUE)
+      return;
 
    CTrade fixTrade;
    fixTrade.SetDeviationInPoints(InpSlippage);
