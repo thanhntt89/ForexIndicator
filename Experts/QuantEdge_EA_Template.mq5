@@ -1999,7 +1999,13 @@ bool TryExecuteSignal(bool isRetry)
    double lot = CalculateLotFromRisk(effectiveRisk, slDistance);
    if(lot <= 0)
    {
-      Print("[QuantEdge EA] Lot calculation returned 0 — cannot trade.");
+      Print("[QuantEdge EA] Lot calculation returned 0 — cannot trade.",
+            " effectiveRisk=", DoubleToString(effectiveRisk, 2),
+            "% slDist=", DoubleToString(slDistance, 1),
+            " entry=", DoubleToString(entry, _Digits),
+            " sl=", DoubleToString(sl, _Digits),
+            " tickVal=", DoubleToString(SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_VALUE), 4),
+            " balance=", DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2));
       return false;
    }
 
