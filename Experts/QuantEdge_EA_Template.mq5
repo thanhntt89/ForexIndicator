@@ -697,6 +697,68 @@ void ManageTrailing()
 }
 
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| MT5 Broker Compatibility Helpers                                  |
+//+------------------------------------------------------------------+
+
+void SetTradeFillingMode(CTrade &trade)
+{
+   long fillMode = SymbolInfoInteger(Symbol(), SYMBOL_FILLING_MODE);
+   if(fillMode & SYMBOL_FILLING_FOK)
+      trade.SetTypeFilling(ORDER_FILLING_FOK);
+   else if(fillMode & SYMBOL_FILLING_IOC)
+      trade.SetTypeFilling(ORDER_FILLING_IOC);
+   else
+      trade.SetTypeFilling(ORDER_FILLING_RETURN);
+}
+
+void EnsurePositionTP(CTrade &trade, double tp)
+{
+   if(tp <= 0) return;
+   ulong ticket = trade.ResultOrder();
+   if(ticket == 0) return;
+   if(!PositionSelectByTicket(ticket)) return;
+   if(PositionGetDouble(POSITION_TP) != 0) return;
+
+   double curSL = PositionGetDouble(POSITION_SL);
+   if(trade.PositionModify(ticket, curSL, tp))
+      Print("[QuantEdge EA] TP set via modify: ", DoubleToString(tp, _Digits));
+   else
+      Print("[QuantEdge EA] Failed to set TP via modify: ", trade.ResultRetcodeDescription());
+}
+
+void AutoFixMissingTP()
+{
+   static datetime lastCheck = 0;
+   if(TimeCurrent() - lastCheck < 5) return;
+   lastCheck = TimeCurrent();
+
+   if(g_dcaOriginalTP1 <= 0) return;
+
+   CTrade fixTrade;
+   fixTrade.SetDeviationInPoints(InpSlippage);
+   SetTradeFillingMode(fixTrade);
+
+   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket == 0) continue;
+      if(PositionGetString(POSITION_SYMBOL) != Symbol()) continue;
+      long magic = PositionGetInteger(POSITION_MAGIC);
+      if(!IsOurMagic(magic)) continue;
+      if(PositionGetDouble(POSITION_TP) != 0) continue;
+
+      double curSL = PositionGetDouble(POSITION_SL);
+      fixTrade.SetExpertMagicNumber((ulong)magic);
+      if(fixTrade.PositionModify(ticket, curSL, g_dcaOriginalTP1))
+         Print("[QuantEdge EA] AutoFix: set TP=", DoubleToString(g_dcaOriginalTP1, _Digits),
+               " for ticket=", ticket, " magic=", magic);
+      else
+         Print("[QuantEdge EA] AutoFix failed for ticket=", ticket,
+               ": ", fixTrade.ResultRetcodeDescription());
+   }
+}
+
 //| DCA MANAGEMENT — positive (trend) + negative (recovery) baskets   |
 //| See document/DCA_Flowcharts.md and DCA_Function_Specs.md          |
 //+------------------------------------------------------------------+
@@ -887,6 +949,7 @@ void ManagePositiveDCA()
       CTrade dcaTrade;
       dcaTrade.SetExpertMagicNumber(dcaMagic);
       dcaTrade.SetDeviationInPoints(InpSlippage);
+      SetTradeFillingMode(dcaTrade);
 
       bool result = (g_dcaDirection > 0)
                     ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, dcaTP, comment)
@@ -894,6 +957,7 @@ void ManagePositiveDCA()
 
       if(result)
       {
+         EnsurePositionTP(dcaTrade, dcaTP);
          g_dcaLastOrderTime = TimeCurrent();
          SaveDCAState();
          Print("[QuantEdge EA] Positive DCA+", idx, " placed: ",
@@ -1147,6 +1211,7 @@ void ManageNegativeDCA()
       CTrade dcaTrade;
       dcaTrade.SetExpertMagicNumber(dcaMagic);
       dcaTrade.SetDeviationInPoints(InpSlippage);
+      SetTradeFillingMode(dcaTrade);
 
       bool result = (g_dcaDirection > 0)
                     ? dcaTrade.Buy(dcaLot, Symbol(), 0, 0, dcaTP, comment)
@@ -1154,6 +1219,7 @@ void ManageNegativeDCA()
 
       if(result)
       {
+         EnsurePositionTP(dcaTrade, dcaTP);
          g_dcaLastOrderTime = TimeCurrent();
          SaveDCAState();
          Print("[QuantEdge EA] Negative DCA-", idx, " placed: ",
@@ -1619,8 +1685,10 @@ int OnInit()
 
    g_trade.SetExpertMagicNumber(InpMagicNumber);
    g_trade.SetDeviationInPoints(InpSlippage);
+   SetTradeFillingMode(g_trade);
    g_tradeTP2.SetExpertMagicNumber(InpMagicNumber + MAGIC_TP2_OFFSET);
    g_tradeTP2.SetDeviationInPoints(InpSlippage);
+   SetTradeFillingMode(g_tradeTP2);
 
    g_hATR = iATR(Symbol(), Period(), InpTrailATRPeriod);
 
@@ -2090,12 +2158,20 @@ bool TryExecuteSignal(bool isRetry)
       }
 
       if(!r1) Print("[QuantEdge EA] TP1 order failed: ", g_trade.ResultRetcodeDescription());
-      else    Print("[QuantEdge EA] TP1 placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
-                    DoubleToString(lot1, 2), " lot");
+      else
+      {
+         Print("[QuantEdge EA] TP1 placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
+               DoubleToString(lot1, 2), " lot");
+         EnsurePositionTP(g_trade, adjTP1);
+      }
 
       if(!r2) Print("[QuantEdge EA] TP2 order failed: ", g_tradeTP2.ResultRetcodeDescription());
-      else    Print("[QuantEdge EA] TP2 placed: ticket=", g_tradeTP2.ResultOrder(), " ", dirStr, " ",
-                    DoubleToString(lot2, 2), " lot (trailing)");
+      else
+      {
+         Print("[QuantEdge EA] TP2 placed: ticket=", g_tradeTP2.ResultOrder(), " ", dirStr, " ",
+               DoubleToString(lot2, 2), " lot (trailing)");
+         EnsurePositionTP(g_tradeTP2, adjTP2);
+      }
    }
    else
    {
@@ -2108,8 +2184,11 @@ bool TryExecuteSignal(bool isRetry)
       if(!result)
          Print("[QuantEdge EA] Order failed: ", g_trade.ResultRetcodeDescription());
       else
+      {
          Print("[QuantEdge EA] Order placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
                DoubleToString(lot, 2), " lot @ ", DoubleToString(g_trade.ResultPrice(), _Digits));
+         EnsurePositionTP(g_trade, adjTP1);
+      }
    }
 
    // --- Initialize DCA state after successful order placement ---
@@ -2186,6 +2265,7 @@ void OnTick()
 {
    ManageTrailing();
    ManageDCA();
+   AutoFixMissingTP();
    UpdateDailyLossTracking();
    TrackRecoveryOutcome();
    CheckRecoveryAutoOff();
