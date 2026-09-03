@@ -733,7 +733,12 @@ void AutoFixMissingTP()
    if(TimeCurrent() - lastCheck < 5) return;
    lastCheck = TimeCurrent();
 
-   if(g_dcaOriginalTP1 <= 0) return;
+   double tp = g_dcaOriginalTP1;
+   if(tp <= 0 || tp == EMPTY_VALUE)
+   {
+      tp = ReadBuffer(BUF_TP1);
+      if(tp <= 0 || tp == EMPTY_VALUE) return;
+   }
 
    CTrade fixTrade;
    fixTrade.SetDeviationInPoints(InpSlippage);
@@ -750,8 +755,8 @@ void AutoFixMissingTP()
 
       double curSL = PositionGetDouble(POSITION_SL);
       fixTrade.SetExpertMagicNumber((ulong)magic);
-      if(fixTrade.PositionModify(ticket, curSL, g_dcaOriginalTP1))
-         Print("[QuantEdge EA] AutoFix: set TP=", DoubleToString(g_dcaOriginalTP1, _Digits),
+      if(fixTrade.PositionModify(ticket, curSL, tp))
+         Print("[QuantEdge EA] AutoFix: set TP=", DoubleToString(tp, _Digits),
                " for ticket=", ticket, " magic=", magic);
       else
          Print("[QuantEdge EA] AutoFix failed for ticket=", ticket,
