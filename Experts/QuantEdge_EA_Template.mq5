@@ -41,6 +41,14 @@
 //+------------------------------------------------------------------+
 //| Recommendation level ordinals (mirrors ENUM_RECOMMENDATION)       |
 //+------------------------------------------------------------------+
+enum ENUM_TP_MODE
+{
+   TP_DEFAULT  = 0,  // Default — all lot at TP1
+   TP_USE_TP2  = 1,  // TP2 — all lot at TP2
+   TP_USE_TP3  = 2,  // TP3 — all lot at TP3
+   TP_DYNAMIC  = 3   // Dynamic — split TP1 leg + TP2 trailing
+};
+
 enum ENUM_REC_LEVEL
 {
    REC_STRONG_ENTRY  = 0,  // STRONG — Best quality
@@ -120,10 +128,9 @@ input bool   InpUseEconCalGate   = false;               // Enable economic calen
 //| INPUT GROUP: Trade Management                                      |
 //+------------------------------------------------------------------+
 input string inp_grp_mgmt        = "========== Trade Management =========="; // ---
-input bool   InpUsePartialClose  = true;                // Split into TP1 + TP2 (+ optional TP3) legs
-input double InpTP1LotRatio      = 0.6;                 // TP1 leg lot ratio (of total)
-input double InpTP2LotRatio      = 0.0;                 // TP2 leg lot ratio (0=remainder, >0=explicit; TP3 gets rest)
-input bool   InpUseTrailing      = true;                // Enable ATR trailing stop on TP2/TP3 legs
+input ENUM_TP_MODE InpTPMode     = TP_DEFAULT;           // TP Mode: Default(TP1) / TP2 / TP3 / Dynamic(split+trail)
+input double InpTP1LotRatio      = 0.6;                 // [Dynamic] TP1 leg lot ratio (0.1-0.9)
+input bool   InpUseTrailing      = true;                // [Dynamic] Enable ATR trailing stop on TP2 leg
 input double InpTrailATRMult     = 1.5;                 // Trailing distance = ATR × this multiplier
 input int    InpTrailATRPeriod   = 14;                  // ATR period for trailing calculation
 
@@ -1726,8 +1733,8 @@ int OnInit()
          " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
    Print("[QuantEdge EA] SignalRetry=", InpUseSignalRetry, " RetryMaxBars=", InpRetryMaxBars);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
-   Print("[QuantEdge EA] PartialClose=", InpUsePartialClose,
-         " TP1Ratio=", InpTP1LotRatio, " TP2Ratio=", InpTP2LotRatio,
+   Print("[QuantEdge EA] TPMode=", EnumToString(InpTPMode),
+         " TP1Ratio=", InpTP1LotRatio,
          " Trailing=", InpUseTrailing);
    Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " PosDCA_ATR=", InpPosDCAATRMult,
          " NegativeDCA=", InpUseNegativeDCA, " NegDCA_ATR=", InpNegDCAATRMult);
@@ -2139,15 +2146,15 @@ bool TryExecuteSignal(bool isRetry)
 
    if(!InpEnableAutoTrading)
    {
-      if(InpUsePartialClose && tp2 != EMPTY_VALUE && tp2 > 0)
-         Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot (split TP1+TP2) @ ",
-               DoubleToString(entry, _Digits), " SL=", DoubleToString(sl, _Digits),
-               " TP1=", DoubleToString(tp1, _Digits), " TP2=", DoubleToString(tp2, _Digits),
-               " — auto-trading OFF.");
-      else
-         Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot @ ",
-               DoubleToString(entry, _Digits), " SL=", DoubleToString(sl, _Digits),
-               " TP=", DoubleToString(tp1, _Digits), " — auto-trading OFF.");
+      string tpModeStr = (InpTPMode == TP_DYNAMIC) ? "Dynamic" :
+                         (InpTPMode == TP_USE_TP2)  ? "TP2" :
+                         (InpTPMode == TP_USE_TP3)  ? "TP3" : "Default";
+      Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot [", tpModeStr, "] @ ",
+            DoubleToString(entry, _Digits), " SL=", DoubleToString(sl, _Digits),
+            " TP1=", DoubleToString(tp1, _Digits),
+            " TP2=", DoubleToString(tp2, _Digits),
+            " TP3=", DoubleToString(tp3, _Digits),
+            " — auto-trading OFF.");
       return false;
    }
 
@@ -2187,98 +2194,85 @@ bool TryExecuteSignal(bool isRetry)
    bool   dcaGateActive = (InpUsePositiveDCA || InpUseNegativeDCA);
    double sendSL = dcaGateActive ? 0.0 : adjSL;
 
-   // --- Place order(s) ---
+   // --- Place order(s) based on TP Mode ---
    string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
 
-   double tp2Ratio = InpTP2LotRatio;
-   bool   useTP3   = InpUsePartialClose && adjTP3 > 0 && adjTP2 > 0
-                      && tp2Ratio > 0 && lot >= minLot * 3.0;
-   bool   useTP2   = !useTP3 && InpUsePartialClose && adjTP2 > 0
-                      && lot >= minLot * 2.0;
-
-   if(useTP3)
+   if(InpTPMode == TP_DYNAMIC)
    {
-      double tp3Ratio = MathMax(1.0 - InpTP1LotRatio - tp2Ratio, 0.0);
-      double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
-      double lot2 = MathFloor(lot * tp2Ratio       / lotStep) * lotStep;
-      double lot3 = MathFloor(lot * tp3Ratio        / lotStep) * lotStep;
-      lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
-      lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
-      lot3 = MathMax(lot3, minLot); lot3 = MathMin(lot3, InpMaxLotSize);
+      // Dynamic: split TP1 leg + TP2 trailing leg (existing 2-way behavior)
+      bool useSplit = adjTP2 > 0 && lot >= minLot * 2.0;
 
-      string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
-      string comment3 = StringFormat("QE3 C%d %s", caseNum, RecLevelName(recLevelInt));
-
-      bool r1 = false, r2 = false, r3 = false;
-      if(direction > 0)
+      if(useSplit)
       {
-         r1 = g_trade.Buy(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
-         r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
-         r3 = g_tradeTP3.Buy(lot3, Symbol(), 0, sendSL, adjTP3, comment3);
+         double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
+         double lot2 = MathFloor(lot * (1.0 - InpTP1LotRatio) / lotStep) * lotStep;
+         lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
+         lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
+
+         string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
+
+         bool r1 = false, r2 = false;
+         if(direction > 0)
+         {
+            r1 = g_trade.Buy(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
+            r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
+         }
+         else
+         {
+            r1 = g_trade.Sell(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
+            r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
+         }
+
+         if(!r1) Print("[QuantEdge EA] TP1 order failed: ", g_trade.ResultRetcodeDescription());
+         else { Print("[QuantEdge EA] TP1 placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
+                  DoubleToString(lot1, 2), " lot"); EnsurePositionTP(g_trade, adjTP1); }
+
+         if(!r2) Print("[QuantEdge EA] TP2 order failed: ", g_tradeTP2.ResultRetcodeDescription());
+         else { Print("[QuantEdge EA] TP2 placed: ticket=", g_tradeTP2.ResultOrder(), " ", dirStr, " ",
+                  DoubleToString(lot2, 2), " lot (trailing)"); EnsurePositionTP(g_tradeTP2, adjTP2); }
       }
       else
       {
-         r1 = g_trade.Sell(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
-         r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
-         r3 = g_tradeTP3.Sell(lot3, Symbol(), 0, sendSL, adjTP3, comment3);
+         bool result = false;
+         if(direction > 0)
+            result = g_trade.Buy(lot, Symbol(), 0, sendSL, adjTP1, comment1);
+         else
+            result = g_trade.Sell(lot, Symbol(), 0, sendSL, adjTP1, comment1);
+
+         if(!result)
+            Print("[QuantEdge EA] Order failed: ", g_trade.ResultRetcodeDescription());
+         else
+         {
+            Print("[QuantEdge EA] Order placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
+                  DoubleToString(lot, 2), " lot @ ", DoubleToString(g_trade.ResultPrice(), _Digits));
+            EnsurePositionTP(g_trade, adjTP1);
+         }
       }
-
-      if(!r1) Print("[QuantEdge EA] TP1 order failed: ", g_trade.ResultRetcodeDescription());
-      else { Print("[QuantEdge EA] TP1 placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
-               DoubleToString(lot1, 2), " lot"); EnsurePositionTP(g_trade, adjTP1); }
-
-      if(!r2) Print("[QuantEdge EA] TP2 order failed: ", g_tradeTP2.ResultRetcodeDescription());
-      else { Print("[QuantEdge EA] TP2 placed: ticket=", g_tradeTP2.ResultOrder(), " ", dirStr, " ",
-               DoubleToString(lot2, 2), " lot (trailing)"); EnsurePositionTP(g_tradeTP2, adjTP2); }
-
-      if(!r3) Print("[QuantEdge EA] TP3 order failed: ", g_tradeTP3.ResultRetcodeDescription());
-      else { Print("[QuantEdge EA] TP3 placed: ticket=", g_tradeTP3.ResultOrder(), " ", dirStr, " ",
-               DoubleToString(lot3, 2), " lot (trailing)"); EnsurePositionTP(g_tradeTP3, adjTP3); }
-   }
-   else if(useTP2)
-   {
-      double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
-      double lot2 = MathFloor(lot * (1.0 - InpTP1LotRatio) / lotStep) * lotStep;
-      lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
-      lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
-
-      string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
-
-      bool r1 = false, r2 = false;
-      if(direction > 0)
-      {
-         r1 = g_trade.Buy(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
-         r2 = g_tradeTP2.Buy(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
-      }
-      else
-      {
-         r1 = g_trade.Sell(lot1, Symbol(), 0, sendSL, adjTP1, comment1);
-         r2 = g_tradeTP2.Sell(lot2, Symbol(), 0, sendSL, adjTP2, comment2);
-      }
-
-      if(!r1) Print("[QuantEdge EA] TP1 order failed: ", g_trade.ResultRetcodeDescription());
-      else { Print("[QuantEdge EA] TP1 placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
-               DoubleToString(lot1, 2), " lot"); EnsurePositionTP(g_trade, adjTP1); }
-
-      if(!r2) Print("[QuantEdge EA] TP2 order failed: ", g_tradeTP2.ResultRetcodeDescription());
-      else { Print("[QuantEdge EA] TP2 placed: ticket=", g_tradeTP2.ResultOrder(), " ", dirStr, " ",
-               DoubleToString(lot2, 2), " lot (trailing)"); EnsurePositionTP(g_tradeTP2, adjTP2); }
    }
    else
    {
+      // Default / TP2 / TP3: single order, full lot, one TP
+      double selectedTP = adjTP1;
+      string tpLabel = "TP1";
+      if(InpTPMode == TP_USE_TP2 && adjTP2 > 0)
+      {  selectedTP = adjTP2; tpLabel = "TP2"; }
+      else if(InpTPMode == TP_USE_TP3 && adjTP3 > 0)
+      {  selectedTP = adjTP3; tpLabel = "TP3"; }
+
       bool result = false;
       if(direction > 0)
-         result = g_trade.Buy(lot, Symbol(), 0, sendSL, adjTP1, comment1);
+         result = g_trade.Buy(lot, Symbol(), 0, sendSL, selectedTP, comment1);
       else
-         result = g_trade.Sell(lot, Symbol(), 0, sendSL, adjTP1, comment1);
+         result = g_trade.Sell(lot, Symbol(), 0, sendSL, selectedTP, comment1);
 
       if(!result)
          Print("[QuantEdge EA] Order failed: ", g_trade.ResultRetcodeDescription());
       else
       {
-         Print("[QuantEdge EA] Order placed: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
-               DoubleToString(lot, 2), " lot @ ", DoubleToString(g_trade.ResultPrice(), _Digits));
-         EnsurePositionTP(g_trade, adjTP1);
+         Print("[QuantEdge EA] Order placed [", tpLabel, "]: ticket=", g_trade.ResultOrder(), " ", dirStr, " ",
+               DoubleToString(lot, 2), " lot @ ", DoubleToString(g_trade.ResultPrice(), _Digits),
+               " TP=", DoubleToString(selectedTP, _Digits));
+         EnsurePositionTP(g_trade, selectedTP);
       }
    }
 
@@ -2354,7 +2348,7 @@ void TrackRecoveryOutcome()
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   ManageTrailing();
+   if(InpTPMode == TP_DYNAMIC) ManageTrailing();
    ManageDCA();
    AutoFixMissingTP();
    UpdateDailyLossTracking();

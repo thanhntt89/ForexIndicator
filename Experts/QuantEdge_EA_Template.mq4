@@ -118,13 +118,23 @@ input bool   InpUseADXGate       = false;               // Enable ADX trend-stre
 input bool   InpUseEconCalGate   = false;               // Enable economic calendar blackout gate (Gate 9)
 
 //+------------------------------------------------------------------+
+//| TP Mode selector                                                   |
+//+------------------------------------------------------------------+
+enum ENUM_TP_MODE
+{
+   TP_DEFAULT  = 0,  // Default — all lot at TP1
+   TP_USE_TP2  = 1,  // TP2 — all lot at TP2
+   TP_USE_TP3  = 2,  // TP3 — all lot at TP3
+   TP_DYNAMIC  = 3   // Dynamic — split TP1 leg + TP2 trailing
+};
+
+//+------------------------------------------------------------------+
 //| INPUT GROUP: Trade Management                                      |
 //+------------------------------------------------------------------+
 input string inp_grp_mgmt        = "========== Trade Management =========="; // ---
-input bool   InpUsePartialClose  = true;                // Split into TP1 + TP2 (+ optional TP3) legs
-input double InpTP1LotRatio      = 0.6;                 // TP1 leg lot ratio (of total)
-input double InpTP2LotRatio      = 0.0;                 // TP2 leg lot ratio (0=remainder, >0=explicit; TP3 gets rest)
-input bool   InpUseTrailing      = true;                // Enable ATR trailing stop on TP2/TP3 legs
+input ENUM_TP_MODE InpTPMode     = TP_DEFAULT;           // TP Mode: Default(TP1) / TP2 / TP3 / Dynamic(split+trail)
+input double InpTP1LotRatio      = 0.6;                 // [Dynamic] TP1 leg lot ratio (0.1-0.9)
+input bool   InpUseTrailing      = true;                // [Dynamic] Enable ATR trailing stop on TP2 leg
 input double InpTrailATRMult     = 1.5;                 // Trailing distance = ATR × this multiplier
 input int    InpTrailATRPeriod   = 14;                  // ATR period for trailing calculation
 
@@ -1570,8 +1580,8 @@ int OnInit()
    Print("[QuantEdge EA] PriceLocSLSide=", InpUsePriceLocSLSide, " PriceLocTPSide=", InpUsePriceLocTPSide,
          " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
-   Print("[QuantEdge EA] PartialClose=", InpUsePartialClose,
-         " TP1Ratio=", InpTP1LotRatio, " TP2Ratio=", InpTP2LotRatio,
+   Print("[QuantEdge EA] TPMode=", EnumToString(InpTPMode),
+         " TP1Ratio=", InpTP1LotRatio,
          " Trailing=", InpUseTrailing);
    Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " PosDCA_ATR=", InpPosDCAATRMult,
          " NegativeDCA=", InpUseNegativeDCA, " NegDCA_ATR=", InpNegDCAATRMult);
@@ -1981,15 +1991,15 @@ bool TryExecuteSignal(bool isRetry)
 
    if(!InpEnableAutoTrading)
    {
-      if(InpUsePartialClose && tp2 != EMPTY_VALUE && tp2 > 0)
-         Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot (split TP1+TP2) @ ",
-               DoubleToString(entry, Digits), " SL=", DoubleToString(sl, Digits),
-               " TP1=", DoubleToString(tp1, Digits), " TP2=", DoubleToString(tp2, Digits),
-               " — auto-trading OFF.");
-      else
-         Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot @ ",
-               DoubleToString(entry, Digits), " SL=", DoubleToString(sl, Digits),
-               " TP=", DoubleToString(tp1, Digits), " — auto-trading OFF.");
+      string tpModeStr = (InpTPMode == TP_DYNAMIC) ? "Dynamic" :
+                         (InpTPMode == TP_USE_TP2)  ? "TP2" :
+                         (InpTPMode == TP_USE_TP3)  ? "TP3" : "Default";
+      Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot [", tpModeStr, "] @ ",
+            DoubleToString(entry, Digits), " SL=", DoubleToString(sl, Digits),
+            " TP1=", DoubleToString(tp1, Digits),
+            " TP2=", DoubleToString(tp2, Digits),
+            " TP3=", DoubleToString(tp3, Digits),
+            " — auto-trading OFF.");
       return false;
    }
 
@@ -2026,94 +2036,79 @@ bool TryExecuteSignal(bool isRetry)
    bool   dcaGateActive = (InpUsePositiveDCA || InpUseNegativeDCA);
    double sendSL = dcaGateActive ? 0.0 : adjSL;
 
-   // --- Place order(s) ---
+   // --- Place order(s) based on TP Mode ---
    string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
 
-   double tp2Ratio = InpTP2LotRatio;
-   bool   useTP3   = InpUsePartialClose && adjTP3 > 0 && adjTP2 > 0
-                      && tp2Ratio > 0 && lot >= minLot * 3.0;
-   bool   useTP2   = !useTP3 && InpUsePartialClose && adjTP2 > 0
-                      && lot >= minLot * 2.0;
-
-   if(useTP3)
+   if(InpTPMode == TP_DYNAMIC)
    {
-      double tp3Ratio = MathMax(1.0 - InpTP1LotRatio - tp2Ratio, 0.0);
-      double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
-      double lot2 = MathFloor(lot * tp2Ratio       / lotStep) * lotStep;
-      double lot3 = MathFloor(lot * tp3Ratio        / lotStep) * lotStep;
-      lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
-      lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
-      lot3 = MathMax(lot3, minLot); lot3 = MathMin(lot3, InpMaxLotSize);
+      // Dynamic: split TP1 leg + TP2 trailing leg
+      bool useSplit = adjTP2 > 0 && lot >= minLot * 2.0;
 
-      string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
-      string comment3 = StringFormat("QE3 C%d %s", caseNum, RecLevelName(recLevelInt));
-      int magicTP2    = InpMagicNumber + MAGIC_TP2_OFFSET;
-      int magicTP3    = InpMagicNumber + MAGIC_TP3_OFFSET;
-
-      int t1 = -1, t2 = -1, t3 = -1;
-      if(direction > 0)
+      if(useSplit)
       {
-         t1 = OrderSend(Symbol(), OP_BUY, lot1, Ask, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
-         t2 = OrderSend(Symbol(), OP_BUY, lot2, Ask, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrGreen);
-         t3 = OrderSend(Symbol(), OP_BUY, lot3, Ask, InpSlippage, sendSL, adjTP3, comment3, magicTP3, 0, clrAqua);
+         double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
+         double lot2 = MathFloor(lot * (1.0 - InpTP1LotRatio) / lotStep) * lotStep;
+         lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
+         lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
+
+         string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
+         int magicTP2    = InpMagicNumber + MAGIC_TP2_OFFSET;
+
+         int t1 = -1, t2 = -1;
+         if(direction > 0)
+         {
+            t1 = OrderSend(Symbol(), OP_BUY, lot1, Ask, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
+            t2 = OrderSend(Symbol(), OP_BUY, lot2, Ask, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrGreen);
+         }
+         else
+         {
+            t1 = OrderSend(Symbol(), OP_SELL, lot1, Bid, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
+            t2 = OrderSend(Symbol(), OP_SELL, lot2, Bid, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrMaroon);
+         }
+
+         if(t1 < 0) Print("[QuantEdge EA] TP1 OrderSend failed: error ", GetLastError());
+         else       Print("[QuantEdge EA] TP1 placed: ticket=", t1, " ", dirStr, " ", DoubleToString(lot1, 2), " lot");
+
+         if(t2 < 0) Print("[QuantEdge EA] TP2 OrderSend failed: error ", GetLastError());
+         else       Print("[QuantEdge EA] TP2 placed: ticket=", t2, " ", dirStr, " ", DoubleToString(lot2, 2), " lot (trailing)");
       }
       else
       {
-         t1 = OrderSend(Symbol(), OP_SELL, lot1, Bid, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
-         t2 = OrderSend(Symbol(), OP_SELL, lot2, Bid, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrMaroon);
-         t3 = OrderSend(Symbol(), OP_SELL, lot3, Bid, InpSlippage, sendSL, adjTP3, comment3, magicTP3, 0, clrMagenta);
+         int ticket = -1;
+         if(direction > 0)
+            ticket = OrderSend(Symbol(), OP_BUY, lot, Ask, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
+         else
+            ticket = OrderSend(Symbol(), OP_SELL, lot, Bid, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
+
+         if(ticket < 0)
+            Print("[QuantEdge EA] OrderSend failed: error ", GetLastError());
+         else
+            Print("[QuantEdge EA] Order placed: ticket=", ticket, " ", dirStr, " ", DoubleToString(lot, 2),
+                  " lot @ ", DoubleToString((direction > 0 ? Ask : Bid), Digits));
       }
-
-      if(t1 < 0) Print("[QuantEdge EA] TP1 OrderSend failed: error ", GetLastError());
-      else       Print("[QuantEdge EA] TP1 placed: ticket=", t1, " ", dirStr, " ", DoubleToString(lot1, 2), " lot");
-
-      if(t2 < 0) Print("[QuantEdge EA] TP2 OrderSend failed: error ", GetLastError());
-      else       Print("[QuantEdge EA] TP2 placed: ticket=", t2, " ", dirStr, " ", DoubleToString(lot2, 2), " lot (trailing)");
-
-      if(t3 < 0) Print("[QuantEdge EA] TP3 OrderSend failed: error ", GetLastError());
-      else       Print("[QuantEdge EA] TP3 placed: ticket=", t3, " ", dirStr, " ", DoubleToString(lot3, 2), " lot (trailing)");
-   }
-   else if(useTP2)
-   {
-      double lot1 = MathFloor(lot * InpTP1LotRatio / lotStep) * lotStep;
-      double lot2 = MathFloor(lot * (1.0 - InpTP1LotRatio) / lotStep) * lotStep;
-      lot1 = MathMax(lot1, minLot); lot1 = MathMin(lot1, InpMaxLotSize);
-      lot2 = MathMax(lot2, minLot); lot2 = MathMin(lot2, InpMaxLotSize);
-
-      string comment2 = StringFormat("QE2 C%d %s", caseNum, RecLevelName(recLevelInt));
-      int magicTP2    = InpMagicNumber + MAGIC_TP2_OFFSET;
-
-      int t1 = -1, t2 = -1;
-      if(direction > 0)
-      {
-         t1 = OrderSend(Symbol(), OP_BUY, lot1, Ask, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
-         t2 = OrderSend(Symbol(), OP_BUY, lot2, Ask, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrGreen);
-      }
-      else
-      {
-         t1 = OrderSend(Symbol(), OP_SELL, lot1, Bid, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
-         t2 = OrderSend(Symbol(), OP_SELL, lot2, Bid, InpSlippage, sendSL, adjTP2, comment2, magicTP2, 0, clrMaroon);
-      }
-
-      if(t1 < 0) Print("[QuantEdge EA] TP1 OrderSend failed: error ", GetLastError());
-      else       Print("[QuantEdge EA] TP1 placed: ticket=", t1, " ", dirStr, " ", DoubleToString(lot1, 2), " lot");
-
-      if(t2 < 0) Print("[QuantEdge EA] TP2 OrderSend failed: error ", GetLastError());
-      else       Print("[QuantEdge EA] TP2 placed: ticket=", t2, " ", dirStr, " ", DoubleToString(lot2, 2), " lot (trailing)");
    }
    else
    {
+      // Default / TP2 / TP3: single order, full lot, one TP
+      double selectedTP = adjTP1;
+      string tpLabel = "TP1";
+      if(InpTPMode == TP_USE_TP2 && adjTP2 > 0)
+      {  selectedTP = adjTP2; tpLabel = "TP2"; }
+      else if(InpTPMode == TP_USE_TP3 && adjTP3 > 0)
+      {  selectedTP = adjTP3; tpLabel = "TP3"; }
+
       int ticket = -1;
       if(direction > 0)
-         ticket = OrderSend(Symbol(), OP_BUY, lot, Ask, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrLime);
+         ticket = OrderSend(Symbol(), OP_BUY, lot, Ask, InpSlippage, sendSL, selectedTP, comment1, InpMagicNumber, 0, clrLime);
       else
-         ticket = OrderSend(Symbol(), OP_SELL, lot, Bid, InpSlippage, sendSL, adjTP1, comment1, InpMagicNumber, 0, clrRed);
+         ticket = OrderSend(Symbol(), OP_SELL, lot, Bid, InpSlippage, sendSL, selectedTP, comment1, InpMagicNumber, 0, clrRed);
 
       if(ticket < 0)
          Print("[QuantEdge EA] OrderSend failed: error ", GetLastError());
       else
-         Print("[QuantEdge EA] Order placed: ticket=", ticket, " ", dirStr, " ", DoubleToString(lot, 2),
-               " lot @ ", DoubleToString((direction > 0 ? Ask : Bid), Digits));
+         Print("[QuantEdge EA] Order placed [", tpLabel, "]: ticket=", ticket, " ", dirStr, " ", DoubleToString(lot, 2),
+               " lot @ ", DoubleToString((direction > 0 ? Ask : Bid), Digits),
+               " TP=", DoubleToString(selectedTP, Digits));
    }
 
    // --- Initialize DCA state after successful order placement ---
@@ -2185,7 +2180,7 @@ void TrackRecoveryOutcome()
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   ManageTrailing();
+   if(InpTPMode == TP_DYNAMIC) ManageTrailing();
    ManageDCA();
    UpdateDailyLossTracking();
    TrackRecoveryOutcome();
