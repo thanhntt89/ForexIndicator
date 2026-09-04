@@ -11,6 +11,7 @@
 //+------------------------------------------------------------------+
 void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
 {
+   if(InpEAMode) return;
    string name = PREFIX_ARROW + (isBuy ? "BUY_" : "SELL_")
                + IntegerToString(caseNum) + "_"
                + IntegerToString((int)barTime);
@@ -41,6 +42,7 @@ void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
 //+------------------------------------------------------------------+
 void CleanupOldArrows(datetime cutoffTime)
 {
+   if(InpEAMode) return;
 #ifdef __MQL5__
    int total = ObjectsTotal(0);
    for(int i = total - 1; i >= 0; i--)
@@ -62,6 +64,7 @@ void CleanupOldArrows(datetime cutoffTime)
 //+------------------------------------------------------------------+
 void DeleteArrowForSignal(datetime barTime, bool isBuy, int caseNum)
 {
+   if(InpEAMode) return;
    string name = PREFIX_ARROW + (isBuy ? "BUY_" : "SELL_")
                + IntegerToString(caseNum) + "_"
                + IntegerToString((int)barTime);
@@ -71,6 +74,7 @@ void DeleteArrowForSignal(datetime barTime, bool isBuy, int caseNum)
 //+------------------------------------------------------------------+
 void DeleteOppositeArrows(bool newSignalIsBuy)
 {
+   if(InpEAMode) return;
    string killPrefix = PREFIX_ARROW + (newSignalIsBuy ? "SELL_" : "BUY_");
    DeleteObjectsByPrefix(killPrefix);
 }

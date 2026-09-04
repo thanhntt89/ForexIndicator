@@ -328,13 +328,16 @@ int OnCalculate(const int rates_total,
       g_tfGeneration++;
       ArrayResize(g_rawRSI, rates_total);
       ArrayInitialize(g_rawRSI, EMPTY_VALUE);
-      DeleteObjectsByPrefix(PREFIX_ARROW);
-      DeleteObjectsByPrefix(PREFIX_OSMON);
-      DeleteObjectsByPrefix(PREFIX_LINE);
-      DeleteObjectsByPrefix(PREFIX_PANEL);
-      DeleteObjectsByPrefix(PREFIX_EXPLAIN);
-      DeleteObjectsByPrefix(PREFIX_PROB);
-      DeleteObjectsByPrefix(PREFIX_ZONE);
+      if(!InpEAMode)
+      {
+         DeleteObjectsByPrefix(PREFIX_ARROW);
+         DeleteObjectsByPrefix(PREFIX_OSMON);
+         DeleteObjectsByPrefix(PREFIX_LINE);
+         DeleteObjectsByPrefix(PREFIX_PANEL);
+         DeleteObjectsByPrefix(PREFIX_EXPLAIN);
+         DeleteObjectsByPrefix(PREFIX_PROB);
+         DeleteObjectsByPrefix(PREFIX_ZONE);
+      }
       g_signalCount       = 0;
       g_activeSignalIndex = -1;
       g_userSelectedSignal = false;   // [STALE-FIX2] clear any pin on full rebuild
