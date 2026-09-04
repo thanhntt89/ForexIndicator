@@ -2379,12 +2379,20 @@ void OnTick()
       double buyCase  = ReadBuffer(BUF_BUY_SIGNAL);
       double sellCase = ReadBuffer(BUF_SELL_SIGNAL);
 
-      // [DEBUG] Log every new-bar buffer read so we can see what indicator returns
-      int indBarsCalc = BarsCalculated(g_hIndicator);
-      Print("[QuantEdge EA] NEW BAR: time=", TimeToString(currentBarTime),
-            " BarsCalc=", indBarsCalc,
-            " buyBuf[1]=", (buyCase == EMPTY_VALUE ? "EMPTY" : DoubleToString(buyCase, 0)),
-            " sellBuf[1]=", (sellCase == EMPTY_VALUE ? "EMPTY" : DoubleToString(sellCase, 0)));
+      // [DEBUG] Scan nearby shifts to find where signal actually is
+      {
+         string scanLog = "[QuantEdge EA] NEW BAR " + TimeToString(currentBarTime) + " scan: ";
+         for(int dbgShift = 0; dbgShift <= 10; dbgShift++)
+         {
+            double dbgBuy  = ReadBufferAt(BUF_BUY_SIGNAL, dbgShift);
+            double dbgSell = ReadBufferAt(BUF_SELL_SIGNAL, dbgShift);
+            if(dbgBuy != EMPTY_VALUE && dbgBuy > 0)
+               scanLog += "BUY@" + IntegerToString(dbgShift) + " ";
+            if(dbgSell != EMPTY_VALUE && dbgSell > 0)
+               scanLog += "SELL@" + IntegerToString(dbgShift) + " ";
+         }
+         Print(scanLog);
+      }
 
       bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
       bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
