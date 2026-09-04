@@ -484,6 +484,12 @@ int OnCalculate(const int rates_total,
    }
 
    //=================================================================
+   // PRE-SIGNAL: refresh MTF data so probability calc uses current data
+   //=================================================================
+   if(!fullRecalc && InpShowMTF)
+      RefreshMTFData();
+
+   //=================================================================
    // SIGNAL DETECTION
    //=================================================================
    int _storedIdx = 0;
@@ -909,6 +915,27 @@ int OnCalculate(const int rates_total,
             g_currentProb.probTP1, g_currentProb.probSL,
             recN, mtfAgree,
             slDist, tp1Dist, activeSig.atrValue, activeSig.signalTime);
+         // [FIX] Write back probability/recommendation buffers for EA CopyBuffer()
+         // The signal loop may have stale MTF data; this recalc uses fresh data.
+         int sigBarIdx = activeSig.barIndex;
+         if(sigBarIdx >= 0 && sigBarIdx < rates_total)
+         {
+            BufferProbTP1[sigBarIdx]            = g_currentProb.probTP1;
+            BufferProbTP2[sigBarIdx]            = g_currentProb.probTP2;
+            BufferProbTP3[sigBarIdx]            = g_currentProb.probTP3;
+            BufferProbSL[sigBarIdx]             = g_currentProb.probSL;
+            BufferProbSamples[sigBarIdx]        = g_currentProb.totalSamples;
+            BufferProbDecayedTP1[sigBarIdx]     = g_currentProb.decayedProbTP1;
+            BufferProbSurvivalRatio[sigBarIdx]  = g_currentProb.survivalRatio;
+            BufferProbExpiresMin[sigBarIdx]     = g_currentProb.expiresMinutes;
+            BufferXGBProbTP1[sigBarIdx]         = g_currentProb.xgbProbTP1;
+            BufferXGBActive[sigBarIdx]          = g_currentProb.xgbActive ? 1.0 : 0.0;
+            BufferRecLevel[sigBarIdx]           = (double)rec.level;
+            BufferRecConfidence[sigBarIdx]      = rec.confidence;
+            BufferRecEV[sigBarIdx]              = rec.ev;
+            BufferRecSuggestedRisk[sigBarIdx]   = rec.suggestedRisk;
+         }
+
          if(rec.level == REC_AVOID || rec.level == REC_COUNTER_TREND || rec.level == REC_WAIT)
             suppressDisplay = true;
          // Keep chart zone lines in sync with dashboard: dashboard hides its
