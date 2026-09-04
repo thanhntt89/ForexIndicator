@@ -348,8 +348,8 @@ int OnCalculate(const int rates_total,
    // New bar added (rates_total increased) keeps cached signals Ã¢â‚¬â€ incremental path handles it.
    bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
 
-   // [DEBUG] Track OnCalculate flow when called via iCustom
-   if(InpEAMode)
+   // [DEBUG] Track OnCalculate flow when called via iCustom (only on fullRecalc or new bar)
+   if(InpEAMode && (fullRecalc || rates_total > g_prevRatesTotal))
       Print("[QE-IND] OnCalc: rates=", rates_total, " prev=", prev_calculated,
             " fullRecalc=", fullRecalc, " sigCount=", g_signalCount);
 
@@ -1053,14 +1053,17 @@ int OnCalculate(const int rates_total,
 
    if(s_scoringQueueCount > 0) FlushLogQueues();
 
-   // [DEBUG] Final state before return
-   if(InpEAMode)
+   // [DEBUG] Final state — only on fullRecalc or new bar
+   if(InpEAMode && (fullRecalc || rates_total > g_prevRatesTotal))
    {
-      double lastBuy  = (rates_total >= 2) ? BufferBuySignal[rates_total - 2]  : EMPTY_VALUE;
-      double lastSell = (rates_total >= 2) ? BufferSellSignal[rates_total - 2] : EMPTY_VALUE;
+      int lastSigBar = (g_signalCount > 0) ? g_signals[g_signalCount - 1].barIndex : -1;
+      int lastSigShift = (lastSigBar >= 0) ? (rates_total - 1 - lastSigBar) : -1;
+      double lastBuy  = (lastSigBar >= 0) ? BufferBuySignal[lastSigBar]  : EMPTY_VALUE;
+      double lastSell = (lastSigBar >= 0) ? BufferSellSignal[lastSigBar] : EMPTY_VALUE;
       Print("[QE-IND] Done: sigCount=", g_signalCount,
-            " buf5[N-2]=", (lastBuy == EMPTY_VALUE ? "EMPTY" : DoubleToString(lastBuy, 0)),
-            " buf6[N-2]=", (lastSell == EMPTY_VALUE ? "EMPTY" : DoubleToString(lastSell, 0)));
+            " lastSigShift=", lastSigShift,
+            " buf5=", (lastBuy == EMPTY_VALUE ? "EMPTY" : DoubleToString(lastBuy, 0)),
+            " buf6=", (lastSell == EMPTY_VALUE ? "EMPTY" : DoubleToString(lastSell, 0)));
    }
 
    return(rates_total);
