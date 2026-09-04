@@ -1776,7 +1776,9 @@ int OnInit()
 
          double recLevel   = ReadBufferAt(BUF_REC_LEVEL, i);
          double confidence = ReadBufferAt(BUF_REC_CONFIDENCE, i);
-         if(recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE) continue;
+         // Accept signal even if RecLevel/Confidence not yet computed (older bars)
+         if(recLevel == EMPTY_VALUE)   recLevel   = (double)REC_WAIT;
+         if(confidence == EMPTY_VALUE) confidence = 0;
 
          int    direction = hasBuy ? 1 : -1;
          int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
@@ -1792,9 +1794,12 @@ int OnInit()
          g_sigTP3        = ReadBufferAt(BUF_TP3, i);
          g_sigRecLevel   = recLevel;
          g_sigConfidence = confidence;
-         g_sigEV         = ReadBufferAt(BUF_REC_EV, i);
-         g_sigRiskPct    = ReadBufferAt(BUF_REC_RISK, i);
-         g_sigProbTP1    = ReadBufferAt(BUF_PROB_TP1, i);
+         double evVal    = ReadBufferAt(BUF_REC_EV, i);
+         g_sigEV         = (evVal != EMPTY_VALUE) ? evVal : 0;
+         double rkVal    = ReadBufferAt(BUF_REC_RISK, i);
+         g_sigRiskPct    = (rkVal != EMPTY_VALUE) ? rkVal : 0;
+         double ptVal    = ReadBufferAt(BUF_PROB_TP1, i);
+         g_sigProbTP1    = (ptVal != EMPTY_VALUE) ? ptVal : 0;
          g_lastBarTime   = iTime(Symbol(), Period(), i);
 
          double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), i)
@@ -1803,6 +1808,7 @@ int OnInit()
 
          Print("[QuantEdge EA] Startup: found active signal at bar[", i, "] — ",
                (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
+               " RecLevel=", IntegerToString((int)recLevel),
                " Conf=", (int)MathRound(confidence), " EV=", DoubleToString(g_sigEV, 2), "R");
          break;
       }
@@ -2376,22 +2382,24 @@ void OnTick()
    {
       g_lastBarTime = currentBarTime;
 
-      double buyCase  = ReadBuffer(BUF_BUY_SIGNAL);
-      double sellCase = ReadBuffer(BUF_SELL_SIGNAL);
+      // Scan shift 1..RetryMaxBars to find the most recent signal
+      int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
+      int foundShift = -1;
+      double buyCase = EMPTY_VALUE, sellCase = EMPTY_VALUE;
 
-      // [DEBUG] Scan nearby shifts to find where signal actually is
+      for(int s = 1; s <= scanLimit; s++)
       {
-         string scanLog = "[QuantEdge EA] NEW BAR " + TimeToString(currentBarTime) + " scan: ";
-         for(int dbgShift = 0; dbgShift <= 10; dbgShift++)
+         double bc = ReadBufferAt(BUF_BUY_SIGNAL, s);
+         double sc = ReadBufferAt(BUF_SELL_SIGNAL, s);
+         bool hb = (bc != EMPTY_VALUE && bc > 0);
+         bool hs = (sc != EMPTY_VALUE && sc > 0);
+         if(hb || hs)
          {
-            double dbgBuy  = ReadBufferAt(BUF_BUY_SIGNAL, dbgShift);
-            double dbgSell = ReadBufferAt(BUF_SELL_SIGNAL, dbgShift);
-            if(dbgBuy != EMPTY_VALUE && dbgBuy > 0)
-               scanLog += "BUY@" + IntegerToString(dbgShift) + " ";
-            if(dbgSell != EMPTY_VALUE && dbgSell > 0)
-               scanLog += "SELL@" + IntegerToString(dbgShift) + " ";
+            foundShift = s;
+            buyCase  = bc;
+            sellCase = sc;
+            break;
          }
-         Print(scanLog);
       }
 
       bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
@@ -2401,16 +2409,16 @@ void OnTick()
       {
          int    direction = hasBuy ? 1 : -1;
          int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
-         double entry     = ReadBuffer(BUF_ENTRY);
-         double sl2       = ReadBuffer(BUF_SL);
-         double tp1       = ReadBuffer(BUF_TP1);
-         double tp2       = ReadBuffer(BUF_TP2);
-         double tp3       = ReadBuffer(BUF_TP3);
-         double recLevel  = ReadBuffer(BUF_REC_LEVEL);
-         double confidence= ReadBuffer(BUF_REC_CONFIDENCE);
-         double ev        = ReadBuffer(BUF_REC_EV);
-         double riskPct   = ReadBuffer(BUF_REC_RISK);
-         double probTP1   = ReadBuffer(BUF_PROB_TP1);
+         double entry     = ReadBufferAt(BUF_ENTRY, foundShift);
+         double sl2       = ReadBufferAt(BUF_SL, foundShift);
+         double tp1       = ReadBufferAt(BUF_TP1, foundShift);
+         double tp2       = ReadBufferAt(BUF_TP2, foundShift);
+         double tp3       = ReadBufferAt(BUF_TP3, foundShift);
+         double recLevel  = ReadBufferAt(BUF_REC_LEVEL, foundShift);
+         double confidence= ReadBufferAt(BUF_REC_CONFIDENCE, foundShift);
+         double ev        = ReadBufferAt(BUF_REC_EV, foundShift);
+         double riskPct   = ReadBufferAt(BUF_REC_RISK, foundShift);
+         double probTP1   = ReadBufferAt(BUF_PROB_TP1, foundShift);
 
          bool buffersIncomplete = (recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE
                                    || entry == EMPTY_VALUE || sl2 == EMPTY_VALUE);
@@ -2428,10 +2436,14 @@ void OnTick()
             if(tp1 == EMPTY_VALUE) tp1 = 0;
             if(tp2 == EMPTY_VALUE) tp2 = 0;
             if(tp3 == EMPTY_VALUE) tp3 = 0;
-            Print("[QuantEdge EA] Signal detected (Case ", caseNum,
-                  ") — buffers pending, will retry on next tick.");
          }
          if(tp3 == EMPTY_VALUE) tp3 = 0;
+
+         Print("[QuantEdge EA] Signal found at shift=", foundShift, " — ",
+               (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
+               " Entry=", DoubleToString(entry, _Digits),
+               " RecLevel=", (recLevel == EMPTY_VALUE ? "EMPTY" : IntegerToString((int)recLevel)),
+               " Conf=", (confidence == EMPTY_VALUE ? "EMPTY" : IntegerToString((int)MathRound(confidence))));
 
          g_sigValid      = true;
          g_sigTP1Hit     = false;
@@ -2449,9 +2461,9 @@ void OnTick()
          g_sigRiskPct    = riskPct;
          g_sigProbTP1    = probTP1;
 
-         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), 1)
-                                             : iHigh(Symbol(), Period(), 1);
-         DrawSignalArrow(iTime(Symbol(), Period(), 1), arrowPrice, direction > 0, caseNum);
+         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), foundShift)
+                                             : iHigh(Symbol(), Period(), foundShift);
+         DrawSignalArrow(iTime(Symbol(), Period(), foundShift), arrowPrice, direction > 0, caseNum);
 
          if(TryExecuteSignal(false))
             return;
