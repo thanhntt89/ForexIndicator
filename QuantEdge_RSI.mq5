@@ -348,6 +348,11 @@ int OnCalculate(const int rates_total,
    // New bar added (rates_total increased) keeps cached signals Ã¢â‚¬â€ incremental path handles it.
    bool fullRecalc = (prev_calculated <= 0 || rates_total < g_prevRatesTotal);
 
+   // [DEBUG] Track OnCalculate flow when called via iCustom
+   if(InpEAMode)
+      Print("[QE-IND] OnCalc: rates=", rates_total, " prev=", prev_calculated,
+            " fullRecalc=", fullRecalc, " sigCount=", g_signalCount);
+
    // [TF-FIX] Check handle readiness BEFORE destructive cleanup.
    // Without this, each return(0) bounce wipes objects/signals, leaving the chart blank
    // for multiple ticks until BarsCalculated catches up.
@@ -1047,6 +1052,16 @@ int OnCalculate(const int rates_total,
    }
 
    if(s_scoringQueueCount > 0) FlushLogQueues();
+
+   // [DEBUG] Final state before return
+   if(InpEAMode)
+   {
+      double lastBuy  = (rates_total >= 2) ? BufferBuySignal[rates_total - 2]  : EMPTY_VALUE;
+      double lastSell = (rates_total >= 2) ? BufferSellSignal[rates_total - 2] : EMPTY_VALUE;
+      Print("[QE-IND] Done: sigCount=", g_signalCount,
+            " buf5[N-2]=", (lastBuy == EMPTY_VALUE ? "EMPTY" : DoubleToString(lastBuy, 0)),
+            " buf6[N-2]=", (lastSell == EMPTY_VALUE ? "EMPTY" : DoubleToString(lastSell, 0)));
+   }
 
    return(rates_total);
 }
