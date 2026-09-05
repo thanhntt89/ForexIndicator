@@ -838,6 +838,7 @@ int OnCalculate(const int rates_total,
       static int     s_lastDrawSignalIdx = -1;
       static bool    s_sltpDrawn = false;
       static bool    s_zonesDrawn = false;
+      static double  s_zonesCachedSL = 0;
       static bool    s_lastSuppressMode = false;
 
       // Auto-switch to latest signal when new signal appears
@@ -993,7 +994,8 @@ int OnCalculate(const int rates_total,
          }
 
          if(s_zonesDrawn && g_validZoneCount > 0 &&
-            MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point)
+            (MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point ||
+             MathAbs(s_zonesCachedSL - activeSig.stopLoss) > _Point))
             s_zonesDrawn = false;
          bool needZoneRedraw = !s_zonesDrawn
                                || g_activeSignalIndex != s_lastDrawSignalIdx;
@@ -1013,6 +1015,7 @@ int OnCalculate(const int rates_total,
                activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
                activeSig.atrValue, high, low, rates_total,
                BufferOrange, BufferBBUpper, BufferBBLower);
+            s_zonesCachedSL = activeSig.stopLoss;
          }
          if(!suppressDisplay && needZoneRedraw)
          {
