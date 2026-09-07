@@ -702,6 +702,14 @@ int OnCalculate(const int rates_total,
       static bool    s_zonesDrawn = false;
       static bool    s_lastSuppressMode = false;
 
+      // [ZONE-FIX] Reset stale drawing state after full recalculation.
+      if(fullRecalc)
+      {
+         s_zonesDrawn        = false;
+         s_sltpDrawn         = false;
+         s_lastDrawSignalIdx = -1;
+      }
+
       // Auto-switch to latest signal when new signal appears
       static int s_prevSignalCount = 0;
       static datetime s_prevNewestTime = 0;
@@ -730,6 +738,7 @@ int OnCalculate(const int rates_total,
       {
          s_zonesDrawn = false;
          s_sltpDrawn  = false;
+         DeleteObjectsByPrefix(PREFIX_ZONE);
       }
       SignalData activeSig = g_signals[g_activeSignalIndex];
 

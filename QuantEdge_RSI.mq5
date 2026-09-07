@@ -841,6 +841,18 @@ int OnCalculate(const int rates_total,
       static double  s_zonesCachedSL = 0;
       static bool    s_lastSuppressMode = false;
 
+      // [ZONE-FIX] Reset stale drawing state after full recalculation.
+      // Static vars survive DeInit/Init — without this reset, zones from a
+      // previous TF or signal set persist when g_activeSignalIndex coincides
+      // with s_lastDrawSignalIdx by index alone.
+      if(fullRecalc)
+      {
+         s_zonesDrawn        = false;
+         s_sltpDrawn         = false;
+         s_lastDrawSignalIdx = -1;
+         s_zonesCachedSL     = 0;
+      }
+
       // Auto-switch to latest signal when new signal appears
       static int s_prevSignalCount = 0;
       static datetime s_prevNewestTime = 0;
@@ -869,6 +881,11 @@ int OnCalculate(const int rates_total,
       {
          s_zonesDrawn = false;
          s_sltpDrawn  = false;
+         // [ZONE-FIX] Eagerly remove stale zone objects so they don't linger
+         // when the new signal is suppressed (AVOID/WAIT) and DrawZoneLines
+         // is skipped. Objects are recreated in the same OnCalculate call
+         // if the new signal is displayable.
+         DeleteObjectsByPrefix(PREFIX_ZONE);
       }
       SignalData activeSig = g_signals[g_activeSignalIndex];
 
