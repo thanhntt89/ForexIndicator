@@ -839,6 +839,7 @@ int OnCalculate(const int rates_total,
       static bool    s_sltpDrawn = false;
       static bool    s_zonesDrawn = false;
       static double  s_zonesCachedSL = 0;
+      static datetime s_zonesCachedSignalTime = 0;
       static bool    s_lastSuppressMode = false;
 
       // [ZONE-FIX] Reset stale drawing state after full recalculation.
@@ -847,10 +848,11 @@ int OnCalculate(const int rates_total,
       // with s_lastDrawSignalIdx by index alone.
       if(fullRecalc)
       {
-         s_zonesDrawn        = false;
-         s_sltpDrawn         = false;
-         s_lastDrawSignalIdx = -1;
-         s_zonesCachedSL     = 0;
+         s_zonesDrawn            = false;
+         s_sltpDrawn             = false;
+         s_lastDrawSignalIdx     = -1;
+         s_zonesCachedSL         = 0;
+         s_zonesCachedSignalTime = 0;
       }
 
       // Auto-switch to latest signal when new signal appears
@@ -1010,8 +1012,16 @@ int OnCalculate(const int rates_total,
             s_sltpDrawn = true;
          }
 
+         // [ZONE-FIX2] Identify "same signal" by signalTime, not just entry/SL
+         // proximity. Two DIFFERENT signals (e.g. a reversal firing right after
+         // the prior one) can share a near-identical entry/SL by coincidence —
+         // price/SL proximity alone then fails to detect the swap, leaving
+         // g_entryZones[] (and the Z2/Z3 labels drawn from it) stale from the
+         // old signal while SL/EN — read directly from activeSig, not cached —
+         // update correctly. That mismatch is what shows up as "wrong zone".
          if(s_zonesDrawn && g_validZoneCount > 0 &&
-            (MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point ||
+            (s_zonesCachedSignalTime != activeSig.signalTime ||
+             MathAbs(g_entryZones[0].price - activeSig.entryPrice) > _Point ||
              MathAbs(s_zonesCachedSL - activeSig.stopLoss) > _Point))
             s_zonesDrawn = false;
          bool needZoneRedraw = !s_zonesDrawn
@@ -1032,7 +1042,8 @@ int OnCalculate(const int rates_total,
                activeSig.entryPrice, activeSig.stopLoss, activeSig.takeProfit1,
                activeSig.atrValue, high, low, rates_total,
                BufferOrange, BufferBBUpper, BufferBBLower);
-            s_zonesCachedSL = activeSig.stopLoss;
+            s_zonesCachedSL         = activeSig.stopLoss;
+            s_zonesCachedSignalTime = activeSig.signalTime;
          }
          if(!suppressDisplay && needZoneRedraw)
          {
