@@ -2109,7 +2109,6 @@ bool TryExecuteSignal(bool isRetry)
 
    string dirStr  = (direction > 0) ? "BUY" : "SELL";
 
-   if(!isRetry)
    {
       string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s G10:%s",
          g1_pass?"PASS":"FAIL", g2_pass?"PASS":"FAIL", g3_pass?"PASS":"FAIL",
@@ -2117,11 +2116,26 @@ bool TryExecuteSignal(bool isRetry)
          g7_pass?"PASS":"FAIL", g8_pass?"PASS":"FAIL", g9_pass?"PASS":"FAIL",
          g10_pass?"PASS":"FAIL");
 
-      Print("[QuantEdge EA] ", dirStr, " Case=", caseNum,
-            " Rec=", RecLevelName(recLevelInt), " Conf=", (int)MathRound(confidence),
-            " EV=", DoubleToString(ev, 2), "R Prob=", DoubleToString(probTP1, 1), "%",
-            " Risk=", DoubleToString(riskPct, 2), "% | ", gateStr,
-            " => ", (allPass ? "TRADE" : "SKIP"));
+      // [GATE-LOG-FIX] A signal picked up via the tick-level retry path (e.g.
+      // right after OnInit's startup rescan on EA reload/TF switch) is
+      // isRetry=true for its ENTIRE lifetime — before this fix its gate
+      // outcome was NEVER printed, so a signal silently stuck on SKIP looked
+      // identical to "no signal" in the log. Always print on fresh
+      // detection; on retry, print only when the outcome actually changes
+      // (gate flips, or direction/case changes) so nothing is spammed every
+      // tick, but a currently-blocked signal is still visible at least once
+      // and again whenever its blocking reason changes.
+      string gateKey = StringFormat("%s|%d|%s|%s", dirStr, caseNum, gateStr, allPass ? "TRADE" : "SKIP");
+      static string s_lastGateKey = "";
+      if(!isRetry || gateKey != s_lastGateKey)
+      {
+         Print("[QuantEdge EA] ", dirStr, " Case=", caseNum,
+               " Rec=", RecLevelName(recLevelInt), " Conf=", (int)MathRound(confidence),
+               " EV=", DoubleToString(ev, 2), "R Prob=", DoubleToString(probTP1, 1), "%",
+               " Risk=", DoubleToString(riskPct, 2), "% | ", gateStr,
+               " => ", (allPass ? "TRADE" : "SKIP"), isRetry ? " (retry)" : "");
+         s_lastGateKey = gateKey;
+      }
    }
 
    if(!allPass)
