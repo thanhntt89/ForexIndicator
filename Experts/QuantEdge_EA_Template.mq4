@@ -270,6 +270,7 @@ double   g_sigRiskPct     = 0;
 double   g_sigProbTP1     = 0;
 bool     g_sigTP1Hit      = false;
 bool     g_sigSLHit       = false;
+datetime g_sigBarTime     = 0;   // Bar time of the signal itself (for RetryMaxBars expiry)
 
 //+------------------------------------------------------------------+
 //| DCA state tracking                                                |
@@ -1643,6 +1644,7 @@ int OnInit()
          g_sigRiskPct    = ReadBufferAt(BUF_REC_RISK, i);
          g_sigProbTP1    = ReadBufferAt(BUF_PROB_TP1, i);
          g_lastBarTime   = iTime(Symbol(), Period(), i);
+         g_sigBarTime    = iTime(Symbol(), Period(), i);
 
          double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), i)
                                              : iHigh(Symbol(), Period(), i);
@@ -2263,6 +2265,7 @@ void OnTick()
          g_sigEV         = ev;
          g_sigRiskPct    = riskPct;
          g_sigProbTP1    = probTP1;
+         g_sigBarTime    = iTime(Symbol(), Period(), 1);
 
          double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), 1)
                                              : iHigh(Symbol(), Period(), 1);
@@ -2278,7 +2281,11 @@ void OnTick()
    {
       if(InpRetryMaxBars > 0)
       {
-         int barsSinceSignal = iBarShift(Symbol(), Period(), g_lastBarTime, false);
+         // [RETRY-FIX] Use the signal's own bar time, not g_lastBarTime (which is
+         // always the CURRENT bar's open time — comparing it to itself always
+         // yields shift 0, so this check never fired and retries never expired
+         // by bar count, only by survival-probability decay (Gate 3).
+         int barsSinceSignal = iBarShift(Symbol(), Period(), g_sigBarTime, false);
          if(barsSinceSignal > InpRetryMaxBars)
          {
             Print("[QuantEdge EA] Retry expired: ", barsSinceSignal,
