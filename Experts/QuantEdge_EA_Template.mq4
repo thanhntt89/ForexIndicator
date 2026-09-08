@@ -1614,6 +1614,7 @@ int OnInit()
    if(InpUseSignalRetry && !HasOpenPosition(1) && !HasOpenPosition(-1))
    {
       int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
+      bool foundAtStartup = false;
       for(int i = 1; i <= scanLimit; i++)
       {
          double buyCase  = ReadBufferAt(BUF_BUY_SIGNAL, i);
@@ -1621,10 +1622,20 @@ int OnInit()
          bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
          bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
          if(!hasBuy && !hasSell) continue;
+         foundAtStartup = true;
 
          double recLevel   = ReadBufferAt(BUF_REC_LEVEL, i);
          double confidence = ReadBufferAt(BUF_REC_CONFIDENCE, i);
-         if(recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE) continue;
+         // [MQ4-SYNC-FIX] Was "continue" (skip this signal entirely) — but
+         // buffers 21-24 are wiped on full recalc (e.g. a TF switch) and are
+         // NOT backfilled for historical bars, so a real signal older than
+         // the just-closed bar routinely has recLevel/confidence EMPTY here.
+         // Skipping it made the EA silently ignore a signal that MQ5's
+         // equivalent scan (which falls back to WAIT/0 instead) still adopts.
+         // Accept it with a conservative fallback so gates (esp. Gate 2
+         // confidence) can still filter it, instead of pretending it's not there.
+         if(recLevel == EMPTY_VALUE)   recLevel   = (double)REC_WAIT;
+         if(confidence == EMPTY_VALUE) confidence = 0;
 
          int    direction = hasBuy ? 1 : -1;
          int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
@@ -1655,6 +1666,16 @@ int OnInit()
                " Conf=", (int)MathRound(confidence), " EV=", DoubleToString(g_sigEV, 2), "R");
          break;
       }
+      // [SCAN-LOG-FIX] This is the path a TF switch / recompile / chart
+      // reattach reruns. Silence here — the prior behavior — is
+      // indistinguishable from the EA not running: the indicator's own
+      // dashboard has no scan window and keeps showing the latest signal
+      // regardless of age, so a signal older than scanLimit bars is
+      // invisible to the EA with zero explanation.
+      if(!foundAtStartup)
+         Print("[QuantEdge EA] Startup: no active signal within shift 1..", scanLimit,
+               " (indicator dashboard may show an older signal outside this scan window — "
+               "see InpRetryMaxBars).");
    }
 
    return INIT_SUCCEEDED;
@@ -2287,6 +2308,18 @@ void OnTick()
 
          if(TryExecuteSignal(false))
             return;
+      }
+      // [SCAN-LOG-FIX] Make "nothing found" explicit instead of silent.
+      // Note: unlike the MQ5 EA, this MQ4 check only reads shift=1 (the last
+      // closed bar) — it does NOT scan back InpRetryMaxBars bars, so a real
+      // signal even 2 bars old is invisible here even though the indicator's
+      // own dashboard (no such window) still shows it. Only print when there
+      // is no signal already cached/retrying, to avoid duplicating that
+      // path's own logs.
+      else if(!g_sigValid)
+      {
+         Print("[QuantEdge EA] New bar: no signal at shift=1",
+               " (indicator dashboard may show an older signal — this EA only checks the last closed bar).");
       }
    }
 

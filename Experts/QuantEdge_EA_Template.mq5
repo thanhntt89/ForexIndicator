@@ -1767,6 +1767,7 @@ int OnInit()
    if(InpUseSignalRetry && !HasOpenPosition(1) && !HasOpenPosition(-1))
    {
       int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
+      bool foundAtStartup = false;
       for(int i = 1; i <= scanLimit; i++)
       {
          double buyCase  = ReadBufferAt(BUF_BUY_SIGNAL, i);
@@ -1774,6 +1775,7 @@ int OnInit()
          bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
          bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
          if(!hasBuy && !hasSell) continue;
+         foundAtStartup = true;
 
          double recLevel   = ReadBufferAt(BUF_REC_LEVEL, i);
          double confidence = ReadBufferAt(BUF_REC_CONFIDENCE, i);
@@ -1814,6 +1816,16 @@ int OnInit()
                " Conf=", (int)MathRound(confidence), " EV=", DoubleToString(g_sigEV, 2), "R");
          break;
       }
+      // [SCAN-LOG-FIX] This is the path a TF switch / recompile / chart
+      // reattach reruns (OnDeinit reason=CHARTCHANGE etc. → OnInit). Silence
+      // here — the prior behavior — is indistinguishable from the EA not
+      // running: the indicator's own dashboard has no scan window and keeps
+      // showing the latest signal regardless of age, so a signal older than
+      // scanLimit bars is invisible to the EA with zero explanation.
+      if(!foundAtStartup)
+         Print("[QuantEdge EA] Startup: no active signal within shift 1..", scanLimit,
+               " (indicator dashboard may show an older signal outside this scan window — "
+               "see InpRetryMaxBars).");
    }
 
    return INIT_SUCCEEDED;
@@ -2484,6 +2496,19 @@ void OnTick()
 
          if(TryExecuteSignal(false))
             return;
+      }
+      // [SCAN-LOG-FIX] Make "nothing found" explicit instead of silent. The
+      // scan above only looks at shift 1..scanLimit (InpRetryMaxBars) — a
+      // real signal older than that (still visible on the indicator's own
+      // dashboard, which has no such window) is invisible to the EA and,
+      // before this log line, produced ZERO output, indistinguishable from
+      // the EA not running at all. Only print when there is no signal
+      // already cached/retrying, to avoid duplicating that path's own logs.
+      else if(!g_sigValid)
+      {
+         Print("[QuantEdge EA] New bar: no signal in shift 1..", scanLimit,
+               " (indicator dashboard may show an older signal outside this scan window — "
+               "see InpRetryMaxBars).");
       }
    }
 
