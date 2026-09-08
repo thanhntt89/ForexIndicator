@@ -2591,7 +2591,15 @@ void OnDeinit(const int reason)
       g_hATR = INVALID_HANDLE;
    }
    QEEA_DeletePanel();
-   CleanupSignalArrows();
+   // [ARROW-FIX] Only wipe drawn signal-arrow history on a real removal/
+   // recompile/close, not on REASON_CHARTCHANGE (TF switch) — the same
+   // pattern the indicator itself already uses for its own arrow prefix.
+   // Since only ONE arrow (the currently tracked signal) ever gets redrawn
+   // on reinit, wiping unconditionally here meant every TF switch discarded
+   // the arrow history with no way to get it back, even for a signal that
+   // already became a closed trade.
+   if(reason != REASON_CHARTCHANGE)
+      CleanupSignalArrows();
    GlobalVariableDel("QE_BrierMinN_"  + Symbol());
    GlobalVariableDel("QE_BrierFloor_" + Symbol());
    Print("[QuantEdge EA] Deinit, reason=", reason);
