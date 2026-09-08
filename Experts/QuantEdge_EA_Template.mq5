@@ -1764,7 +1764,11 @@ int OnInit()
    LoadRecoveryState();
 
    // Scan for existing active signal on startup (within RetryMaxBars)
-   if(InpUseSignalRetry && !HasOpenPosition(1) && !HasOpenPosition(-1))
+   if(!InpUseSignalRetry)
+      Print("[QuantEdge EA] Startup: signal scan skipped — InpUseSignalRetry=false.");
+   else if(HasOpenPosition(1) || HasOpenPosition(-1))
+      Print("[QuantEdge EA] Startup: signal scan skipped — a position with our magic is already open on this symbol.");
+   else
    {
       int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
       bool foundAtStartup = false;
