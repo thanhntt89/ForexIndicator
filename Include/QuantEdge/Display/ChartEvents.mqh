@@ -45,9 +45,19 @@ void HandleChartEvent(const int id, const long &lparam,
          return;
       }
 
-      // Manual panel collapse toggle (click on header area)
+      // Manual panel collapse toggle (click on header area).
+      // [COLLAPSE-CLICK-FIX] "1_C"/"1_T"/"1_B" are only the small text glyphs
+      // (collapse-button "[-]"/"[+]", title, and a "1_B" that no drawing code
+      // actually creates) — clicking the much larger header/bar BACKGROUND
+      // rectangle around them missed every check, which is most of the
+      // visible clickable area. Added "0_TB" (the dedicated title-bar strip
+      // drawn in expanded mode) unconditionally, and "0_BG" only while
+      // collapsed — in that state "0_BG" IS the whole mini-bar (so the whole
+      // bar should expand it), but in expanded mode "0_BG" spans the ENTIRE
+      // panel body, and must NOT collapse the panel on every click inside it.
       if(sparam == PREFIX_PANEL+"1_C" || sparam == PREFIX_PANEL+"1_T"
-         || sparam == PREFIX_PANEL+"1_B")
+         || sparam == PREFIX_PANEL+"1_B" || sparam == PREFIX_PANEL+"0_TB"
+         || (g_manualPanelCollapsed && sparam == PREFIX_PANEL+"0_BG"))
       {
          g_manualPanelCollapsed = !g_manualPanelCollapsed;
          DrawDashboard(g_activeSignalIndex, true);
