@@ -59,6 +59,19 @@ void HandleChartEvent(const int id, const long &lparam,
          || sparam == PREFIX_PANEL+"1_B" || sparam == PREFIX_PANEL+"0_TB"
          || (g_manualPanelCollapsed && sparam == PREFIX_PANEL+"0_BG"))
       {
+         // [DOUBLE-CLICK-FIX] "0_BG"/"0_TB"/"1_T" can overlap the same pixels
+         // (the title text sits on top of the title-bar/background
+         // rectangle), and MT4/5 can deliver a separate CHARTEVENT_OBJECT_CLICK
+         // for EACH object under the cursor for a single physical click — so
+         // toggling unconditionally here could fire twice in a row (once per
+         // object), flipping g_manualPanelCollapsed back to where it started
+         // and making the click appear to do nothing. Debounce: only the
+         // first of a burst of near-simultaneous click events actually toggles.
+         static uint s_lastToggleTick = 0;
+         uint nowTick = GetTickCount();
+         if(nowTick - s_lastToggleTick < 150) return;
+         s_lastToggleTick = nowTick;
+
          g_manualPanelCollapsed = !g_manualPanelCollapsed;
          DrawDashboard(g_activeSignalIndex, true);
          return;
