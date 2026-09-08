@@ -16,6 +16,12 @@
 #property copyright "QuantEdge"
 #property version   "1.00"
 
+// [BUILD-TAG] Bump on every meaningful EA change and check this against the
+// FIRST line printed on chart load — repeatedly "the fix isn't showing up"
+// reports turned out to be testing against a not-yet-recompiled binary, with
+// no way to tell from the log alone. This settles it at a glance.
+#define EA_BUILD_TAG "2026-09-08.1-arrowfix"
+
 #include <Trade/Trade.mqh>
 
 //+------------------------------------------------------------------+
@@ -1697,6 +1703,8 @@ void ClosePositionsByCriteria(int criteria, bool confirm = true)
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   Print("[QuantEdge EA] Build=", EA_BUILD_TAG);
+
    g_hIndicator = iCustom(Symbol(), Period(), InpIndicatorName,
                            "", // inp_grp_core separator
                            Ind_RSIPeriod, Ind_FastMAPeriod, Ind_SignalMAPeriod,

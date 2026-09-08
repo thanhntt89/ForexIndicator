@@ -17,6 +17,12 @@
 #property version   "1.00"
 #property strict
 
+// [BUILD-TAG] Bump on every meaningful EA change and check this against the
+// FIRST line printed on chart load — repeatedly "the fix isn't showing up"
+// reports turned out to be testing against a not-yet-recompiled binary, with
+// no way to tell from the log alone. This settles it at a glance.
+#define EA_BUILD_TAG "2026-09-08.1-arrowfix"
+
 //+------------------------------------------------------------------+
 //| Buffer index constants (from 12_EA_EXPORT_CONTRACT.md)            |
 //+------------------------------------------------------------------+
@@ -1561,6 +1567,8 @@ void ClosePositionsByCriteria(int criteria, bool confirm = true)
 //+------------------------------------------------------------------+
 int OnInit()
 {
+   Print("[QuantEdge EA] Build=", EA_BUILD_TAG);
+
    double testRead = ReadBuffer(BUF_REC_LEVEL);
    if(GetLastError() == ERR_INDICATOR_CANNOT_LOAD)
    {
