@@ -121,8 +121,16 @@ double BufferTP3[];                // 25: take profit 3 price
 #include <QuantEdge/Data/SignalLogger.mqh>
 #include <QuantEdge/Engine/VirtualTradeTracker.mqh>
 //+------------------------------------------------------------------+
+// [BUILD-TAG] Bump on every meaningful indicator change and check this
+// against the FIRST line printed on chart load — settles "is this terminal
+// actually running the code I just edited" without guessing, same purpose
+// as QuantEdge_EA_Template's EA_BUILD_TAG.
+#define IND_BUILD_TAG "2026-09-08.1-paneldrag-investigation"
+
 int OnInit()
 {
+   Print("[QuantEdge] Build=", IND_BUILD_TAG);
+
    if(InpRSIPeriod < 2 || InpFastMAPeriod < 1 || InpSignalMAPeriod < 1 || InpBBPeriod < 2)
       return(INIT_PARAMETERS_INCORRECT);
    if(InpBBDeviation <= 0 || InpSLRatio <= 0 || InpTPRatio <= 0)
