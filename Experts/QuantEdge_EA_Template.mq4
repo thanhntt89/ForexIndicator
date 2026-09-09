@@ -23,6 +23,30 @@
 // no way to tell from the log alone. This settles it at a glance.
 #define EA_BUILD_TAG "2026-09-08.1-arrowfix"
 
+// [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
+// the EA is a separate compiled program with no shared include, so these
+// are duplicated literals, not a shared constant. Keep in sync if the
+// indicator's prefixes ever change).
+// A standalone QuantEdge_RSI instance previously attached to this same
+// chart can leave SL/TP/Zone objects behind if it's removed at the exact
+// moment MT4/5 reports the deinit reason as REASON_CHARTCHANGE instead of
+// a real removal — the indicator's own "don't wipe on a plain TF switch"
+// guard then skips cleanup, and nothing is left running to ever clean them
+// up. Wipe them once at EA startup so the EA, when it's the only program
+// left on the chart, doesn't inherit stale clutter from a prior instance.
+#define QE_IND_PREFIX_LINE "QE_Line_"
+#define QE_IND_PREFIX_ZONE "QE_Zone_"
+void QEEA_CleanupOrphanedIndicatorObjects()
+{
+   int total = ObjectsTotal();
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(i);
+      if(StringFind(name, QE_IND_PREFIX_LINE) == 0 || StringFind(name, QE_IND_PREFIX_ZONE) == 0)
+         ObjectDelete(name);
+   }
+}
+
 //+------------------------------------------------------------------+
 //| Buffer index constants (from 12_EA_EXPORT_CONTRACT.md)            |
 //+------------------------------------------------------------------+
@@ -1568,6 +1592,7 @@ void ClosePositionsByCriteria(int criteria, bool confirm = true)
 int OnInit()
 {
    Print("[QuantEdge EA] Build=", EA_BUILD_TAG);
+   QEEA_CleanupOrphanedIndicatorObjects();
 
    double testRead = ReadBuffer(BUF_REC_LEVEL);
    if(GetLastError() == ERR_INDICATOR_CANNOT_LOAD)
