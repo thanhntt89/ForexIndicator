@@ -21,7 +21,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-08.1-arrowfix"
+#define EA_BUILD_TAG "2026-09-10.1-scanback"
 
 // [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
 // the EA is a separate compiled program with no shared include, so these
@@ -2281,8 +2281,30 @@ void OnTick()
    {
       g_lastBarTime = currentBarTime;
 
-      double buyCase  = ReadBuffer(BUF_BUY_SIGNAL);
-      double sellCase = ReadBuffer(BUF_SELL_SIGNAL);
+      // [NEW-BAR-SCAN-FIX] MQ4 previously only checked shift=1 (the last closed
+      // bar). A signal from 2+ bars ago — e.g. after an EA attach, terminal
+      // restart, or TF switch — was invisible in the new-bar path even though
+      // the indicator still displayed it. Scan back InpRetryMaxBars bars
+      // (matching MQ5 behavior) so the EA finds the signal regardless of when
+      // it was loaded relative to the signal bar.
+      int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
+      int foundShift = -1;
+      double buyCase = EMPTY_VALUE, sellCase = EMPTY_VALUE;
+
+      for(int s = 1; s <= scanLimit; s++)
+      {
+         double bc = ReadBufferAt(BUF_BUY_SIGNAL, s);
+         double sc = ReadBufferAt(BUF_SELL_SIGNAL, s);
+         bool hb = (bc != EMPTY_VALUE && bc > 0);
+         bool hs = (sc != EMPTY_VALUE && sc > 0);
+         if(hb || hs)
+         {
+            foundShift = s;
+            buyCase  = bc;
+            sellCase = sc;
+            break;
+         }
+      }
 
       bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
       bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
@@ -2291,16 +2313,16 @@ void OnTick()
       {
          int    direction = hasBuy ? 1 : -1;
          int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
-         double entry     = ReadBuffer(BUF_ENTRY);
-         double sl2       = ReadBuffer(BUF_SL);
-         double tp1       = ReadBuffer(BUF_TP1);
-         double tp2       = ReadBuffer(BUF_TP2);
-         double tp3       = ReadBuffer(BUF_TP3);
-         double recLevel  = ReadBuffer(BUF_REC_LEVEL);
-         double confidence= ReadBuffer(BUF_REC_CONFIDENCE);
-         double ev        = ReadBuffer(BUF_REC_EV);
-         double riskPct   = ReadBuffer(BUF_REC_RISK);
-         double probTP1   = ReadBuffer(BUF_PROB_TP1);
+         double entry     = ReadBufferAt(BUF_ENTRY, foundShift);
+         double sl2       = ReadBufferAt(BUF_SL, foundShift);
+         double tp1       = ReadBufferAt(BUF_TP1, foundShift);
+         double tp2       = ReadBufferAt(BUF_TP2, foundShift);
+         double tp3       = ReadBufferAt(BUF_TP3, foundShift);
+         double recLevel  = ReadBufferAt(BUF_REC_LEVEL, foundShift);
+         double confidence= ReadBufferAt(BUF_REC_CONFIDENCE, foundShift);
+         double ev        = ReadBufferAt(BUF_REC_EV, foundShift);
+         double riskPct   = ReadBufferAt(BUF_REC_RISK, foundShift);
+         double probTP1   = ReadBufferAt(BUF_PROB_TP1, foundShift);
 
          bool buffersIncomplete = (recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE
                                    || entry == EMPTY_VALUE || sl2 == EMPTY_VALUE);
@@ -2318,9 +2340,15 @@ void OnTick()
             if(tp2 == EMPTY_VALUE) tp2 = 0;
             if(tp3 == EMPTY_VALUE) tp3 = 0;
             Print("[QuantEdge EA] Signal detected (Case ", caseNum,
-                  ") — buffers pending, will retry on next tick.");
+                  ") at bar[", foundShift, "] — buffers pending, will retry on next tick.");
          }
          if(tp3 == EMPTY_VALUE) tp3 = 0;
+
+         Print("[QuantEdge EA] Signal found at shift=", foundShift, " — ",
+               (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
+               " Entry=", DoubleToString(entry, Digits),
+               " RecLevel=", (recLevel == EMPTY_VALUE ? "EMPTY" : IntegerToString((int)recLevel)),
+               " Conf=", (confidence == EMPTY_VALUE ? "EMPTY" : IntegerToString((int)MathRound(confidence))));
 
          g_sigValid      = true;
          g_sigTP1Hit     = false;
@@ -2337,26 +2365,20 @@ void OnTick()
          g_sigEV         = ev;
          g_sigRiskPct    = riskPct;
          g_sigProbTP1    = probTP1;
-         g_sigBarTime    = iTime(Symbol(), Period(), 1);
+         g_sigBarTime    = iTime(Symbol(), Period(), foundShift);
 
-         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), 1)
-                                             : iHigh(Symbol(), Period(), 1);
-         DrawSignalArrow(iTime(Symbol(), Period(), 1), arrowPrice, direction > 0, caseNum);
+         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), foundShift)
+                                             : iHigh(Symbol(), Period(), foundShift);
+         DrawSignalArrow(iTime(Symbol(), Period(), foundShift), arrowPrice, direction > 0, caseNum);
 
          if(TryExecuteSignal(false))
             return;
       }
-      // [SCAN-LOG-FIX] Make "nothing found" explicit instead of silent.
-      // Note: unlike the MQ5 EA, this MQ4 check only reads shift=1 (the last
-      // closed bar) — it does NOT scan back InpRetryMaxBars bars, so a real
-      // signal even 2 bars old is invisible here even though the indicator's
-      // own dashboard (no such window) still shows it. Only print when there
-      // is no signal already cached/retrying, to avoid duplicating that
-      // path's own logs.
       else if(!g_sigValid)
       {
-         Print("[QuantEdge EA] New bar: no signal at shift=1",
-               " (indicator dashboard may show an older signal — this EA only checks the last closed bar).");
+         Print("[QuantEdge EA] New bar: no signal in shift 1..", scanLimit,
+               " (indicator dashboard may show an older signal outside this scan window — "
+               "see InpRetryMaxBars).");
       }
    }
 
