@@ -240,6 +240,13 @@ void CalculateSLTP_Fibonacci(bool isBuy, int barNS, double entry,
       outTP1 = entry + swingRange * 1.0;
       outTP2 = entry + swingRange * 1.618;
       outTP3 = entry + swingRange * 2.618;
+      // [TP-CAP] Bound swing-range TP at 3x parametric ratio
+      double _tpCap1 = outATR * GetActiveTPRatio() * 3.0;
+      double _tpCap2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult() * 3.0;
+      double _tpCap3 = outATR * GetActiveTPRatio() * GetActiveTP3Mult() * 3.0;
+      if(outTP1 - entry > _tpCap1) outTP1 = entry + _tpCap1;
+      if(outTP2 - entry > _tpCap2) outTP2 = entry + _tpCap2;
+      if(outTP3 - entry > _tpCap3) outTP3 = entry + _tpCap3;
    }
    else
    {
@@ -249,6 +256,13 @@ void CalculateSLTP_Fibonacci(bool isBuy, int barNS, double entry,
       outTP1 = entry - swingRange * 1.0;
       outTP2 = entry - swingRange * 1.618;
       outTP3 = entry - swingRange * 2.618;
+      // [TP-CAP] Mirror for SELL side
+      double _tpCap1 = outATR * GetActiveTPRatio() * 3.0;
+      double _tpCap2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult() * 3.0;
+      double _tpCap3 = outATR * GetActiveTPRatio() * GetActiveTP3Mult() * 3.0;
+      if(entry - outTP1 > _tpCap1) outTP1 = entry - _tpCap1;
+      if(entry - outTP2 > _tpCap2) outTP2 = entry - _tpCap2;
+      if(entry - outTP3 > _tpCap3) outTP3 = entry - _tpCap3;
    }
 }
 
@@ -295,6 +309,13 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
       outTP1 = MathMax(fibTP1, entry + atrTP1);
       outTP2 = MathMax(fibTP2, entry + atrTP2);
       outTP3 = MathMax(fibTP3, entry + atrTP3);
+      // [TP-CAP] Bound swing-range TP at 3x parametric ratio (same ceiling as Bayesian blend)
+      double _tpCap1 = outATR * GetActiveTPRatio() * 3.0;
+      double _tpCap2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult() * 3.0;
+      double _tpCap3 = outATR * GetActiveTPRatio() * GetActiveTP3Mult() * 3.0;
+      if(outTP1 - entry > _tpCap1) outTP1 = entry + _tpCap1;
+      if(outTP2 - entry > _tpCap2) outTP2 = entry + _tpCap2;
+      if(outTP3 - entry > _tpCap3) outTP3 = entry + _tpCap3;
    }
    else
    {
@@ -311,6 +332,13 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
       outTP1 = MathMin(fibTP1, entry - atrTP1);
       outTP2 = MathMin(fibTP2, entry - atrTP2);
       outTP3 = MathMin(fibTP3, entry - atrTP3);
+      // [TP-CAP] Mirror for SELL side
+      double _tpCap1 = outATR * GetActiveTPRatio() * 3.0;
+      double _tpCap2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult() * 3.0;
+      double _tpCap3 = outATR * GetActiveTPRatio() * GetActiveTP3Mult() * 3.0;
+      if(entry - outTP1 > _tpCap1) outTP1 = entry - _tpCap1;
+      if(entry - outTP2 > _tpCap2) outTP2 = entry - _tpCap2;
+      if(entry - outTP3 > _tpCap3) outTP3 = entry - _tpCap3;
    }
 }
 
@@ -800,6 +828,29 @@ void CalculateSLTP(bool isBuy, int barNS, double entry,
          if(outTP2 >= outTP1) outTP2 = outTP1 - outATR * 0.5;
          if(outTP3 >= outTP2) outTP3 = outTP2 - outATR * 0.5;
       }
+   }
+
+   // [SCALP-HARD-CAP] Final safety ceiling for intraday scalping.
+   // Prevents any code path (including misconfigured InpTPRatio with AutoTFConfig off)
+   // from producing unreasonably large TP distances for the active timeframe.
+   double _hardMax = (tf <= TF_M5)  ? 2.5 :
+                     (tf <= TF_M15) ? 3.0 :
+                     (tf <= TF_M30) ? 4.0 :
+                     (tf <= TF_H1)  ? 5.0 : 8.0;
+   double _hCap1 = outATR * _hardMax;
+   double _hCap2 = outATR * _hardMax * 1.5;
+   double _hCap3 = outATR * _hardMax * 2.5;
+   if(isBuy)
+   {
+      if(outTP1 - entry > _hCap1) outTP1 = entry + _hCap1;
+      if(outTP2 - entry > _hCap2) outTP2 = entry + _hCap2;
+      if(outTP3 - entry > _hCap3) outTP3 = entry + _hCap3;
+   }
+   else
+   {
+      if(entry - outTP1 > _hCap1) outTP1 = entry - _hCap1;
+      if(entry - outTP2 > _hCap2) outTP2 = entry - _hCap2;
+      if(entry - outTP3 > _hCap3) outTP3 = entry - _hCap3;
    }
 }
 
