@@ -227,17 +227,27 @@ int           g_outcomeCount = 0;
 bool     g_tpHit[3]     = {false, false, false};  // TP1, TP2, TP3
 datetime g_tpHitTime[3] = {0, 0, 0};
 int      g_tpTrackingSigIndex = -1;                // reset when signal changes
+datetime g_tpTrackingSigTime  = 0;                 // signal identity (survives index reuse after fullRecalc)
 
 void ResetTPTracking(int newSigIndex)
 {
    g_tpTrackingSigIndex = newSigIndex;
+   g_tpTrackingSigTime  = (newSigIndex >= 0 && newSigIndex < g_signalCount)
+                          ? g_signals[newSigIndex].signalTime : 0;
    for(int i = 0; i < 3; i++) { g_tpHit[i] = false; g_tpHitTime[i] = 0; }
 }
 
 void UpdateTPHitStatus(int sigIdx)
 {
    if(sigIdx < 0 || sigIdx >= g_signalCount) return;
-   if(sigIdx != g_tpTrackingSigIndex) ResetTPTracking(sigIdx);
+   // [TP-HIT-FIX] After a fullRecalc the signal array is rebuilt from scratch —
+   // a DIFFERENT signal can land at the same index, so comparing the index alone
+   // kept stale g_tpHit flags from the old signal. Also verify signalTime: if
+   // the signal at the tracked index isn't the same one we started tracking,
+   // reset to avoid false "HIT" labels.
+   if(sigIdx != g_tpTrackingSigIndex ||
+      g_signals[sigIdx].signalTime != g_tpTrackingSigTime)
+      ResetTPTracking(sigIdx);
 
    SignalData sig = g_signals[sigIdx];
    double curPrice = (sig.isBuySignal)
