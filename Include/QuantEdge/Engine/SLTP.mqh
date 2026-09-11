@@ -109,6 +109,51 @@ void FindSwingRange(bool isBuy, int barIndex,
 }
 
 //+------------------------------------------------------------------+
+//| [ADAPTIVE-LB] TF-adaptive swing lookback for TP calculation        |
+//| Lower TFs: tighter window (2-4h) for scalping structure            |
+//| Higher TFs: wider window for swing/position structure              |
+//+------------------------------------------------------------------+
+int GetTPSwingLookback()
+{
+   int tf = Period();
+   if(tf <= TF_M1)  return 30;   // ~30 min
+   if(tf <= TF_M5)  return 20;   // ~1h40m
+   if(tf <= TF_M15) return 16;   // ~4h (1 session)
+   if(tf <= TF_M30) return 12;   // ~6h
+   if(tf <= TF_H1)  return 12;   // ~12h
+   if(tf <= TF_H4)  return 10;   // ~40h
+   return 15;                     // D1+: ~3w
+}
+
+//+------------------------------------------------------------------+
+//| Adaptive TP swing range: TF default + history-based shrink         |
+//| When dynamic TP ratio (from MFE history) shows tighter targets     |
+//| are optimal, reduces lookback so swing range matches the target.   |
+//| Falls back to TF default when no history available.                |
+//+------------------------------------------------------------------+
+void FindAdaptiveTPSwingRange(bool isBuy, int barNS,
+                              const double &hi[], const double &lo[],
+                              double atr,
+                              double &swH, double &swL, double &swRange)
+{
+   int tpLB = GetTPSwingLookback();
+   FindSwingRange(isBuy, barNS, hi, lo, tpLB, swH, swL);
+   swRange = MathMax(swH - swL, atr);
+
+   double tpTarget = GetDynamicTP1Ratio() * atr;
+   if(tpTarget <= 0 || swRange <= tpTarget * 2.5) return;
+
+   int minLB = MathMax(5, tpLB / 3);
+   for(int i = 0; i < 3 && tpLB > minLB; i++)
+   {
+      tpLB = MathMax(minLB, (int)(tpLB * 0.7));
+      FindSwingRange(isBuy, barNS, hi, lo, tpLB, swH, swL);
+      swRange = MathMax(swH - swL, atr);
+      if(swRange <= tpTarget * 2.0) break;
+   }
+}
+
+//+------------------------------------------------------------------+
 //| SL multiplier per case × TF group                                  |
 //| Returns multiplier to apply on InpSLRatio.                         |
 //| Bounded [0.70, 1.40] — never extreme override of user config.      |
@@ -225,21 +270,24 @@ void CalculateSLTP_Fibonacci(bool isBuy, int barNS, double entry,
    double spreadBuf = GetNormalizedSpreadBuffer();
    double minSL = GetMinSLDistance();
 
-   int fibLookback = MathMax(GetActiveSLSwingLB(), 30);
+   // SL: wider lookback for structural fib retracement
+   int slLB = MathMax(GetActiveSLSwingLB(), 20);
    double swingHigh = 0, swingLow = 0;
-   FindSwingRange(isBuy, barNS, hi, lo, fibLookback, swingHigh, swingLow);
-   double swingRange = swingHigh - swingLow;
+   FindSwingRange(isBuy, barNS, hi, lo, slLB, swingHigh, swingLow);
+   double slSwingRange = MathMax(swingHigh - swingLow, outATR);
 
-   if(swingRange < outATR) swingRange = outATR;
+   // TP: TF-adaptive + history-adaptive lookback (tighter for scalping)
+   double tpSwH = 0, tpSwL = 0, tpSwingRange = 0;
+   FindAdaptiveTPSwingRange(isBuy, barNS, hi, lo, outATR, tpSwH, tpSwL, tpSwingRange);
 
    if(isBuy)
    {
-      double fib786 = swingHigh - swingRange * 0.786;
+      double fib786 = swingHigh - slSwingRange * 0.786;
       outSL = fib786 - spreadBuf;
       if(entry - outSL < minSL) outSL = entry - minSL;
-      outTP1 = entry + swingRange * 1.0;
-      outTP2 = entry + swingRange * 1.618;
-      outTP3 = entry + swingRange * 2.618;
+      outTP1 = entry + tpSwingRange * 1.0;
+      outTP2 = entry + tpSwingRange * 1.618;
+      outTP3 = entry + tpSwingRange * 2.618;
       // [TP-CAP] Bound swing-range TP at 3x parametric ratio
       double _tpCap1 = outATR * GetActiveTPRatio() * 3.0;
       double _tpCap2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult() * 3.0;
@@ -250,12 +298,12 @@ void CalculateSLTP_Fibonacci(bool isBuy, int barNS, double entry,
    }
    else
    {
-      double fib786 = swingLow + swingRange * 0.786;
+      double fib786 = swingLow + slSwingRange * 0.786;
       outSL = fib786 + spreadBuf;
       if(outSL - entry < minSL) outSL = entry + minSL;
-      outTP1 = entry - swingRange * 1.0;
-      outTP2 = entry - swingRange * 1.618;
-      outTP3 = entry - swingRange * 2.618;
+      outTP1 = entry - tpSwingRange * 1.0;
+      outTP2 = entry - tpSwingRange * 1.618;
+      outTP3 = entry - tpSwingRange * 2.618;
       // [TP-CAP] Mirror for SELL side
       double _tpCap1 = outATR * GetActiveTPRatio() * 3.0;
       double _tpCap2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult() * 3.0;
@@ -288,24 +336,29 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
    double atrTP2 = outATR * GetActiveTPRatio() * GetActiveTP2Mult();
    double atrTP3 = outATR * GetActiveTPRatio() * GetActiveTP3Mult();
 
-   int fibLookback = MathMax(GetActiveSLSwingLB(), 30);
+   // SL: wider lookback for structural support/resistance
+   int slSwingLB = MathMax(GetActiveSLSwingLB(), 20);
    double swingHigh = 0, swingLow = 0;
-   FindSwingRange(isBuy, barNS, hi, lo, fibLookback, swingHigh, swingLow);
-   double swingRange = MathMax(swingHigh - swingLow, outATR);
+   FindSwingRange(isBuy, barNS, hi, lo, slSwingLB, swingHigh, swingLow);
+   double slSwingRange = MathMax(swingHigh - swingLow, outATR);
    double maxSLDist = outATR * (slRatio + 0.5);
+
+   // TP: TF-adaptive + history-adaptive lookback (tighter for scalping)
+   double tpSwH = 0, tpSwL = 0, tpSwingRange = 0;
+   FindAdaptiveTPSwingRange(isBuy, barNS, hi, lo, outATR, tpSwH, tpSwL, tpSwingRange);
 
    if(isBuy)
    {
-      double fibSL = swingHigh - swingRange * 0.786 - spreadBuf;
+      double fibSL = swingHigh - slSwingRange * 0.786 - spreadBuf;
       double atrSL = entry - atrSLDist;
       int slLookback = GetNormalizedSLLookback();
       double swingSL = FindNearestSwingLow(lo, barNS, slLookback, total) - totalBuf;
       outSL = MathMin(fibSL, MathMin(atrSL, swingSL));
       if(entry - outSL > maxSLDist) outSL = entry - maxSLDist;
       if(entry - outSL < minSL) outSL = entry - minSL;
-      double fibTP1 = entry + swingRange * 1.0;
-      double fibTP2 = entry + swingRange * 1.618;
-      double fibTP3 = entry + swingRange * 2.618;
+      double fibTP1 = entry + tpSwingRange * 1.0;
+      double fibTP2 = entry + tpSwingRange * 1.618;
+      double fibTP3 = entry + tpSwingRange * 2.618;
       outTP1 = MathMax(fibTP1, entry + atrTP1);
       outTP2 = MathMax(fibTP2, entry + atrTP2);
       outTP3 = MathMax(fibTP3, entry + atrTP3);
@@ -319,16 +372,16 @@ void CalculateSLTP_Hybrid(bool isBuy, int barNS, double entry,
    }
    else
    {
-      double fibSL = swingLow + swingRange * 0.786 + spreadBuf;
+      double fibSL = swingLow + slSwingRange * 0.786 + spreadBuf;
       double atrSL = entry + atrSLDist;
       int slLookback = GetNormalizedSLLookback();
       double swingSL = FindNearestSwingHigh(hi, barNS, slLookback, total) + totalBuf;
       outSL = MathMax(fibSL, MathMax(atrSL, swingSL));
       if(outSL - entry > maxSLDist) outSL = entry + maxSLDist;
       if(outSL - entry < minSL) outSL = entry + minSL;
-      double fibTP1 = entry - swingRange * 1.0;
-      double fibTP2 = entry - swingRange * 1.618;
-      double fibTP3 = entry - swingRange * 2.618;
+      double fibTP1 = entry - tpSwingRange * 1.0;
+      double fibTP2 = entry - tpSwingRange * 1.618;
+      double fibTP3 = entry - tpSwingRange * 2.618;
       outTP1 = MathMin(fibTP1, entry - atrTP1);
       outTP2 = MathMin(fibTP2, entry - atrTP2);
       outTP3 = MathMin(fibTP3, entry - atrTP3);
