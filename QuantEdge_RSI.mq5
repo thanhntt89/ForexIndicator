@@ -543,6 +543,11 @@ int OnCalculate(const int rates_total,
             BufferTP1[i]   = g_signals[_storedIdx].takeProfit1;
             BufferTP2[i]   = g_signals[_storedIdx].takeProfit2;
             BufferTP3[i]   = g_signals[_storedIdx].takeProfit3;
+            // [ARROW-FIX] Redraw arrows for stored signals after fullRecalc cleanup
+            if(g_signals[_storedIdx].isBuySignal)
+               CreateSignalArrow(time[i], low[i], true, g_signals[_storedIdx].caseNumber);
+            else
+               CreateSignalArrow(time[i], high[i], false, g_signals[_storedIdx].caseNumber);
             _storedIdx++;
          }
          continue;
