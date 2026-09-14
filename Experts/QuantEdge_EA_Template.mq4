@@ -120,10 +120,14 @@ input int    InpSessionEndHour   = 20;                  // Session end hour (GMT
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Daily Loss Cap                                        |
 //+------------------------------------------------------------------+
-input string inp_grp_daily       = "========== Daily Loss Cap =========="; // ---
+input string inp_grp_daily       = "========== Daily / Weekly / Monthly Loss Cap =========="; // ---
 input bool   InpUseDailyLossCap  = false;               // Enable daily loss cap (Gate 7)
 input int    InpMaxDailyLosses   = 0;                   // Max consecutive losses per day (0=no limit)
 input double InpMaxDailyLossPct  = 0.0;                 // Max daily loss % of balance (0=no limit)
+input bool   InpUseWeeklyDDStop  = false;               // Enable weekly DD stop (Gate 7b)
+input double InpMaxWeeklyDDPct   = 10.0;                // Max weekly loss % of balance (0=no limit)
+input bool   InpUseMonthlyDDStop = false;               // Enable monthly DD stop (Gate 7c)
+input double InpMaxMonthlyDDPct  = 15.0;                // Max monthly loss % of balance (0=no limit)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Advanced Gates (ADX / Economic Calendar)              |
@@ -191,6 +195,8 @@ input double InpNegDCABEOffsetPip = 5.0;                 // Breakeven offset in 
 input double InpDCAProfitLockR    = 1.0;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
 input double InpDCAMinSpacingPts = 1500;                 // Min distance between DCA orders (points, 500=$5 XAUUSD)
 input int    InpDCAMinIntervalMin= 5;                   // Min time between DCA orders (minutes, 0=no check)
+input bool   InpUseDCABackstopSL  = true;                // Broker-side SL safety net for DCA basket (protects if EA goes offline)
+input double InpDCABackstopBufferMult = 1.3;             // Backstop distance = DD-cap distance × this (wider than EA's own tick-cap so it doesn't fire under normal operation)
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Risk & Lot Sizing                                    |
@@ -281,6 +287,10 @@ bool g_panelCollapsed = false;
 int      g_dailyLossCount   = 0;
 double   g_dailyLossAmount  = 0;
 datetime g_dailyResetDate   = 0;
+double   g_weeklyLossAmount  = 0;
+datetime g_weeklyResetDate   = 0;
+double   g_monthlyLossAmount = 0;
+datetime g_monthlyResetDate  = 0;
 
 //+------------------------------------------------------------------+
 //| Signal retry state — cached from last valid signal for tick retry  |
@@ -533,6 +543,92 @@ double CalculateNegDCAAvgEntry()
 }
 
 //+------------------------------------------------------------------+
+//| Weighted average entry + total lot across the ENTIRE basket       |
+//| (any leg: original, TP2, TP3, positive DCA, negative DCA) — wider |
+//| scope than CalculateNegDCAAvgEntry(), matches CheckDrawdownCap()'s|
+//| basket-wide CalculateBasketPnL() coverage.                        |
+//+------------------------------------------------------------------+
+double CalculateBasketAvgEntry(double &totalLotOut)
+{
+   double totalLots = 0;
+   double weightedPrice = 0;
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(!IsOurMagic(OrderMagicNumber())) continue;
+
+      double lots  = OrderLots();
+      double entry = OrderOpenPrice();
+      totalLots     += lots;
+      weightedPrice += lots * entry;
+   }
+   totalLotOut = totalLots;
+   if(totalLots <= 0) return 0;
+   return weightedPrice / totalLots;
+}
+
+//+------------------------------------------------------------------+
+//| Broker-side backstop SL for the entire DCA basket — a safety net  |
+//| for when the EA itself is offline (VPS crash, disconnect, weekend |
+//| gap). CheckDrawdownCap() is the primary, tick-by-tick, exact cap; |
+//| this sets a wider hard SL on every leg so a cut still happens if  |
+//| the EA can't run its own check.                                   |
+//+------------------------------------------------------------------+
+void ApplyDCABackstopSL()
+{
+   if(!InpUseDCABackstopSL || !g_dcaActive)
+      return;
+   if(InpNegDCAMaxDDPct <= 0)
+      return;
+
+   double balance = AccountBalance();
+   if(balance <= 0)
+      return;
+
+   double totalLot = 0;
+   double avgEntry = CalculateBasketAvgEntry(totalLot);
+   if(totalLot <= 0 || avgEntry <= 0)
+      return;
+
+   double tickVal = MarketInfo(Symbol(), MODE_TICKVALUE);
+   if(tickVal <= 0)
+      return;
+
+   double ddCapDollars   = balance * InpNegDCAMaxDDPct / 100.0;
+   double distancePoints = ddCapDollars / (totalLot * tickVal);
+   double distancePrice  = distancePoints * Point * InpDCABackstopBufferMult;
+
+   double backstopSL = (g_dcaDirection > 0)
+                        ? NormalizeDouble(avgEntry - distancePrice, Digits)
+                        : NormalizeDouble(avgEntry + distancePrice, Digits);
+
+   // Respect broker min-stop-distance from current price
+   double stoplevel = MarketInfo(Symbol(), MODE_STOPLEVEL) * Point;
+   if(g_dcaDirection > 0 && backstopSL >= Bid - stoplevel)
+      backstopSL = NormalizeDouble(Bid - stoplevel - Point, Digits);
+   if(g_dcaDirection < 0 && backstopSL <= Ask + stoplevel)
+      backstopSL = NormalizeDouble(Ask + stoplevel + Point, Digits);
+
+   // Apply to every basket leg — only ever tighten, never widen, an existing SL
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+   {
+      if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+      if(OrderSymbol() != Symbol()) continue;
+      if(!IsOurMagic(OrderMagicNumber())) continue;
+
+      double curSL = OrderStopLoss();
+      bool needsUpdate = (curSL == 0) ||
+                          (g_dcaDirection > 0 && backstopSL > curSL) ||
+                          (g_dcaDirection < 0 && backstopSL < curSL);
+      if(!needsUpdate) continue;
+
+      if(!OrderModify(OrderTicket(), OrderOpenPrice(), backstopSL, OrderTakeProfit(), 0, clrYellow))
+         Print("[QuantEdge EA] Backstop SL modify FAILED ticket=", OrderTicket(), ": error ", GetLastError());
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Lot ratio for negative DCA order at given index (1-based)        |
 //| idx 1 -> 75%, idx 2 -> 50%, idx 3+ -> 25%                        |
 //+------------------------------------------------------------------+
@@ -630,12 +726,32 @@ bool IsWithinSession()
 //+------------------------------------------------------------------+
 void UpdateDailyLossTracking()
 {
-   datetime today = StringToTime(TimeToString(TimeGMT(), TIME_DATE));
+   datetime nowGMT = TimeGMT();
+   datetime today  = StringToTime(TimeToString(nowGMT, TIME_DATE));
+
+   // Week start = Monday 00:00 GMT of the current week
+   int dow = TimeDayOfWeek(today); // 0=Sunday..6=Saturday
+   int daysSinceMonday = (dow == 0) ? 6 : (dow - 1);
+   datetime weekStart = today - daysSinceMonday * 86400;
+
+   // Month start = 1st day of current month, 00:00 GMT
+   datetime monthStart = StringToTime(StringFormat("%04d.%02d.01", TimeYear(today), TimeMonth(today)));
+
    if(today != g_dailyResetDate)
    {
       g_dailyLossCount  = 0;
       g_dailyLossAmount = 0;
       g_dailyResetDate  = today;
+   }
+   if(weekStart != g_weeklyResetDate)
+   {
+      g_weeklyLossAmount = 0;
+      g_weeklyResetDate  = weekStart;
+   }
+   if(monthStart != g_monthlyResetDate)
+   {
+      g_monthlyLossAmount = 0;
+      g_monthlyResetDate  = monthStart;
    }
 
    static int s_lastHistTotal = 0;
@@ -643,6 +759,9 @@ void UpdateDailyLossTracking()
    if(histTotal == s_lastHistTotal)
       return;
 
+   // Incremental scan — each new closed order is visited exactly once, right
+   // when it closes ("now"), so it's bucketed into daily/weekly/monthly in
+   // the same pass without ever rescanning old history.
    for(int i = s_lastHistTotal; i < histTotal; i++)
    {
       if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
@@ -655,16 +774,21 @@ void UpdateDailyLossTracking()
       if(OrderType() != OP_BUY && OrderType() != OP_SELL)
          continue;
 
-      datetime closeTime = OrderCloseTime();
-      datetime closeDay  = StringToTime(TimeToString(closeTime, TIME_DATE));
-      if(closeDay != g_dailyResetDate)
+      double pnl = OrderProfit() + OrderSwap() + OrderCommission();
+      if(pnl >= 0)
          continue;
 
-      double pnl = OrderProfit() + OrderSwap() + OrderCommission();
-      if(pnl < 0)
+      double absLoss = MathAbs(pnl);
+      datetime closeTime = OrderCloseTime();
+
+      g_monthlyLossAmount += absLoss;
+      if(closeTime >= g_weeklyResetDate) g_weeklyLossAmount += absLoss;
+
+      datetime closeDay = StringToTime(TimeToString(closeTime, TIME_DATE));
+      if(closeDay == g_dailyResetDate)
       {
          g_dailyLossCount++;
-         g_dailyLossAmount += MathAbs(pnl);
+         g_dailyLossAmount += absLoss;
       }
    }
    s_lastHistTotal = histTotal;
@@ -683,6 +807,36 @@ bool IsDailyLossCapHit()
          return true;
    }
    return false;
+}
+
+bool IsWeeklyDDStopHit()
+{
+   if(!InpUseWeeklyDDStop || InpMaxWeeklyDDPct <= 0)
+      return false;
+   static bool s_wasHit = false;
+   double maxLoss = AccountBalance() * InpMaxWeeklyDDPct / 100.0;
+   bool hit = (g_weeklyLossAmount >= maxLoss);
+   if(hit && !s_wasHit)
+      Print("[QuantEdge EA] EXIT: WEEKLY DD STOP — loss=", DoubleToString(g_weeklyLossAmount, 2),
+            " exceeds ", DoubleToString(InpMaxWeeklyDDPct, 1), "% of balance (",
+            DoubleToString(maxLoss, 2), "). Blocking new signals until next week.");
+   s_wasHit = hit;
+   return hit;
+}
+
+bool IsMonthlyDDStopHit()
+{
+   if(!InpUseMonthlyDDStop || InpMaxMonthlyDDPct <= 0)
+      return false;
+   static bool s_wasHit = false;
+   double maxLoss = AccountBalance() * InpMaxMonthlyDDPct / 100.0;
+   bool hit = (g_monthlyLossAmount >= maxLoss);
+   if(hit && !s_wasHit)
+      Print("[QuantEdge EA] EXIT: MONTHLY DD STOP — loss=", DoubleToString(g_monthlyLossAmount, 2),
+            " exceeds ", DoubleToString(InpMaxMonthlyDDPct, 1), "% of balance (",
+            DoubleToString(maxLoss, 2), "). Blocking new signals until next month.");
+   s_wasHit = hit;
+   return hit;
 }
 
 //+------------------------------------------------------------------+
@@ -1204,6 +1358,12 @@ void ManageDCA()
    // loss limit. See CheckDrawdownCap().
    if(CheckDrawdownCap())
       return;
+
+   // --- Broker-side backstop SL — keeps a hard SL in sync on every leg  ---
+   // --- while the basket is open, as a safety net if the EA goes       ---
+   // --- offline (VPS crash, disconnect, weekend gap). Does not replace ---
+   // --- CheckDrawdownCap() above, which is the primary, exact cap.     ---
+   ApplyDCABackstopSL();
 
    // --- Entry-return profit lock (priority 2): price back near the      ---
    // --- original entry AND basket still profitable — lock it in before  ---
@@ -1927,8 +2087,8 @@ bool TryExecuteSignal(bool isRetry)
    // --- Gate 6: Session Filter ---
    bool g6_pass = IsWithinSession();
 
-   // --- Gate 7: Daily Loss Cap ---
-   bool g7_pass = !IsDailyLossCapHit();
+   // --- Gate 7: Daily / Weekly / Monthly Loss Cap ---
+   bool g7_pass = !IsDailyLossCapHit() && !IsWeeklyDDStopHit() && !IsMonthlyDDStopHit();
 
    // --- Gate 8: ADX Trend Strength ---
    bool g8_pass = true;
@@ -2573,45 +2733,22 @@ void OnChartEvent(const int id, const long &lparam, const double &dparam, const 
 }
 
 //+------------------------------------------------------------------+
-//| Sprint 6: Custom fitness for Strategy Tester optimizer             |
+//| Custom fitness for Strategy Tester optimizer.                     |
 //| Select "Custom max" in optimization settings to use this.         |
-//| Returns EV * sqrt(N) — rewards edge AND sample size together.     |
+//| Calmar-proxy: netProfit / maxDD — penalizes drawdown/tail risk,   |
+//| unlike the prior EV*sqrt(N) which only rewarded edge+sample size. |
+//| Guards: minimum trade count (avoid ratio noise from tiny samples) |
+//| and minimum DD floor (STAT_EQUITY_DD_RELATIVE returns a percent,  |
+//| e.g. 15.5, not a 0-1 fraction — avoid divide-by-near-zero).       |
 //+------------------------------------------------------------------+
 double OnTester()
 {
-   int wins = 0, losses = 0;
-   double totalProfit = 0, totalLoss = 0;
-   int magicTP2 = InpMagicNumber + MAGIC_TP2_OFFSET;
+   if(TesterStatistics(STAT_TRADES) < 30) return 0;
 
-   for(int i = OrdersHistoryTotal() - 1; i >= 0; i--)
-   {
-      if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
-      if(OrderSymbol() != Symbol()) continue;
-      int mag = OrderMagicNumber();
-      if(!IsOurMagic(mag)) continue;
-      if(OrderType() > OP_SELL) continue;
+   double netProfit = TesterStatistics(STAT_PROFIT);
+   double maxDD     = TesterStatistics(STAT_EQUITY_DD_RELATIVE);
+   if(maxDD < 0.1) return 0;
 
-      double pnl = OrderProfit() + OrderSwap() + OrderCommission();
-      if(pnl >= 0)
-      {
-         wins++;
-         totalProfit += pnl;
-      }
-      else
-      {
-         losses++;
-         totalLoss += MathAbs(pnl);
-      }
-   }
-
-   int n = wins + losses;
-   if(n == 0) return(-999);
-
-   double wr     = (double)wins / n;
-   double avgWin = (wins > 0) ? totalProfit / wins : 0;
-   double avgLos = (losses > 0) ? totalLoss / losses : 0;
-   double ev     = wr * avgWin - (1.0 - wr) * avgLos;
-
-   return(ev * MathSqrt((double)n));
+   return netProfit / maxDD;
 }
 //+------------------------------------------------------------------+

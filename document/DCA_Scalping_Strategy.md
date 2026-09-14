@@ -1,6 +1,6 @@
 # Chiến Lược DCA Scalping Intraday — QuantEdge EA
 
-**Phiên bản:** 2.1  
+**Phiên bản:** 2.2  
 **Cập nhật:** 2026-09-14  
 **Công cụ:** XAUUSD  
 **Khung thời gian:** M15  
@@ -800,9 +800,15 @@ InpMinLotSize        = 0.01
 === Recovery ===
 InpUseRecoveryMode   = false          // OFF mặc định — cần evidence trước
 
-=== Weekly/Monthly DD Stop (CẦN IMPLEMENT) ===
-// InpMaxWeeklyDDPct  = 10.0          // Block trading nếu weekly DD > 10%
-// InpMaxMonthlyDDPct = 15.0          // Block trading nếu monthly DD > 15%
+=== Weekly/Monthly DD Stop (Đã implement — Gate 7b/7c) ===
+InpUseWeeklyDDStop   = true
+InpMaxWeeklyDDPct    = 10.0           // Block trading nếu weekly DD > 10%
+InpUseMonthlyDDStop  = true
+InpMaxMonthlyDDPct   = 15.0           // Block trading nếu monthly DD > 15%
+
+=== DCA Backstop SL (Đã implement) ===
+InpUseDCABackstopSL      = true       // Broker-side SL an toàn khi EA offline
+InpDCABackstopBufferMult = 1.3        // Backstop rộng hơn DD cap 1.3× để không tự fire khi EA vẫn chạy bình thường
 ```
 
 ### 11.2 Thay đổi so với v1.0
@@ -815,9 +821,9 @@ InpUseRecoveryMode   = false          // OFF mặc định — cần evidence tr
 | Daily Loss Cap | 5/5% | **3/3%** | Chặt hơn, ngăn 2 DD-cuts/ngày |
 | Risk% | 0.5% | **1.0%** | DD cap nhỏ hơn cho phép risk cao hơn |
 | Recovery Mode | ON | **OFF** | Revenge sizing, cần evidence |
-| Weekly DD Stop | — | **10%** | Mới, ngăn chuỗi thua tuần |
-| Monthly DD Stop | — | **15%** | Mới, hard limit cuối cùng |
-| Fitness Function | EV×√N | **Calmar** | Cần phạt tail risk |
+| Weekly DD Stop | — | **10%** | [DONE] Gate 7b implemented |
+| Monthly DD Stop | — | **15%** | [DONE] Gate 7c implemented |
+| Fitness Function | EV×√N | **Calmar** | [DONE] OnTester() implemented |
 | Backtest Mode | Open Prices OK | **Every Tick** | DCA path-dependent |
 
 ---
@@ -907,8 +913,8 @@ double OnTester()
 - [ ] Demo account ≥ 2 tuần: consistent với backtest?
 - [ ] Spread impact: test với spread $0.30?
 - [ ] Backtest period chứa high-impact news (NFP, FOMC)?
-- [ ] Weekly/Monthly DD stop đã implement?
-- [ ] Broker-side backstop SL cho DCA basket đã implement? (§7.2)
+- [x] Weekly/Monthly DD stop đã implement? (Gate 7b/7c, `InpUseWeeklyDDStop`/`InpUseMonthlyDDStop`)
+- [x] Broker-side backstop SL cho DCA basket đã implement? (`ApplyDCABackstopSL()`, §7.2)
 
 ---
 
@@ -1133,16 +1139,16 @@ STEP 1: DCA Parameter Validation
   → Monte Carlo hoặc backtest DD-cut rate
   → Nếu DD-cut > 5% → điều chỉnh tham số hoặc bỏ neg DCA
 
-STEP 2: Implement Weekly/Monthly DD Stop + Backstop SL
-  → Thêm InpMaxWeeklyDDPct, InpMaxMonthlyDDPct vào EA
-  → Implement broker-side backstop SL cho DCA basket (§7.2)
-  → Backstop SL = DD_cap / total_lot, recalc sau mỗi DCA order
+STEP 2: [DONE] Weekly/Monthly DD Stop + Backstop SL
+  → InpUseWeeklyDDStop/InpMaxWeeklyDDPct, InpUseMonthlyDDStop/InpMaxMonthlyDDPct (Gate 7b/7c)
+  → ApplyDCABackstopSL() — chạy mỗi tick trong ManageDCA(), sau CheckDrawdownCap()
+  → Implemented đồng bộ mq4+mq5, xem Experts/QuantEdge_EA_Template.mq4/.mq5
 
 STEP 3: Implement News Gate (Gate 9)
   → MQL5 calendar API hoặc file-based
 
-STEP 4: Fitness Function
-  → Đổi OnTester() sang Calmar proxy
+STEP 4: [DONE] Fitness Function
+  → OnTester() đã đổi sang Calmar proxy (netProfit/maxDD, min 30 trades, DD floor 0.1%)
 
 STEP 5: Walk-Forward Validation
   → 3 windows, Every Tick
@@ -1153,4 +1159,4 @@ STEP 6: Demo Account
 
 ---
 
-*Document v2.1 — sửa 6 điểm tự洽 từ review vòng 2: DCA #3 dead parameter, daily/basket cap ordering, effective risk%, DCA P&L bimodal, broker-side backstop SL, OnTester() guards. Chờ §0 hoàn thành trước khi finalize.*
+*Document v2.2 — v2.1 sửa 6 điểm tự洽 từ review vòng 2 (DCA #3 dead parameter, daily/basket cap ordering, effective risk%, DCA P&L bimodal, broker-side backstop SL, OnTester() guards). v2.2: Weekly/Monthly DD Stop (Gate 7b/7c), Broker-side Backstop SL (ApplyDCABackstopSL), và Calmar OnTester() đã CODE xong trong Experts/QuantEdge_EA_Template.mq4+mq5 (branch features/dca-scalping-strategy). Chờ §0 hoàn thành trước khi bật Negative DCA / finalize target.*
