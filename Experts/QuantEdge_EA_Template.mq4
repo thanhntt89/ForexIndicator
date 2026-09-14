@@ -1361,7 +1361,14 @@ void QEEA_CreatePanel()
 
 void QEEA_DeletePanel()
 {
-   ObjectsDeleteAll(0, QEEA_PREFIX);
+   ObjectDelete(QEEA_BG);
+   ObjectDelete(QEEA_HEADER);
+   ObjectDelete(QEEA_HEADER_TXT);
+   ObjectDelete(QEEA_BTN_PROFIT_ALL);
+   ObjectDelete(QEEA_BTN_LOSS_ALL);
+   ObjectDelete(QEEA_BTN_BUY_PROFIT);
+   ObjectDelete(QEEA_BTN_SELL_PROFIT);
+   ObjectDelete(QEEA_BTN_CLOSE_ALL);
 }
 
 //+------------------------------------------------------------------+

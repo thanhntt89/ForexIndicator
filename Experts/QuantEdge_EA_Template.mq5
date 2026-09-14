@@ -1440,7 +1440,7 @@ void QEEA_CreatePanel()
 {
    if(!InpShowClosePanel)
    {
-      ObjectsDeleteAll(0, QEEA_PREFIX);
+      QEEA_DeletePanel();
       return;
    }
 
@@ -1497,7 +1497,14 @@ void QEEA_CreatePanel()
 
 void QEEA_DeletePanel()
 {
-   ObjectsDeleteAll(0, QEEA_PREFIX);
+   ObjectDelete(0, QEEA_BG);
+   ObjectDelete(0, QEEA_HEADER);
+   ObjectDelete(0, QEEA_HEADER_TXT);
+   ObjectDelete(0, QEEA_BTN_PROFIT_ALL);
+   ObjectDelete(0, QEEA_BTN_LOSS_ALL);
+   ObjectDelete(0, QEEA_BTN_BUY_PROFIT);
+   ObjectDelete(0, QEEA_BTN_SELL_PROFIT);
+   ObjectDelete(0, QEEA_BTN_CLOSE_ALL);
 }
 
 //+------------------------------------------------------------------+
