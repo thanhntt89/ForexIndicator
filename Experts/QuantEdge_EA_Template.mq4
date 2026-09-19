@@ -195,7 +195,7 @@ input double InpNegDCABEOffsetPip = 5.0;                 // Breakeven offset in 
 input double InpDCAProfitLockR    = 1.0;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
 input double InpDCAMinSpacingPts = 1500;                 // Min distance between DCA orders (points, 500=$5 XAUUSD)
 input int    InpDCAMinIntervalMin= 5;                   // Min time between DCA orders (minutes, 0=no check)
-input bool   InpUseDCABackstopSL  = true;                // Broker-side SL safety net for DCA basket (protects if EA goes offline)
+input bool   InpUseDCABackstopSL  = false;               // Broker-side SL safety net for DCA basket (protects if EA goes offline) — opt-in
 input double InpDCABackstopBufferMult = 1.3;             // Backstop distance = DD-cap distance × this (wider than EA's own tick-cap so it doesn't fire under normal operation)
 
 //+------------------------------------------------------------------+
@@ -348,6 +348,53 @@ double ReadBufferAt(int bufferIndex, int shift)
                   Ind_BBPeriod, Ind_BBDeviation, PRICE_CLOSE,
                   Ind_EAMode,
                   bufferIndex, shift);
+}
+
+//+------------------------------------------------------------------+
+//| Read signal from GV bridge (published by standalone indicator)    |
+//+------------------------------------------------------------------+
+bool ReadSignalFromGV(double &outBuyCase, double &outSellCase, int &outShift,
+                      double &outEntry, double &outSL, double &outTP1, double &outTP2, double &outTP3,
+                      double &outRecLevel, double &outConf, double &outEV, double &outRisk, double &outProbTP1)
+{
+   string sym = Symbol();
+   if(!GlobalVariableCheck("QE_SigDir_" + sym))
+      return false;
+
+   double dir     = GlobalVariableGet("QE_SigDir_"     + sym);
+   double caseDbl = GlobalVariableGet("QE_SigCase_"    + sym);
+   double sigTime = GlobalVariableGet("QE_SigTime_"    + sym);
+   if(dir == 0 || caseDbl == 0 || sigTime == 0)
+      return false;
+
+   int shift = iBarShift(Symbol(), Period(), (datetime)sigTime, false);
+   int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
+   if(shift < 1 || shift > scanLimit)
+      return false;
+
+   outShift   = shift;
+   outEntry   = GlobalVariableCheck("QE_SigEntry_"   + sym) ? GlobalVariableGet("QE_SigEntry_"   + sym) : EMPTY_VALUE;
+   outSL      = GlobalVariableCheck("QE_SigSL_"      + sym) ? GlobalVariableGet("QE_SigSL_"      + sym) : EMPTY_VALUE;
+   outTP1     = GlobalVariableCheck("QE_SigTP1_"     + sym) ? GlobalVariableGet("QE_SigTP1_"     + sym) : EMPTY_VALUE;
+   outTP2     = GlobalVariableCheck("QE_SigTP2_"     + sym) ? GlobalVariableGet("QE_SigTP2_"     + sym) : EMPTY_VALUE;
+   outTP3     = GlobalVariableCheck("QE_SigTP3_"     + sym) ? GlobalVariableGet("QE_SigTP3_"     + sym) : EMPTY_VALUE;
+   outRecLevel= GlobalVariableCheck("QE_SigRecLv_"   + sym) ? GlobalVariableGet("QE_SigRecLv_"   + sym) : EMPTY_VALUE;
+   outConf    = GlobalVariableCheck("QE_SigConf_"    + sym) ? GlobalVariableGet("QE_SigConf_"    + sym) : EMPTY_VALUE;
+   outEV      = GlobalVariableCheck("QE_SigEV_"      + sym) ? GlobalVariableGet("QE_SigEV_"      + sym) : EMPTY_VALUE;
+   outRisk    = GlobalVariableCheck("QE_SigRisk_"    + sym) ? GlobalVariableGet("QE_SigRisk_"    + sym) : EMPTY_VALUE;
+   outProbTP1 = GlobalVariableCheck("QE_SigProbTP1_" + sym) ? GlobalVariableGet("QE_SigProbTP1_" + sym) : EMPTY_VALUE;
+
+   if(dir > 0)
+   {
+      outBuyCase  = caseDbl;
+      outSellCase = EMPTY_VALUE;
+   }
+   else
+   {
+      outBuyCase  = EMPTY_VALUE;
+      outSellCase = caseDbl;
+   }
+   return true;
 }
 
 //+------------------------------------------------------------------+
@@ -1819,63 +1866,101 @@ int OnInit()
    {
       int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
       bool foundAtStartup = false;
-      for(int i = 1; i <= scanLimit; i++)
+
+      // 1. Try GV bridge
+      double buyCase = EMPTY_VALUE, sellCase = EMPTY_VALUE;
+      int    gvShift = -1;
+      double gvEntry = EMPTY_VALUE, gvSL = EMPTY_VALUE;
+      double gvTP1 = EMPTY_VALUE, gvTP2 = EMPTY_VALUE, gvTP3 = EMPTY_VALUE;
+      double gvRecLv = EMPTY_VALUE, gvConf = EMPTY_VALUE;
+      double gvEV = EMPTY_VALUE, gvRisk = EMPTY_VALUE, gvProbTP1 = EMPTY_VALUE;
+
+      if(!IsTesting() &&
+         ReadSignalFromGV(buyCase, sellCase, gvShift,
+                          gvEntry, gvSL, gvTP1, gvTP2, gvTP3,
+                          gvRecLv, gvConf, gvEV, gvRisk, gvProbTP1))
       {
-         double buyCase  = ReadBufferAt(BUF_BUY_SIGNAL, i);
-         double sellCase = ReadBufferAt(BUF_SELL_SIGNAL, i);
-         bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
-         bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
-         if(!hasBuy && !hasSell) continue;
          foundAtStartup = true;
+         bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
+         int  direction = hasBuy ? 1 : -1;
+         int  caseNum   = (int)(hasBuy ? buyCase : sellCase);
+         double recLevel   = (gvRecLv != EMPTY_VALUE) ? gvRecLv : (double)REC_WAIT;
+         double confidence = (gvConf  != EMPTY_VALUE) ? gvConf  : 0;
 
-         double recLevel   = ReadBufferAt(BUF_REC_LEVEL, i);
-         double confidence = ReadBufferAt(BUF_REC_CONFIDENCE, i);
-         // [MQ4-SYNC-FIX] Was "continue" (skip this signal entirely) — but
-         // buffers 21-24 are wiped on full recalc (e.g. a TF switch) and are
-         // NOT backfilled for historical bars, so a real signal older than
-         // the just-closed bar routinely has recLevel/confidence EMPTY here.
-         // Skipping it made the EA silently ignore a signal that MQ5's
-         // equivalent scan (which falls back to WAIT/0 instead) still adopts.
-         // Accept it with a conservative fallback so gates (esp. Gate 2
-         // confidence) can still filter it, instead of pretending it's not there.
-         if(recLevel == EMPTY_VALUE)   recLevel   = (double)REC_WAIT;
-         if(confidence == EMPTY_VALUE) confidence = 0;
-
-         int    direction = hasBuy ? 1 : -1;
-         int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
          g_sigValid      = true;
          g_sigTP1Hit     = false;
          g_sigSLHit      = false;
          g_sigDirection  = direction;
          g_sigCaseNum    = caseNum;
-         g_sigEntry      = ReadBufferAt(BUF_ENTRY, i);
-         g_sigSL         = ReadBufferAt(BUF_SL, i);
-         g_sigTP1        = ReadBufferAt(BUF_TP1, i);
-         g_sigTP2        = ReadBufferAt(BUF_TP2, i);
-         g_sigTP3        = ReadBufferAt(BUF_TP3, i);
+         g_sigEntry      = (gvEntry != EMPTY_VALUE) ? gvEntry : ((direction > 0) ? Ask : Bid);
+         g_sigSL         = (gvSL    != EMPTY_VALUE) ? gvSL    : 0;
+         g_sigTP1        = (gvTP1   != EMPTY_VALUE) ? gvTP1   : 0;
+         g_sigTP2        = (gvTP2   != EMPTY_VALUE) ? gvTP2   : 0;
+         g_sigTP3        = (gvTP3   != EMPTY_VALUE) ? gvTP3   : 0;
          g_sigRecLevel   = recLevel;
          g_sigConfidence = confidence;
-         g_sigEV         = ReadBufferAt(BUF_REC_EV, i);
-         g_sigRiskPct    = ReadBufferAt(BUF_REC_RISK, i);
-         g_sigProbTP1    = ReadBufferAt(BUF_PROB_TP1, i);
-         g_lastBarTime   = iTime(Symbol(), Period(), i);
-         g_sigBarTime    = iTime(Symbol(), Period(), i);
+         g_sigEV         = (gvEV      != EMPTY_VALUE) ? gvEV      : 0;
+         g_sigRiskPct    = (gvRisk    != EMPTY_VALUE) ? gvRisk    : 0;
+         g_sigProbTP1    = (gvProbTP1 != EMPTY_VALUE) ? gvProbTP1 : 0;
+         g_lastBarTime   = iTime(Symbol(), Period(), gvShift);
+         g_sigBarTime    = iTime(Symbol(), Period(), gvShift);
 
-         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), i)
-                                             : iHigh(Symbol(), Period(), i);
-         DrawSignalArrow(iTime(Symbol(), Period(), i), arrowPrice, direction > 0, caseNum);
+         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), gvShift)
+                                             : iHigh(Symbol(), Period(), gvShift);
+         DrawSignalArrow(iTime(Symbol(), Period(), gvShift), arrowPrice, direction > 0, caseNum);
 
-         Print("[QuantEdge EA] Startup: found active signal at bar[", i, "] — ",
+         Print("[QuantEdge EA] Startup: found active signal via GV bridge at bar[", gvShift, "] — ",
                (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
                " Conf=", (int)MathRound(confidence), " EV=", DoubleToString(g_sigEV, 2), "R");
-         break;
       }
-      // [SCAN-LOG-FIX] This is the path a TF switch / recompile / chart
-      // reattach reruns. Silence here — the prior behavior — is
-      // indistinguishable from the EA not running: the indicator's own
-      // dashboard has no scan window and keeps showing the latest signal
-      // regardless of age, so a signal older than scanLimit bars is
-      // invisible to the EA with zero explanation.
+
+      // 2. Fallback: iCustom buffer scan
+      if(!foundAtStartup)
+      {
+         for(int i = 1; i <= scanLimit; i++)
+         {
+            buyCase  = ReadBufferAt(BUF_BUY_SIGNAL, i);
+            sellCase = ReadBufferAt(BUF_SELL_SIGNAL, i);
+            bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
+            bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
+            if(!hasBuy && !hasSell) continue;
+            foundAtStartup = true;
+
+            double recLevel   = ReadBufferAt(BUF_REC_LEVEL, i);
+            double confidence = ReadBufferAt(BUF_REC_CONFIDENCE, i);
+            if(recLevel == EMPTY_VALUE)   recLevel   = (double)REC_WAIT;
+            if(confidence == EMPTY_VALUE) confidence = 0;
+
+            int    direction = hasBuy ? 1 : -1;
+            int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
+            g_sigValid      = true;
+            g_sigTP1Hit     = false;
+            g_sigSLHit      = false;
+            g_sigDirection  = direction;
+            g_sigCaseNum    = caseNum;
+            g_sigEntry      = ReadBufferAt(BUF_ENTRY, i);
+            g_sigSL         = ReadBufferAt(BUF_SL, i);
+            g_sigTP1        = ReadBufferAt(BUF_TP1, i);
+            g_sigTP2        = ReadBufferAt(BUF_TP2, i);
+            g_sigTP3        = ReadBufferAt(BUF_TP3, i);
+            g_sigRecLevel   = recLevel;
+            g_sigConfidence = confidence;
+            g_sigEV         = ReadBufferAt(BUF_REC_EV, i);
+            g_sigRiskPct    = ReadBufferAt(BUF_REC_RISK, i);
+            g_sigProbTP1    = ReadBufferAt(BUF_PROB_TP1, i);
+            g_lastBarTime   = iTime(Symbol(), Period(), i);
+            g_sigBarTime    = iTime(Symbol(), Period(), i);
+
+            double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), i)
+                                                : iHigh(Symbol(), Period(), i);
+            DrawSignalArrow(iTime(Symbol(), Period(), i), arrowPrice, direction > 0, caseNum);
+
+            Print("[QuantEdge EA] Startup: found active signal via iCustom at bar[", i, "] — ",
+                  (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
+                  " Conf=", (int)MathRound(confidence), " EV=", DoubleToString(g_sigEV, 2), "R");
+            break;
+         }
+      }
       if(!foundAtStartup)
          Print("[QuantEdge EA] Startup: no active signal within shift 1..", scanLimit,
                " (indicator dashboard may show an older signal outside this scan window — "
@@ -2448,28 +2533,52 @@ void OnTick()
    {
       g_lastBarTime = currentBarTime;
 
-      // [NEW-BAR-SCAN-FIX] MQ4 previously only checked shift=1 (the last closed
-      // bar). A signal from 2+ bars ago — e.g. after an EA attach, terminal
-      // restart, or TF switch — was invisible in the new-bar path even though
-      // the indicator still displayed it. Scan back InpRetryMaxBars bars
-      // (matching MQ5 behavior) so the EA finds the signal regardless of when
-      // it was loaded relative to the signal bar.
       int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
       int foundShift = -1;
       double buyCase = EMPTY_VALUE, sellCase = EMPTY_VALUE;
+      double entry = EMPTY_VALUE, sl2 = EMPTY_VALUE;
+      double tp1 = EMPTY_VALUE, tp2 = EMPTY_VALUE, tp3 = EMPTY_VALUE;
+      double recLevel = EMPTY_VALUE, confidence = EMPTY_VALUE;
+      double ev = EMPTY_VALUE, riskPct = EMPTY_VALUE, probTP1 = EMPTY_VALUE;
+      bool fromGV = false;
 
-      for(int s = 1; s <= scanLimit; s++)
+      // 1. Try GV bridge (standalone indicator publishes its signal)
+      if(!IsTesting())
       {
-         double bc = ReadBufferAt(BUF_BUY_SIGNAL, s);
-         double sc = ReadBufferAt(BUF_SELL_SIGNAL, s);
-         bool hb = (bc != EMPTY_VALUE && bc > 0);
-         bool hs = (sc != EMPTY_VALUE && sc > 0);
-         if(hb || hs)
+         fromGV = ReadSignalFromGV(buyCase, sellCase, foundShift,
+                                   entry, sl2, tp1, tp2, tp3,
+                                   recLevel, confidence, ev, riskPct, probTP1);
+      }
+
+      // 2. Fallback: iCustom buffer scan (tester, or indicator not on chart)
+      if(!fromGV)
+      {
+         for(int s = 1; s <= scanLimit; s++)
          {
-            foundShift = s;
-            buyCase  = bc;
-            sellCase = sc;
-            break;
+            double bc = ReadBufferAt(BUF_BUY_SIGNAL, s);
+            double sc = ReadBufferAt(BUF_SELL_SIGNAL, s);
+            bool hb = (bc != EMPTY_VALUE && bc > 0);
+            bool hs = (sc != EMPTY_VALUE && sc > 0);
+            if(hb || hs)
+            {
+               foundShift = s;
+               buyCase  = bc;
+               sellCase = sc;
+               break;
+            }
+         }
+         if(foundShift > 0)
+         {
+            entry      = ReadBufferAt(BUF_ENTRY, foundShift);
+            sl2        = ReadBufferAt(BUF_SL, foundShift);
+            tp1        = ReadBufferAt(BUF_TP1, foundShift);
+            tp2        = ReadBufferAt(BUF_TP2, foundShift);
+            tp3        = ReadBufferAt(BUF_TP3, foundShift);
+            recLevel   = ReadBufferAt(BUF_REC_LEVEL, foundShift);
+            confidence = ReadBufferAt(BUF_REC_CONFIDENCE, foundShift);
+            ev         = ReadBufferAt(BUF_REC_EV, foundShift);
+            riskPct    = ReadBufferAt(BUF_REC_RISK, foundShift);
+            probTP1    = ReadBufferAt(BUF_PROB_TP1, foundShift);
          }
       }
 
@@ -2480,16 +2589,6 @@ void OnTick()
       {
          int    direction = hasBuy ? 1 : -1;
          int    caseNum   = (int)(hasBuy ? buyCase : sellCase);
-         double entry     = ReadBufferAt(BUF_ENTRY, foundShift);
-         double sl2       = ReadBufferAt(BUF_SL, foundShift);
-         double tp1       = ReadBufferAt(BUF_TP1, foundShift);
-         double tp2       = ReadBufferAt(BUF_TP2, foundShift);
-         double tp3       = ReadBufferAt(BUF_TP3, foundShift);
-         double recLevel  = ReadBufferAt(BUF_REC_LEVEL, foundShift);
-         double confidence= ReadBufferAt(BUF_REC_CONFIDENCE, foundShift);
-         double ev        = ReadBufferAt(BUF_REC_EV, foundShift);
-         double riskPct   = ReadBufferAt(BUF_REC_RISK, foundShift);
-         double probTP1   = ReadBufferAt(BUF_PROB_TP1, foundShift);
 
          bool buffersIncomplete = (recLevel == EMPTY_VALUE || confidence == EMPTY_VALUE
                                    || entry == EMPTY_VALUE || sl2 == EMPTY_VALUE);
@@ -2511,7 +2610,8 @@ void OnTick()
          }
          if(tp3 == EMPTY_VALUE) tp3 = 0;
 
-         Print("[QuantEdge EA] Signal found at shift=", foundShift, " — ",
+         Print("[QuantEdge EA] Signal found ", (fromGV ? "via GV bridge" : "via iCustom scan"),
+               " at shift=", foundShift, " — ",
                (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
                " Entry=", DoubleToString(entry, Digits),
                " RecLevel=", (recLevel == EMPTY_VALUE ? "EMPTY" : IntegerToString((int)recLevel)),

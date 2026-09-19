@@ -270,6 +270,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   CleanupSignalGV();
    // Signals binary: always save (accumulates history across restarts).
    SaveSignalsBinary();
    // [PERF] Session stats binary: save on RECOMPILE/PARAMETERS/CHARTCHANGE for fast warm
@@ -631,6 +632,8 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, buySignal, true, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], buySignal, true, entryPrice, sl, tp1, (i >= rates_total - 2));
+         if(i >= rates_total - 2 && !IsBacktestMode())
+            PublishSignalToGV(time[i], buySignal, true, entryPrice, sl, tp1, tp2, tp3);
          BufferEntry[i] = entryPrice;
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
@@ -660,6 +663,9 @@ int OnCalculate(const int rates_total,
             BufferRecConfidence[i]      = recBuy.confidence;
             BufferRecEV[i]              = recBuy.ev;
             BufferRecSuggestedRisk[i]   = recBuy.suggestedRisk;
+            if(!IsBacktestMode())
+               PublishProbToGV((double)recBuy.level, recBuy.confidence, recBuy.ev, recBuy.suggestedRisk,
+                               g_currentProb.probTP1);
          }
          // [PERF] Log signal + pending ONLY for the just-closed bar (forward-only). Re-logging
          // every historical signal on each fullRecalc is what forced the slow CSV wipe in
@@ -725,6 +731,8 @@ int OnCalculate(const int rates_total,
          StoreSignal(time[i], i, sellSignal, false, entryPrice, sl, tp1, tp2, tp3, atrVal, angleZ,
                      curSpread, sigSessBlock, signal.indicatorValue);
          TrackSignalForSession(time[i], sellSignal, false, entryPrice, sl, tp1, (i >= rates_total - 2));
+         if(i >= rates_total - 2 && !IsBacktestMode())
+            PublishSignalToGV(time[i], sellSignal, false, entryPrice, sl, tp1, tp2, tp3);
          BufferEntry[i] = entryPrice;
          BufferSL[i]    = sl;
          BufferTP1[i]   = tp1;
@@ -754,6 +762,9 @@ int OnCalculate(const int rates_total,
             BufferRecConfidence[i]      = recSell.confidence;
             BufferRecEV[i]              = recSell.ev;
             BufferRecSuggestedRisk[i]   = recSell.suggestedRisk;
+            if(!IsBacktestMode())
+               PublishProbToGV((double)recSell.level, recSell.confidence, recSell.ev, recSell.suggestedRisk,
+                               g_currentProb.probTP1);
          }
          // [PERF] Forward-only logging (see buy branch): log once when the bar closes.
          if(i >= rates_total - 2)
@@ -1096,5 +1107,50 @@ int OnCalculate(const int rates_total,
    if(s_scoringQueueCount > 0) FlushLogQueues();
 
    return(rates_total);
+}
+
+//+------------------------------------------------------------------+
+//| GV Signal Bridge — publish latest signal for EA consumption       |
+//+------------------------------------------------------------------+
+void PublishSignalToGV(datetime barTime, int caseNum, bool isBuy,
+                       double entry, double sl, double tp1, double tp2, double tp3)
+{
+   string sym = Symbol();
+   GlobalVariableSet("QE_SigDir_"   + sym, isBuy ? 1.0 : -1.0);
+   GlobalVariableSet("QE_SigCase_"  + sym, (double)caseNum);
+   GlobalVariableSet("QE_SigTime_"  + sym, (double)barTime);
+   GlobalVariableSet("QE_SigEntry_" + sym, entry);
+   GlobalVariableSet("QE_SigSL_"    + sym, sl);
+   GlobalVariableSet("QE_SigTP1_"   + sym, tp1);
+   GlobalVariableSet("QE_SigTP2_"   + sym, tp2);
+   GlobalVariableSet("QE_SigTP3_"   + sym, tp3);
+}
+
+void PublishProbToGV(double recLevel, double confidence, double ev, double risk, double probTP1)
+{
+   string sym = Symbol();
+   GlobalVariableSet("QE_SigRecLv_"   + sym, recLevel);
+   GlobalVariableSet("QE_SigConf_"    + sym, confidence);
+   GlobalVariableSet("QE_SigEV_"      + sym, ev);
+   GlobalVariableSet("QE_SigRisk_"    + sym, risk);
+   GlobalVariableSet("QE_SigProbTP1_" + sym, probTP1);
+}
+
+void CleanupSignalGV()
+{
+   string sym = Symbol();
+   GlobalVariableDel("QE_SigDir_"     + sym);
+   GlobalVariableDel("QE_SigCase_"    + sym);
+   GlobalVariableDel("QE_SigTime_"    + sym);
+   GlobalVariableDel("QE_SigEntry_"   + sym);
+   GlobalVariableDel("QE_SigSL_"      + sym);
+   GlobalVariableDel("QE_SigTP1_"     + sym);
+   GlobalVariableDel("QE_SigTP2_"     + sym);
+   GlobalVariableDel("QE_SigTP3_"     + sym);
+   GlobalVariableDel("QE_SigRecLv_"   + sym);
+   GlobalVariableDel("QE_SigConf_"    + sym);
+   GlobalVariableDel("QE_SigEV_"      + sym);
+   GlobalVariableDel("QE_SigRisk_"    + sym);
+   GlobalVariableDel("QE_SigProbTP1_" + sym);
 }
 //+------------------------------------------------------------------+
