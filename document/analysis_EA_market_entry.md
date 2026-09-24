@@ -396,6 +396,54 @@ Nếu mày muốn thấy đầy đủ lịch sử mũi tên, có 2 hướng:
 
 ---
 
+## 3e. Nguyên nhân gốc: `InpEAMode` chặn cả mũi tên (build `.5-eaarrow`)
+
+Sau `.4-noeaarrow` vẫn không thấy mũi tên. Manh mối quyết định là câu **"chỉ báo đang dùng
+config mặc định của EA"** — nghĩa là instance duy nhất trên chart là bản headless mà EA nạp qua
+`iCustom` với `Ind_EAMode = true`, **không** phải một indicator standalone.
+
+Nên trạng thái thực tế là:
+
+| Ai | Có vẽ mũi tên? |
+|----|----------------|
+| EA | Không — đã xóa ở `.4-noeaarrow` theo yêu cầu |
+| Indicator (qua `iCustom`, `InpEAMode=true`) | Không — `CreateSignalArrow()` return ngay ở dòng đầu (`ArrowManager.mqh:14`) |
+
+→ **Không ai vẽ cả.** Đây là hệ quả trực tiếp của `.4`: trước đó EA che lấp việc indicator
+headless không vẽ.
+
+Đây cũng giải thích luôn §3b/§3c/§3d đã chẩn đoán lệch hướng: tao suy ra "có indicator standalone
+đang chạy" từ việc chart hiện lines SL/Z2/Z3/EN/TP1. Nhưng chart ở §3b **là ảnh cũ** từ lúc còn
+indicator standalone; ảnh sau khi chuyển sang EA-only thì lines cũng mất — chi tiết đó tao đã bỏ
+qua.
+
+### Giải pháp: tách mũi tên khỏi `InpEAMode`
+
+`InpEAMode` tồn tại để bỏ phần chart furniture đắt đỏ — panel, SL/TP lines, zones, explain box.
+Mũi tên thì chỉ là vài object `OBJ_ARROW` tạo một lần mỗi tín hiệu, gộp chung vào cùng một cờ là
+quá thô.
+
+Thêm `InpArrowsInEAMode = true` (`Config.mqh:139`) và đổi 3 gate trong `ArrowManager.mqh`:
+
+```cpp
+if(InpEAMode && !InpArrowsInEAMode) return;   // thay cho: if(InpEAMode) return;
+```
+
+Áp cho `CreateSignalArrow()`, `CleanupOldArrows()` và `DeleteArrowForSignal()` — ba hàm phải
+cùng nhịp, nếu vẽ mà không prune thì mũi tên tích tụ vô hạn.
+
+**Cố ý KHÔNG đổi `DeleteOppositeArrows()`**: nó vẫn return sớm trong EA mode. Nghĩa là chart chạy
+EA giữ được **đầy đủ lịch sử mũi tên** cả hai chiều — đúng điều mày muốn — trong khi chart
+standalone giữ hành vi cũ (mỗi tín hiệu mới xóa mũi tên chiều đối lập). Xem §3d về vấn đề này.
+
+**Không phá vỡ `iCustom`**: EA chỉ truyền 7 tham số đầu, dừng ở `InpEAMode` (input thứ 8).
+`InpArrowsInEAMode` nằm ở dòng 139, sau đó rất xa, nên thứ tự tham số không đổi và input mới
+lấy default `true`.
+
+Cả hai nền tảng dùng chung `Config.mqh` + `ArrowManager.mqh` nên không cần sửa riêng `.mq4`/`.mq5`.
+
+---
+
 ## 4. Ngoài phạm vi (không sửa lần này)
 
 ### 4.1 Tham số DCA lệch với tài liệu chiến lược

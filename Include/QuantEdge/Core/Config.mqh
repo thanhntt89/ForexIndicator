@@ -128,6 +128,15 @@ input bool InpMonitorOSCross= false; // [EXPERIMENT] Aqua/magenta dot on Green x
 //| INPUT GROUP: Arrow Display                                         |
 //+------------------------------------------------------------------+
 input string inp_grp_arrow    = "========== Arrow Display =========="; // ---
+// [EAMODE-ARROW] Signal arrows are the one visual worth keeping when the
+// indicator runs headless under an EA's iCustom(). InpEAMode exists to drop
+// the expensive chart furniture — panel, SL/TP lines, zones, explain boxes —
+// but it used to suppress the arrows too, which left the chart with no
+// marker at all once the EA stopped drawing its own. Arrows are a handful of
+// OBJ_ARROW objects created once per signal, so the cost is negligible.
+// Keep this true to see signals on an EA-driven chart; set false to restore
+// the old fully-silent behaviour.
+input bool   InpArrowsInEAMode = true;     // Draw signal arrows even when InpEAMode=true
 input int    InpArrowSize     = 2;         // Arrow size (1-5)
 input int    InpArrowOffset   = 10;        // Arrow offset (points)
 input color  InpBuyArrowColor = clrLime;   // Buy arrow color

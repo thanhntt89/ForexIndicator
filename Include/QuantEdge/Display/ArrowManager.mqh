@@ -11,7 +11,9 @@
 //+------------------------------------------------------------------+
 void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
 {
-   if(InpEAMode) return;
+   // [EAMODE-ARROW] Still draw under an EA's headless iCustom() instance
+   // unless explicitly opted out — see InpArrowsInEAMode in Config.mqh.
+   if(InpEAMode && !InpArrowsInEAMode) return;
    string name = PREFIX_ARROW + (isBuy ? "BUY_" : "SELL_")
                + IntegerToString(caseNum) + "_"
                + IntegerToString((int)barTime);
@@ -42,7 +44,9 @@ void CreateSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
 //+------------------------------------------------------------------+
 void CleanupOldArrows(datetime cutoffTime)
 {
-   if(InpEAMode) return;
+   // Must stay in step with CreateSignalArrow(): if arrows are being drawn
+   // in EA mode, they must also be pruned there, or they accumulate forever.
+   if(InpEAMode && !InpArrowsInEAMode) return;
 #ifdef __MQL5__
    int total = ObjectsTotal(0);
    for(int i = total - 1; i >= 0; i--)
@@ -64,7 +68,7 @@ void CleanupOldArrows(datetime cutoffTime)
 //+------------------------------------------------------------------+
 void DeleteArrowForSignal(datetime barTime, bool isBuy, int caseNum)
 {
-   if(InpEAMode) return;
+   if(InpEAMode && !InpArrowsInEAMode) return;
    string name = PREFIX_ARROW + (isBuy ? "BUY_" : "SELL_")
                + IntegerToString(caseNum) + "_"
                + IntegerToString((int)barTime);
