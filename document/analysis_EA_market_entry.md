@@ -351,6 +351,51 @@ prefix `QEEA_`, nên cũng không chạm `QEEA_Arr_`.
 
 ---
 
+## 3d. Quyết định: mũi tên thuộc indicator, EA không vẽ (build `.4-noeaarrow`)
+
+Theo yêu cầu: **EA chỉ nhận tín hiệu, indicator vẽ mũi tên.** Toàn bộ cơ chế vẽ mũi tên đã bị
+xóa khỏi EA (−376 dòng).
+
+**Đã xóa khỏi cả `.mq4` và `.mq5`**:
+- 5 input: `InpShowSignalArrows`, `InpArrowSize`, `InpArrowOffsetPts`, `InpBuyArrowColor`,
+  `InpSellArrowColor`
+- 3 hàm: `DrawSignalArrow()`, `RedrawSignalArrows()`, `CleanupSignalArrows()`
+- Biến `g_arrowSweepDone` + 4 điểm gọi vẽ (2 ở `OnInit`, 2 ở `OnTick`)
+
+**Thêm mới**: `QEEA_CleanupLegacyArrows()` — quét xóa object `QEEA_Arr_` do build cũ để lại, gọi
+ở cả `OnInit` và `OnDeinit`. Không có nó thì chart nâng cấp tại chỗ vẫn hiện bộ mũi tên mồ côi
+mà không còn gì quản.
+
+> Điều này cũng làm §3b và §3c thành lịch sử: cả hai đều là bug trong code EA vẽ mũi tên, mà
+> code đó giờ không còn. Giữ lại để ghi nhận bối cảnh, nhưng không còn áp dụng.
+
+### ⚠️ Việc cần indicator: `DeleteOppositeArrows()` xóa lịch sử mũi tên
+
+**Chưa sửa** — nằm trong indicator, ngoài phạm vi yêu cầu. Nhưng đây là nguyên nhân khiến chart
+chỉ hiện được rất ít mũi tên:
+
+```cpp
+// ArrowManager.mqh:75
+void DeleteOppositeArrows(bool newSignalIsBuy)
+{
+   if(InpEAMode) return;
+   string killPrefix = PREFIX_ARROW + (newSignalIsBuy ? "SELL_" : "BUY_");
+   DeleteObjectsByPrefix(killPrefix);   // xóa TOÀN BỘ mũi tên chiều đối lập
+}
+```
+
+Gọi ở `QuantEdge_RSI.mq5:591` và `:690` mỗi khi có tín hiệu mới ở 2 bar cuối. Nên mỗi tín hiệu
+BUY xóa **mọi** mũi tên SELL trên chart và ngược lại — không chỉ mũi tên gần nhất mà cả lịch sử.
+
+Trên XAUUSD M15 với 7 case đang bật, tín hiệu đổi chiều liên tục, nên chart thường chỉ giữ được
+mũi tên của chuỗi cùng chiều gần nhất.
+
+Nếu mày muốn thấy đầy đủ lịch sử mũi tên, có 2 hướng:
+- Chỉ xóa mũi tên đối lập **trong N bar gần nhất** thay vì toàn bộ prefix
+- Hoặc bỏ hẳn `DeleteOppositeArrows` — `CreateSignalArrow()` vốn đã dedup theo tên object
+
+---
+
 ## 4. Ngoài phạm vi (không sửa lần này)
 
 ### 4.1 Tham số DCA lệch với tài liệu chiến lược

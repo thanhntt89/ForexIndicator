@@ -21,7 +21,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-24.3-arrowvis"
+#define EA_BUILD_TAG "2026-09-24.4-noeaarrow"
 
 // [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
 // the EA is a separate compiled program with no shared include, so these
@@ -43,6 +43,20 @@ void QEEA_CleanupOrphanedIndicatorObjects()
    {
       string name = ObjectName(i);
       if(StringFind(name, QE_IND_PREFIX_LINE) == 0 || StringFind(name, QE_IND_PREFIX_ZONE) == 0)
+         ObjectDelete(name);
+   }
+}
+
+// [ARROW-OWNERSHIP] Older builds of this EA drew their own signal arrows
+// under this prefix. They are unmanaged now, so clear them out.
+#define QEEA_LEGACY_ARROW_PREFIX "QEEA_Arr_"
+void QEEA_CleanupLegacyArrows()
+{
+   int total = ObjectsTotal();
+   for(int i = total - 1; i >= 0; i--)
+   {
+      string name = ObjectName(i);
+      if(StringFind(name, QEEA_LEGACY_ARROW_PREFIX) == 0)
          ObjectDelete(name);
    }
 }
@@ -91,11 +105,12 @@ input string InpIndicatorName    = "QuantEdge_RSI";     // Indicator name (compi
 input bool   InpEnableAutoTrading= true;                // Enable live order placement
 input int    InpMagicNumber      = 20260805;            // Magic number for order identification
 input int    InpSlippage         = 10;                   // Max slippage (points)
-input bool   InpShowSignalArrows = true;                // Draw signal arrows on chart
-input int    InpArrowSize        = 2;                   // Arrow size (1-5)
-input int    InpArrowOffsetPts   = 10;                  // Arrow offset from price (points)
-input color  InpBuyArrowColor    = clrLime;             // Buy arrow color
-input color  InpSellArrowColor   = clrRed;              // Sell arrow color
+// [ARROW-OWNERSHIP] Signal arrows belong to the indicator, not the EA.
+// The EA consumes signals; the indicator publishes and annotates them, and
+// its CreateSignalArrow() already handles anchoring, tooltips and click-to-
+// select. Two programs drawing the same marker under different prefixes
+// only created two sets to keep in sync. Run the indicator with
+// InpEAMode=false to see its arrows.
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Decision Gates                                       |
@@ -329,20 +344,14 @@ datetime g_sigBarTime     = 0;   // Bar time of the signal itself (for RetryMaxB
 //| Once the basket closed (TP1 hit, say), ClearDCAState() released   |
 //| Gate 4, the next new bar re-read those SAME stale GVs, and the EA |
 //| re-entered the exact same signal at a price that had already run  |
-//| far away. The chart showed one arrow and two trades, because      |
-//| DrawSignalArrow() de-dupes by object name.                        |
+//| far away. The chart showed one arrow and two trades, because the   |
+//| arrow for that bar already existed and was not drawn twice.       |
 //|                                                                   |
 //| Deliberately NOT stored via SaveDCAState(): ClearDCAState() fires |
 //| precisely when the basket closes, which is exactly the moment we  |
 //| still need this memory. It gets its own GV key instead.           |
 //+------------------------------------------------------------------+
 datetime g_lastTradedSigTime = 0;
-
-// [ARROW-FIX] Whether the startup arrow sweep has actually run. OnInit often
-// fires before the indicator has calculated, so CopyBuffer/iCustom there
-// returns nothing and the sweep draws zero arrows; OnTick retries until one
-// pass sees real data.
-bool     g_arrowSweepDone = false;
 
 //+------------------------------------------------------------------+
 //| DCA state tracking                                                |
@@ -1892,6 +1901,7 @@ int OnInit()
 {
    Print("[QuantEdge EA] Build=", EA_BUILD_TAG);
    QEEA_CleanupOrphanedIndicatorObjects();
+   QEEA_CleanupLegacyArrows();
 
    double testRead = ReadBuffer(BUF_REC_LEVEL);
    if(GetLastError() == ERR_INDICATOR_CANNOT_LOAD)
@@ -1961,11 +1971,6 @@ int OnInit()
       Print("[QuantEdge EA] Last traded signal bar restored: ",
             TimeToString(g_lastTradedSigTime), " (will not be re-armed)");
 
-   // [ARROW-FIX] Rebuild the arrow history, independently of the trade-arming
-   // scan below. See RedrawSignalArrows(). May be a no-op here if the
-   // indicator has not calculated yet; OnTick retries until it succeeds.
-   g_arrowSweepDone = RedrawSignalArrows();
-
    // Scan for existing active signal on startup (within RetryMaxBars)
    if(!InpUseSignalRetry)
       Print("[QuantEdge EA] Startup: signal scan skipped — InpUseSignalRetry=false.");
@@ -2015,9 +2020,6 @@ int OnInit()
          g_lastBarTime   = iTime(Symbol(), Period(), gvShift);
          g_sigBarTime    = iTime(Symbol(), Period(), gvShift);
 
-         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), gvShift)
-                                             : iHigh(Symbol(), Period(), gvShift);
-         DrawSignalArrow(iTime(Symbol(), Period(), gvShift), arrowPrice, direction > 0, caseNum);
 
          Print("[QuantEdge EA] Startup: found active signal via GV bridge at bar[", gvShift, "] — ",
                (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
@@ -2064,9 +2066,6 @@ int OnInit()
             g_lastBarTime   = iTime(Symbol(), Period(), i);
             g_sigBarTime    = iTime(Symbol(), Period(), i);
 
-            double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), i)
-                                                : iHigh(Symbol(), Period(), i);
-            DrawSignalArrow(iTime(Symbol(), Period(), i), arrowPrice, direction > 0, caseNum);
 
             Print("[QuantEdge EA] Startup: found active signal via iCustom at bar[", i, "] — ",
                   (direction > 0 ? "BUY" : "SELL"), " Case=", caseNum,
@@ -2081,132 +2080,6 @@ int OnInit()
    }
 
    return INIT_SUCCEEDED;
-}
-
-//+------------------------------------------------------------------+
-//| Signal arrow drawing — EA draws arrows so indicator can run in    |
-//| headless iCustom mode (InpEAMode=true) without visual overhead.   |
-//+------------------------------------------------------------------+
-#define EA_ARROW_PREFIX  "QEEA_Arr_"
-
-void DrawSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
-{
-   if(!InpShowSignalArrows) return;
-
-   string name = EA_ARROW_PREFIX + (isBuy ? "B_" : "S_")
-               + IntegerToString(caseNum) + "_"
-               + IntegerToString((int)barTime);
-   if(ObjectFind(name) >= 0) return;
-
-   // [ARROW-VISIBILITY-FIX] Two things were making these invisible in
-   // practice, both inherited from when this was written:
-   //
-   // 1. No ANCHOR. Without it MT4/MT5 centres the glyph on the price, so
-   //    the arrow sits ON the candle instead of beside it. The indicator's
-   //    own CreateSignalArrow() sets ANCHOR_TOP/ANCHOR_BOTTOM for exactly
-   //    this reason; mirror it.
-   // 2. The offset was InpArrowOffsetPts * Point, i.e. 10 * 0.01 = $0.10 on
-   //    XAUUSD — invisible on a chart spanning ~$150. Scale the gap to
-   //    recent bar range so it clears the candle on any symbol, keeping
-   //    the input as a floor rather than the whole distance.
-   double offset = InpArrowOffsetPts * Point;
-   double barRange = iHigh(Symbol(), Period(), 1) - iLow(Symbol(), Period(), 1);
-   if(barRange > 0) offset = MathMax(offset, barRange * 0.5);
-
-   if(isBuy)
-   {
-      ObjectCreate(name, OBJ_ARROW, 0, barTime, price - offset);
-      ObjectSet(name, OBJPROP_ARROWCODE, 233);
-      ObjectSet(name, OBJPROP_COLOR, InpBuyArrowColor);
-      ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_TOP);
-   }
-   else
-   {
-      ObjectCreate(name, OBJ_ARROW, 0, barTime, price + offset);
-      ObjectSet(name, OBJPROP_ARROWCODE, 234);
-      ObjectSet(name, OBJPROP_COLOR, InpSellArrowColor);
-      ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
-   }
-   ObjectSet(name, OBJPROP_WIDTH, InpArrowSize);
-   ObjectSet(name, OBJPROP_SELECTABLE, false);
-   ObjectSet(name, OBJPROP_HIDDEN, false);
-}
-
-//+------------------------------------------------------------------+
-//| [ARROW-FIX] Rebuild the whole visible arrow history from the      |
-//| indicator's signal buffers.                                       |
-//|                                                                   |
-//| With InpEAMode=true the indicator suppresses its own visuals, so  |
-//| the EA owns these markers entirely. They used to be drawn only at |
-//| the points where a signal gets ARMED for trading, which is the    |
-//| wrong trigger for a chart annotation: the arming scan stops at the|
-//| first tradable signal, skips bars already traded, and is gated on |
-//| InpUseSignalRetry and on there being no open position. Any signal |
-//| that fell outside those conditions was never marked, so the chart |
-//| looked as though no signal had ever occurred there.               |
-//|                                                                   |
-//| Returns true once it has seen readable buffer data, so the caller |
-//| can retry while the indicator is still warming up. DrawSignalArrow|
-//| de-dupes by object name, so repeat passes are cheap and harmless. |
-//+------------------------------------------------------------------+
-bool RedrawSignalArrows()
-{
-   if(!InpShowSignalArrows) return true;
-
-   int scanBars = MathMax(InpRetryMaxBars, 200);
-   int avail    = iBars(Symbol(), Period()) - 1;
-   if(avail < 1) return false;
-   if(scanBars > avail) scanBars = avail;
-
-   // Readiness probe. The signal buffers hold EMPTY_VALUE on every bar
-   // WITHOUT a signal, which is indistinguishable from a failed read — so
-   // they cannot tell us whether the indicator has calculated yet. The RSI
-   // fast line carries a value on every bar, so use that as the probe and
-   // bail out (caller retries) while it is still empty.
-   if(ReadBufferAt(BUF_RSI_FAST, 1) == EMPTY_VALUE)
-      return false;
-
-   int  drawn = 0;
-
-   for(int a = 1; a <= scanBars; a++)
-   {
-      double abc = ReadBufferAt(BUF_BUY_SIGNAL, a);
-      double asc = ReadBufferAt(BUF_SELL_SIGNAL, a);
-
-      bool aHasBuy  = (abc != EMPTY_VALUE && abc > 0);
-      bool aHasSell = (asc != EMPTY_VALUE && asc > 0);
-      if(!aHasBuy && !aHasSell) continue;
-
-      int    aDir   = aHasBuy ? 1 : -1;
-      int    aCase  = (int)(aHasBuy ? abc : asc);
-      double aPrice = (aDir > 0) ? iLow(Symbol(), Period(), a)
-                                 : iHigh(Symbol(), Period(), a);
-      DrawSignalArrow(iTime(Symbol(), Period(), a), aPrice, aDir > 0, aCase);
-      drawn++;
-   }
-
-   // [ARROW-VISIBILITY-FIX] Objects created from an EA are not painted until
-   // the chart is redrawn. Unlike an indicator, an EA gets no automatic
-   // repaint after OnCalculate, so without this the arrows existed in the
-   // object list but never appeared.
-   if(drawn > 0)
-   {
-      Print("[QuantEdge EA] Redrew ", drawn, " signal arrow(s) within shift 1..", scanBars);
-      ChartRedraw();
-   }
-
-   return true;
-}
-
-void CleanupSignalArrows()
-{
-   int total = ObjectsTotal();
-   for(int i = total - 1; i >= 0; i--)
-   {
-      string name = ObjectName(i);
-      if(StringFind(name, EA_ARROW_PREFIX) == 0)
-         ObjectDelete(name);
-   }
 }
 
 //+------------------------------------------------------------------+
@@ -2864,12 +2737,6 @@ void TrackRecoveryOutcome()
 //+------------------------------------------------------------------+
 void OnTick()
 {
-   // [ARROW-FIX] OnInit usually runs before the indicator has calculated, so
-   // its arrow sweep reads nothing. Retry here until one pass sees real
-   // buffer data, then stop.
-   if(!g_arrowSweepDone)
-      g_arrowSweepDone = RedrawSignalArrows();
-
    if(InpTPMode == TP_DYNAMIC) ManageTrailing();
    ManageDCA();
    UpdateDailyLossTracking();
@@ -2955,22 +2822,6 @@ void OnTick()
       // its bar time before anything else touches g_sig*.
       datetime foundBarTime = (foundShift > 0) ? iTime(Symbol(), Period(), foundShift) : 0;
 
-      // [ARROW-FIX] Draw BEFORE the re-arm guard. The arrow is a chart
-      // annotation of "a signal happened here", independent of whether this
-      // EA may still trade it — and with InpEAMode=true the indicator draws
-      // nothing, so the EA is the only thing that can. Skipping the draw
-      // along with the re-arm made the marker disappear from the chart for
-      // every signal already traded, which is most of them.
-      if((hasBuy || hasSell) && foundShift > 0)
-      {
-         int    arrowDir = hasBuy ? 1 : -1;
-         int    arrowCase = (int)(hasBuy ? buyCase : sellCase);
-         double arrPrice = (arrowDir > 0) ? iLow(Symbol(), Period(), foundShift)
-                                          : iHigh(Symbol(), Period(), foundShift);
-         DrawSignalArrow(foundBarTime, arrPrice, arrowDir > 0, arrowCase);
-         ChartRedraw();   // EA-created objects need an explicit repaint
-      }
-
       if((hasBuy || hasSell) && IsSignalAlreadyTraded(foundBarTime))
       {
          static datetime s_lastSkipLogged = 0;
@@ -3032,10 +2883,6 @@ void OnTick()
          g_sigRiskPct    = riskPct;
          g_sigProbTP1    = probTP1;
          g_sigBarTime    = iTime(Symbol(), Period(), foundShift);
-
-         double arrowPrice = (direction > 0) ? iLow(Symbol(), Period(), foundShift)
-                                             : iHigh(Symbol(), Period(), foundShift);
-         DrawSignalArrow(iTime(Symbol(), Period(), foundShift), arrowPrice, direction > 0, caseNum);
 
          if(TryExecuteSignal(false))
             return;
@@ -3115,17 +2962,12 @@ void OnDeinit(const int reason)
       SaveDCAState();
 
    QEEA_DeletePanel();
-   // [ARROW-FIX] Only wipe drawn signal-arrow history on a real removal/
-   // recompile/close, not on REASON_CHARTCHANGE (TF switch) — the same
-   // pattern the indicator itself already uses for its own arrow prefix.
-   // Wiping unconditionally here meant every TF switch discarded the arrow
-   // history, even for signals that had already become closed trades.
-   // OnInit's arrow sweep can now rebuild the visible window from the
-   // indicator's buffers, but only as far back as those buffers reach, so
-   // keeping the drawn objects across a TF switch is still the cheaper and
-   // more complete path.
-   if(reason != REASON_CHARTCHANGE)
-      CleanupSignalArrows();
+   // [ARROW-OWNERSHIP] The EA no longer draws signal arrows — the indicator
+   // owns them. Sweep any QEEA_Arr_ objects left behind by an older build so
+   // a chart upgraded in place does not keep showing a second, now-orphaned
+   // set of markers that nothing maintains. Unconditional: these are stale
+   // whatever the deinit reason.
+   QEEA_CleanupLegacyArrows();
    GlobalVariableDel("QE_BrierMinN_"  + Symbol());
    GlobalVariableDel("QE_BrierFloor_" + Symbol());
    Print("[QuantEdge EA] Deinit, reason=", reason);
