@@ -444,6 +444,63 @@ Cả hai nền tảng dùng chung `Config.mqh` + `ArrowManager.mqh` nên không 
 
 ---
 
+## 3f. Backtest không vào lệnh nào — 2 bug (build `.6-backtest`)
+
+### Bug 1 — Gate 10 từ chối đúng entry tốt nhất (do tao gây ra ở `.1-entryqual`)
+
+Nhánh `else` tao thêm ở §A3 đúng về ý định nhưng sai về ranh giới. Điều kiện phân loại dùng
+**strict inequality cả hai phía**:
+
+```cpp
+priceBetweenSLEntry = (mktNow <  entry && mktNow > sl);
+priceBetweenEntryTP = (mktNow >  entry && mktNow < tp1);
+```
+
+Khi `mktNow == entry` **chính xác**, cả hai đều false → rơi vào nhánh `else` "ngoài dải" → bị
+từ chối.
+
+Đây **không phải** trường hợp hiếm. Indicator đặt `entry = open[i+1]` (`QuantEdge_RSI.mq5:593`)
+— tức giá mở của **chính bar mà EA đánh giá**. Ở tick đầu tiên của bar đó, `Bid`/`Ask` bằng đúng
+giá open. Nên gate từ chối đúng cái entry **tươi nhất, ít trôi nhất** — 0% drift.
+
+Trong backtest với mô hình "Open prices only" hoặc "1 minute OHLC", EA gần như **chỉ** thấy tick
+tại giá open → gate chặn gần hết. Live thì tick liên tục nên giá lệch khỏi entry ngay, che mất
+bug này.
+
+**Sửa**: đổi thành `>=` / `<=` ở nhánh TP-side để "đứng đúng entry" = drift 0%, đi qua nhánh
+TP-side và pass.
+
+### Bug 2 — `TimeGMT()` không được mô phỏng trong Strategy Tester
+
+`IsWithinSession()` (Gate 6) và `UpdateDailyLossTracking()` (Gate 7) đều dùng `TimeGMT()`.
+Nhưng tester **không mô phỏng** hàm này:
+
+| Nền tảng | `TimeGMT()` trong tester |
+|----------|--------------------------|
+| MT4 | Giờ đồng hồ PC thật — hoàn toàn không liên quan bar đang mô phỏng |
+| MT5 | Bám theo server time, không phải thời điểm của bar |
+
+Nên Gate 6 đánh giá **sai thời điểm**. Chạy backtest lúc 2 giờ sáng với session filter 07–20
+thì Gate 6 từ chối **toàn bộ** — trông y hệt "EA không bao giờ trade". Mà `InpUseSessionFilter`
+vừa được tao bật mặc định ở `.1-entryqual`, nên bug này mới lộ ra.
+
+`UpdateDailyLossTracking()` cũng tính sai mốc reset ngày/tuần/tháng vì cùng lý do.
+
+**Sửa**: `QEEA_TimeGMT()` — trong tester dùng `TimeCurrent()` (thời gian mô phỏng) trừ
+`InpTesterGMTOffset`; live giữ nguyên `TimeGMT()`. Thêm input `InpTesterGMTOffset = 0` để khai
+báo offset server→GMT của broker khi backtest (ví dụ broker EET mùa đông = 2).
+
+> Nếu backtest vẫn lệch phiên, chỉnh `InpTesterGMTOffset` cho khớp broker. `SETTINGS DUMP` giờ
+> in cả cửa sổ phiên lẫn offset để đối chiếu.
+
+### Cách xác nhận
+
+`SETTINGS DUMP` in `SessionFilter=true (7-20 GMT) TesterGMTOffset=0`. Trong log tester, gate log
+giờ phải hiện `G6:PASS` trong khung giờ và `G10:PASS` ở bar có tín hiệu. Nếu vẫn `SKIP` toàn bộ,
+đọc cột nào `FAIL` — mỗi gate có dòng `Gate N FAIL` riêng kèm số liệu.
+
+---
+
 ## 4. Ngoài phạm vi (không sửa lần này)
 
 ### 4.1 Tham số DCA lệch với tài liệu chiến lược

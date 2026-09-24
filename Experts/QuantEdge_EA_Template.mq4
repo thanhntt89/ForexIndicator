@@ -21,7 +21,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-24.5-eaarrow"
+#define EA_BUILD_TAG "2026-09-24.6-backtest"
 
 // [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
 // the EA is a separate compiled program with no shared include, so these
@@ -136,6 +136,7 @@ input double InpMinFillRR        = 0.5;                 // Min (TP1-market)/(mar
 //+------------------------------------------------------------------+
 input string inp_grp_session     = "========== Session Filter =========="; // ---
 input bool   InpUseSessionFilter = true;                // Enable session filter (Gate 6)
+input int    InpTesterGMTOffset  = 0;                   // [Backtest only] Server-time to GMT offset in hours
 input int    InpSessionStartHour = 7;                   // Session start hour (GMT)
 input int    InpSessionEndHour   = 20;                  // Session end hour (GMT)
 
@@ -850,13 +851,33 @@ void ClearDCAState()
 }
 
 //+------------------------------------------------------------------+
+//| [TESTER-GMT-FIX] GMT clock that also works in Strategy Tester.    |
+//|                                                                   |
+//| TimeGMT() is not modelled by the tester: on MT4 it returns the    |
+//| real PC wall clock, completely unrelated to the bar being         |
+//| simulated. Every gate below that asks "what hour is it" therefore |
+//| judged the WRONG moment during a backtest — run a test overnight  |
+//| with the 07-20 session filter on and Gate 6 rejected all of it,   |
+//| which looks exactly like "the EA never trades".                   |
+//|                                                                   |
+//| In the tester, fall back to modelled server time (TimeCurrent())  |
+//| shifted by InpTesterGMTOffset. Live behaviour is unchanged.       |
+//+------------------------------------------------------------------+
+datetime QEEA_TimeGMT()
+{
+   if(IsTesting())
+      return TimeCurrent() - (datetime)(InpTesterGMTOffset * 3600);
+   return TimeGMT();
+}
+
+//+------------------------------------------------------------------+
 //| Session filter: check if current GMT hour is within trade window   |
 //+------------------------------------------------------------------+
 bool IsWithinSession()
 {
    if(!InpUseSessionFilter)
       return true;
-   int hourGMT = TimeHour(TimeGMT());
+   int hourGMT = TimeHour(QEEA_TimeGMT());
    if(InpSessionStartHour <= InpSessionEndHour)
       return(hourGMT >= InpSessionStartHour && hourGMT < InpSessionEndHour);
    return(hourGMT >= InpSessionStartHour || hourGMT < InpSessionEndHour);
@@ -867,7 +888,7 @@ bool IsWithinSession()
 //+------------------------------------------------------------------+
 void UpdateDailyLossTracking()
 {
-   datetime nowGMT = TimeGMT();
+   datetime nowGMT = QEEA_TimeGMT();
    datetime today  = StringToTime(TimeToString(nowGMT, TIME_DATE));
 
    // Week start = Monday 00:00 GMT of the current week
@@ -1927,7 +1948,10 @@ int OnInit()
    Print("[QuantEdge EA] Gate11EV=", InpUseGate11EV, " MinEV=", InpMinEV,
          " Gate12FillRR=", InpUseGate12FillRR, " MinFillRR=", InpMinFillRR,
          " StructuralSLTP=", InpUseStructuralSLTP);
-   Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
+   Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter,
+         " (", InpSessionStartHour, "-", InpSessionEndHour, " GMT)",
+         " TesterGMTOffset=", InpTesterGMTOffset,
+         " DailyLossCap=", InpUseDailyLossCap);
    Print("[QuantEdge EA] TPMode=", EnumToString(InpTPMode),
          " TP1Ratio=", InpTP1LotRatio,
          " Trailing=", InpUseTrailing);
@@ -2315,15 +2339,23 @@ bool TryExecuteSignal(bool isRetry)
       bool priceBetweenSLEntry = false;
       bool priceBetweenEntryTP = false;
 
+      // [GATE10-BOUNDARY-FIX] These were strict on BOTH sides, so a market
+      // price sitting exactly ON the published entry matched neither branch.
+      // That is not a rare tie: the indicator sets entry from open[i+1], i.e.
+      // the open of the very bar the EA evaluates, so on that bar's first
+      // tick market == entry exactly and the gate fell through to the
+      // out-of-band else added above — rejecting the freshest, least-drifted
+      // entry there is. Treat "at entry" as zero drift and route it through
+      // the TP-side branch, whose driftPct then evaluates to 0%.
       if(direction > 0)
       {
          priceBetweenSLEntry = (mktNow < entry && mktNow > sl);
-         priceBetweenEntryTP = (mktNow > entry && mktNow < tp1);
+         priceBetweenEntryTP = (mktNow >= entry && mktNow < tp1);
       }
       else
       {
          priceBetweenSLEntry = (mktNow > entry && mktNow < sl);
-         priceBetweenEntryTP = (mktNow < entry && mktNow > tp1);
+         priceBetweenEntryTP = (mktNow <= entry && mktNow > tp1);
       }
 
       if(priceBetweenSLEntry)
