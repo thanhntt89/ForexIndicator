@@ -305,6 +305,52 @@ nhân lần này, nhưng comment ở đó đã lỗi thời và được cập n
 
 ---
 
+## 3c. Mũi tên vẫn không hiện — 2 bug độc lập (build `.3-arrowvis`)
+
+Sau `.2-arrowfix` mũi tên vẫn mất. Lần này **không phải** do thay đổi của branch — hai bug tồn
+tại từ commit `64946e9` (lần đầu thêm `DrawSignalArrow` vào EA), chỉ chưa ai để ý.
+
+### Bug 1 — offset sai đơn vị + thiếu ANCHOR
+
+```cpp
+double offset = InpArrowOffsetPts * _Point;   // 10 * 0.01 = $0.10 trên XAUUSD
+ObjectCreate(0, name, OBJ_ARROW, 0, barTime, price - offset);
+// không set OBJPROP_ANCHOR
+```
+
+Hai vấn đề cộng lại:
+- `_Point` trên XAUUSD = 0.01 → offset = **$0.10**. Trên chart phạm vi ~$150 thì $0.10 là 0.07%
+  chiều cao chart — mũi tên nằm ngay trên thân nến.
+- Không set `OBJPROP_ANCHOR` → MT4/MT5 mặc định `ANCHOR_CENTER`, tâm glyph đè đúng vào giá.
+
+Indicator **không** bị: `CreateSignalArrow()` (`ArrowManager.mqh:26,33`) set `ANCHOR_TOP` /
+`ANCHOR_BOTTOM` — đúng lý do này.
+
+**Sửa**: mirror anchor của indicator; offset lấy `max(InpArrowOffsetPts × Point, barRange × 0.5)`
+để tự co giãn theo symbol, giữ input làm mức sàn thay vì toàn bộ khoảng cách.
+
+### Bug 2 — không `ChartRedraw`
+
+Object tạo từ EA **không được vẽ** cho tới khi chart repaint. Indicator được repaint tự động sau
+`OnCalculate`; EA thì không. EA chỉ gọi `ChartRedraw` bên trong `QEEA_CreatePanel()` — nên mũi
+tên tồn tại trong object list nhưng không bao giờ hiện ra.
+
+**Sửa**: `ChartRedraw` sau sweep và sau mỗi lần vẽ mũi tên mới ở `OnTick`.
+
+### Lưu ý khi chart có cả indicator standalone
+
+Việc chart hiện lines (SL / Z2 / Z3 / EN / TP1) nghĩa là có một instance indicator chạy với
+`InpEAMode = false` — mọi hàm vẽ đều gated trên cờ này (`LineDrawing.mqh:28`,
+`PanelDrawing.mqh:363`). Instance đó tự vẽ `QE_Arrow_` của riêng nó, độc lập với `QEEA_Arr_` của
+EA. Hai bộ mũi tên dùng prefix khác nhau nên không xung đột, nhưng khi debug phải xác định đang
+thiếu bộ nào.
+
+`QEEA_CleanupOrphanedIndicatorObjects()` chỉ xóa `QE_Line_` / `QE_Zone_`, **không** xóa
+`QE_Arrow_` — không phải nguyên nhân. `QEEA_DeletePanel()` xóa theo tên cụ thể chứ không theo
+prefix `QEEA_`, nên cũng không chạm `QEEA_Arr_`.
+
+---
+
 ## 4. Ngoài phạm vi (không sửa lần này)
 
 ### 4.1 Tham số DCA lệch với tài liệu chiến lược

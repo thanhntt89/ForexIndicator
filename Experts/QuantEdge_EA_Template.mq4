@@ -21,7 +21,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-24.2-arrowfix"
+#define EA_BUILD_TAG "2026-09-24.3-arrowvis"
 
 // [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
 // the EA is a separate compiled program with no shared include, so these
@@ -2098,19 +2098,34 @@ void DrawSignalArrow(datetime barTime, double price, bool isBuy, int caseNum)
                + IntegerToString((int)barTime);
    if(ObjectFind(name) >= 0) return;
 
+   // [ARROW-VISIBILITY-FIX] Two things were making these invisible in
+   // practice, both inherited from when this was written:
+   //
+   // 1. No ANCHOR. Without it MT4/MT5 centres the glyph on the price, so
+   //    the arrow sits ON the candle instead of beside it. The indicator's
+   //    own CreateSignalArrow() sets ANCHOR_TOP/ANCHOR_BOTTOM for exactly
+   //    this reason; mirror it.
+   // 2. The offset was InpArrowOffsetPts * Point, i.e. 10 * 0.01 = $0.10 on
+   //    XAUUSD — invisible on a chart spanning ~$150. Scale the gap to
+   //    recent bar range so it clears the candle on any symbol, keeping
+   //    the input as a floor rather than the whole distance.
    double offset = InpArrowOffsetPts * Point;
+   double barRange = iHigh(Symbol(), Period(), 1) - iLow(Symbol(), Period(), 1);
+   if(barRange > 0) offset = MathMax(offset, barRange * 0.5);
 
    if(isBuy)
    {
       ObjectCreate(name, OBJ_ARROW, 0, barTime, price - offset);
       ObjectSet(name, OBJPROP_ARROWCODE, 233);
       ObjectSet(name, OBJPROP_COLOR, InpBuyArrowColor);
+      ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_TOP);
    }
    else
    {
       ObjectCreate(name, OBJ_ARROW, 0, barTime, price + offset);
       ObjectSet(name, OBJPROP_ARROWCODE, 234);
       ObjectSet(name, OBJPROP_COLOR, InpSellArrowColor);
+      ObjectSet(name, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
    }
    ObjectSet(name, OBJPROP_WIDTH, InpArrowSize);
    ObjectSet(name, OBJPROP_SELECTABLE, false);
@@ -2170,8 +2185,15 @@ bool RedrawSignalArrows()
       drawn++;
    }
 
+   // [ARROW-VISIBILITY-FIX] Objects created from an EA are not painted until
+   // the chart is redrawn. Unlike an indicator, an EA gets no automatic
+   // repaint after OnCalculate, so without this the arrows existed in the
+   // object list but never appeared.
    if(drawn > 0)
+   {
       Print("[QuantEdge EA] Redrew ", drawn, " signal arrow(s) within shift 1..", scanBars);
+      ChartRedraw();
+   }
 
    return true;
 }
@@ -2946,6 +2968,7 @@ void OnTick()
          double arrPrice = (arrowDir > 0) ? iLow(Symbol(), Period(), foundShift)
                                           : iHigh(Symbol(), Period(), foundShift);
          DrawSignalArrow(foundBarTime, arrPrice, arrowDir > 0, arrowCase);
+         ChartRedraw();   // EA-created objects need an explicit repaint
       }
 
       if((hasBuy || hasSell) && IsSignalAlreadyTraded(foundBarTime))
