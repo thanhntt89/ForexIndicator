@@ -272,6 +272,39 @@ lại càng tệ → gate tự chặn.
 
 ---
 
+## 3b. Hồi quy đã sửa — mất mũi tên trên chart (build `.2-arrowfix`)
+
+**Triệu chứng**: sau khi áp bản `.1-entryqual`, mũi tên tín hiệu không còn hiện trên chart, dù
+panel SL/TP/EN vẫn vẽ đúng.
+
+**Nguyên nhân**: guard chặn re-arm của A1 đặt **trước** chỗ vẽ mũi tên. Nhưng mũi tên là chú
+thích "ở đây từng có tín hiệu" — nó không liên quan tới việc EA còn được phép trade tín hiệu
+đó hay không. Với `InpEAMode = true` indicator không vẽ gì (`QuantEdge_RSI.mq5:398`), nên EA là
+thứ duy nhất vẽ được. Bỏ luôn việc vẽ cùng với việc chặn re-arm khiến mọi tín hiệu đã trade
+biến mất khỏi chart — tức gần như toàn bộ.
+
+Vấn đề sâu hơn: việc vẽ **vốn đã** gắn sai chỗ từ trước. Nó nằm tại các điểm arm tín hiệu, mà
+các điểm đó bị chi phối bởi những điều kiện không liên quan gì tới hiển thị:
+- `OnInit` scan bị bỏ qua khi `InpUseSignalRetry = false` hoặc khi đã có position
+- Scan dừng ở tín hiệu đầu tiên còn trade được (`break`)
+- Cửa sổ quét chỉ `InpRetryMaxBars` — mà lần này tao giảm 5 → 2
+
+**Giải pháp**: tách thành `RedrawSignalArrows()` chạy độc lập:
+- Quét `max(InpRetryMaxBars, 200)` bar, không dừng ở tín hiệu đầu
+- Gọi vô điều kiện ở `OnInit` (không phụ thuộc retry/position)
+- Vẽ ở `OnTick` **trước** guard re-arm
+- Retry mỗi tick tới khi indicator tính xong (`g_arrowSweepDone`)
+
+**Chi tiết dễ sai**: probe readiness phải dùng buffer 0 (`BufferGreen`, RSI fast line) chứ
+không dùng signal buffer. Signal buffer trả `EMPTY_VALUE` ở mọi bar **không có tín hiệu** —
+không phân biệt được với đọc lỗi, nên 200 bar im lặng sẽ khiến sweep retry mãi mỗi tick.
+Contract ghi rõ buffer 0 có giá trị "Every bar" (`12_EA_EXPORT_CONTRACT.md:33`).
+
+`OnDeinit` đã có guard `reason != REASON_CHARTCHANGE` từ commit `95b9516` — không phải nguyên
+nhân lần này, nhưng comment ở đó đã lỗi thời và được cập nhật.
+
+---
+
 ## 4. Ngoài phạm vi (không sửa lần này)
 
 ### 4.1 Tham số DCA lệch với tài liệu chiến lược
