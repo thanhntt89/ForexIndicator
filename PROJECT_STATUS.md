@@ -24,6 +24,55 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 
 ## 3. Changelog Các Phiên Gần Nhất
 
+### V12.3 — EA Market-Entry Quality (2026-09-24)
+
+**Bối cảnh**: Tín hiệu indicator chạy đúng nhưng một số lệnh market của EA mở ở vị trí vô lý so
+với entry công bố. Truy vết `QuantEdge_RSI.mq5:585-640` → `PublishSignalToGV` → EA `OnTick` →
+`TryExecuteSignal` cho thấy **7 lỗi logic trong EA**, không phải vấn đề tham số. Phân tích đầy
+đủ: `document/analysis_EA_market_entry.md`.
+
+**Chỉ sửa EA** (`Experts/QuantEdge_EA_Template.mq4/.mq5`). Indicator và `Include/` không đổi.
+Build tag mới: `2026-09-24.1-entryqual`.
+
+**7 bug đã sửa**:
+
+| ID | Vấn đề | Cách sửa |
+|----|--------|----------|
+| A1 | GV bridge không bao giờ bị xóa sau khi vào lệnh + EA không nhớ tín hiệu đã trade → sau khi basket đóng ở TP1, bar sau đọc lại GV cũ và **vào lại cùng tín hiệu** ở giá đã chạy xa (chart hiện 1 mũi tên, 2 lệnh) | `g_lastTradedSigTime` + GV riêng `QE_LastSig_<sym>_<magic>`; chặn arm ở 3 điểm. **Không** lưu trong `SaveDCAState()` vì `ClearDCAState()` xóa đúng lúc còn cần nhớ |
+| A2 | `IsSignalStillValid()` set `g_sigTP1Hit` rồi vẫn `return true`; cờ chỉ đọc trong Gate 10 vốn mặc định OFF → vào lệnh sau khi giá đã đi hết Entry→TP1 | Invalidate luôn, độc lập Gate 10. Input `InpInvalidateOnTP1` |
+| A3 | Gate 10 thiếu nhánh `else` → giá vượt TP1/thủng SL thì cả 2 nhánh false, `g10_pass` giữ `true`. Gate chặn entry xa lại không chặn ca xa nhất. Phụ: `probSL = 100 − probTP1` sai khái niệm | Thêm `else { g10_pass = false; }`; đọc `BUF_PROB_SL` (14) thật |
+| A4 | `ReadBuffer()` hardcode shift=1 nhưng indicator chỉ ghi prob buffer tại bar của signal → khi signal ở shift ≥ 2 (đúng lúc retry) gate staleness **bị bỏ qua hoàn toàn** | Helper `ReadSignalBuffer()` giải shift từ `g_sigBarTime` |
+| A5 | `priceShift` dịch cả khối SL/TP theo giá → SL rời khỏi swing cấu trúc. Phụ: BUY đo từ Ask còn entry bid-based → mọi lệnh BUY bị cộng nguyên spread vào SL | Giữ SL/TP cấu trúc tuyệt đối; lot tính từ `\|market − adjSL\|`. Vào muộn → SL xa hơn → lot nhỏ hơn → R thật khớp R sổ sách. Input `InpUseStructuralSLTP` để rollback |
+| A6 | Order bị broker từ chối vẫn chạy tiếp xuống init DCA state, `g_dcaActive = true`, `return true` → EA tin là có basket dù không có position nào; Gate 4 chặn mọi tín hiệu mới | `anyLegFilled`; `return false` nếu không leg nào fill |
+| A7 | Gate 9 đọc GV mà indicator chỉ publish khi `InpUseEconCalendar` bật — vốn mặc định OFF → gate im lặng không làm gì | Cảnh báo ở `OnInit` khi Gate 9 bật mà GV vắng |
+
+**3 gate chất lượng mới**:
+
+- **Gate 5 mở rộng** — thêm spread tương đối `InpMaxSpreadPctOfTP1 = 8.0`. TP1 ≈ ATR×0.8 ≈ $6.4
+  trên M15 XAU, spread rollover $0.30–0.80 = 5–12% target. Tự co giãn theo ATR.
+- **Gate 11 (EV)** — indicator tính EV rồi EA chỉ `Print`. Nay chặn khi `ev < InpMinEV` (0.0).
+- **Gate 12 (fill R:R)** — đi kèm A5: `\|TP1 − market\| / \|market − SL\| < InpMinFillRR` (0.5).
+  Hàng rào chính chống "vào muộn", đo trực tiếp payoff còn lại thay vì đoán ngưỡng khoảng cách.
+
+**Đổi default** (chart đang chạy giữ set trong `.chr`; chỉ chart attach mới ăn default mới):
+
+| Input | Cũ | Mới |
+|-------|-----|-----|
+| `InpMinRecLevel` | `REC_ANY` (tắt Gate 1 → vào cả AVOID/COUNTER_TREND) | `REC_CAUTION_ENTRY` |
+| `InpUseGate5Spread` / `InpMaxSpreadPoints` | `false` / `0` | `true` / `40` |
+| `InpUseGate10PriceLoc` / `InpPriceLocMaxPct` | `false` / `50` | `true` / `25` |
+| `InpRetryMaxBars` | `5` (75 phút M15) | `2` (30 phút) |
+| `InpUseSessionFilter` | `false` | `true` |
+| `InpUseRecoveryMode` | `true` | `false` |
+
+**Ngoài phạm vi** (ghi nhận, chưa sửa): `InpNegDCAMaxOrders=10` / `InpNegDCAMaxDDPct=15.0` lệch
+với `DCA_Scalping_Strategy.md` §5.2 (khuyến nghị 3 / 5%); positive DCA là dead code trên M15
+(§5.1); EA chưa dùng Entry Zone system của indicator (`SLTP.mqh:1213`) — luôn ăn Z1 Market có
+EV thấp nhất, cần pending order để với tới zone pullback.
+
+**Chưa compile** — user tự build và xác minh theo mục 6 của `document/analysis_EA_market_entry.md`.
+
+
 ### V12.0 — XGBoost Probability Integration (2026-07-07)
 
 **Boi canh**: User muon tich hop XGBoost de tinh xac suat tin hieu, chay song song voi pipeline

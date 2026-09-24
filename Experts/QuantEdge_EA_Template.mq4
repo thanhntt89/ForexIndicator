@@ -21,7 +21,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-10.1-scanback"
+#define EA_BUILD_TAG "2026-09-24.1-entryqual"
 
 // [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
 // the EA is a separate compiled program with no shared include, so these
@@ -57,6 +57,7 @@ void QEEA_CleanupOrphanedIndicatorObjects()
 #define BUF_TP1              9
 #define BUF_TP2              10
 #define BUF_PROB_TP1         11
+#define BUF_PROB_SL          14
 #define BUF_PROB_SAMPLES     15
 #define BUF_PROB_DECAYED_TP1 16
 #define BUF_PROB_SURVIVAL    17
@@ -100,20 +101,25 @@ input color  InpSellArrowColor   = clrRed;              // Sell arrow color
 //+------------------------------------------------------------------+
 input string inp_grp_gates       = "========== Decision Gates =========="; // ---
 input bool   InpUseGate1RecLevel = true;                // Enable Gate 1: Recommendation Level check
-input ENUM_REC_LEVEL InpMinRecLevel = REC_ANY;           // Min recommendation level (worst allowed)
+input ENUM_REC_LEVEL InpMinRecLevel = REC_CAUTION_ENTRY;  // Min recommendation level (worst allowed)
 input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
 input bool   InpUseGate2Confidence = true;              // Enable Gate 2: Confidence check
 input int    InpMinConfidence    = 50;                  // Min confidence score (0-100)
 input bool   InpUseGate3Staleness  = true;              // Enable Gate 3: Staleness check
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
-input bool   InpUseGate5Spread     = false;             // Enable Gate 5: Spread check (also requires InpMaxSpreadPoints > 0)
-input int    InpMaxSpreadPoints  = 0;                   // Max spread (points, 0=no check)
+input bool   InpUseGate5Spread     = true;              // Enable Gate 5: Spread check (absolute and/or % of TP1)
+input int    InpMaxSpreadPoints  = 40;                  // Max spread (points, 0=no absolute check)
+input double InpMaxSpreadPctOfTP1 = 8.0;                // Max spread as % of Entry->TP1 distance (0=no check)
+input bool   InpUseGate11EV      = true;                // Enable Gate 11: Expected Value check
+input double InpMinEV            = 0.0;                 // Min EV in R-multiples (signal rejected below this)
+input bool   InpUseGate12FillRR  = true;                // Enable Gate 12: remaining R:R at fill price
+input double InpMinFillRR        = 0.5;                 // Min (TP1-market)/(market-SL) required to fill
 
 //+------------------------------------------------------------------+
 //| INPUT GROUP: Session Filter                                        |
 //+------------------------------------------------------------------+
 input string inp_grp_session     = "========== Session Filter =========="; // ---
-input bool   InpUseSessionFilter = false;               // Enable session filter (Gate 6)
+input bool   InpUseSessionFilter = true;                // Enable session filter (Gate 6)
 input int    InpSessionStartHour = 7;                   // Session start hour (GMT)
 input int    InpSessionEndHour   = 20;                  // Session end hour (GMT)
 
@@ -138,13 +144,14 @@ input double InpMaxMonthlyDDPct  = 15.0;                // Max monthly loss % of
 //+------------------------------------------------------------------+
 input string inp_grp_retry        = "========== Signal Retry =========="; // ---
 input bool   InpUseSignalRetry    = true;               // Retry cached signal every tick while still valid
-input int    InpRetryMaxBars      = 5;                  // Max bars to keep retrying after signal appeared
+input int    InpRetryMaxBars      = 2;                  // Max bars to keep retrying after signal appeared
+input bool   InpInvalidateOnTP1   = true;               // Drop the cached signal once price has reached TP1
 
 input string inp_grp_priceloc     = "========== Price Location Gate (10) =========="; // ---
-input bool   InpUseGate10PriceLoc  = false;             // Enable Gate 10: Price Location filter (master switch)
-input bool   InpUsePriceLocSLSide  = true;              // Case 1: Allow entry when price between SL-Entry (probSL<50%, within 50%)
-input bool   InpUsePriceLocTPSide  = true;              // Case 2: Allow entry when price between Entry-TP1 (probSL<50%, within 50%)
-input double InpPriceLocMaxPct     = 50.0;              // Max % distance from reference edge (0-100)
+input bool   InpUseGate10PriceLoc  = true;              // Enable Gate 10: Price Location filter (master switch)
+input bool   InpUsePriceLocSLSide  = true;              // Case 1: Allow entry when price between SL-Entry (probSL<max, within max%)
+input bool   InpUsePriceLocTPSide  = true;              // Case 2: Allow entry when price between Entry-TP1 (probSL<max, within max%)
+input double InpPriceLocMaxPct     = 25.0;              // Max % distance from reference edge (0-100)
 input double InpPriceLocMaxProbSL  = 50.0;              // Max prob SL % allowed (0-100)
 
 input string inp_grp_advgates    = "========== Advanced Gates =========="; // ---
@@ -167,6 +174,7 @@ enum ENUM_TP_MODE
 //+------------------------------------------------------------------+
 input string inp_grp_mgmt        = "========== Trade Management =========="; // ---
 input ENUM_TP_MODE InpTPMode     = TP_DEFAULT;           // TP Mode: Default(TP1) / TP2 / TP3 / Dynamic(split+trail)
+input bool   InpUseStructuralSLTP = true;               // Keep SL/TP at the indicator's structural prices (false=shift with market)
 input double InpTP1LotRatio      = 0.6;                 // [Dynamic] TP1 leg lot ratio (0.1-0.9)
 input bool   InpUseTrailing      = true;                // [Dynamic] Enable ATR trailing stop on TP2 leg
 input double InpTrailATRMult     = 1.5;                 // Trailing distance = ATR × this multiplier
@@ -210,7 +218,7 @@ input double InpMinLotSize       = 0.03;                // Min lot size
 //| INPUT GROUP: Recovery Mode                                         |
 //+------------------------------------------------------------------+
 input string inp_grp_recovery    = "========== Recovery Mode =========="; // ---
-input bool   InpUseRecoveryMode  = true;                 // Enable Recovery Mode (boost lot after DCA cutloss)
+input bool   InpUseRecoveryMode  = false;                // Enable Recovery Mode (boost lot after DCA cutloss)
 input double InpRecoveryLotMult  = 1.3;                  // Lot multiplier during recovery (1.1-2.0)
 input int    InpRecoveryMaxTrades= 5;                    // Max trades in recovery mode before auto-off
 input int    InpRecoveryMaxConsLoss = 2;                  // Max consecutive losses in recovery — auto-off (circuit breaker)
@@ -313,6 +321,23 @@ bool     g_sigSLHit       = false;
 datetime g_sigBarTime     = 0;   // Bar time of the signal itself (for RetryMaxBars expiry)
 
 //+------------------------------------------------------------------+
+//| [REARM-FIX] Bar time of the last signal we actually FILLED.       |
+//|                                                                   |
+//| The indicator's GV bridge is only cleared in its OnDeinit, so a   |
+//| signal's GVs sit there indefinitely after the EA has traded it.   |
+//| Once the basket closed (TP1 hit, say), ClearDCAState() released   |
+//| Gate 4, the next new bar re-read those SAME stale GVs, and the EA |
+//| re-entered the exact same signal at a price that had already run  |
+//| far away. The chart showed one arrow and two trades, because      |
+//| DrawSignalArrow() de-dupes by object name.                        |
+//|                                                                   |
+//| Deliberately NOT stored via SaveDCAState(): ClearDCAState() fires |
+//| precisely when the basket closes, which is exactly the moment we  |
+//| still need this memory. It gets its own GV key instead.           |
+//+------------------------------------------------------------------+
+datetime g_lastTradedSigTime = 0;
+
+//+------------------------------------------------------------------+
 //| DCA state tracking                                                |
 //+------------------------------------------------------------------+
 bool     g_dcaActive          = false;   // Is DCA state tracking active
@@ -348,6 +373,29 @@ double ReadBufferAt(int bufferIndex, int shift)
                   Ind_BBPeriod, Ind_BBDeviation, PRICE_CLOSE,
                   Ind_EAMode,
                   bufferIndex, shift);
+}
+
+//+------------------------------------------------------------------+
+//| [GATE3-FIX] Read a buffer AT THE CACHED SIGNAL'S OWN BAR.         |
+//|                                                                   |
+//| The probability/recommendation buffers are written ONLY on the    |
+//| signal's bar — every other bar holds EMPTY_VALUE. ReadBuffer()    |
+//| hardcodes shift=1, so once the signal is two or more bars back    |
+//| (exactly the retry window Gate 3 exists to police) it read an     |
+//| empty slot, the "!= EMPTY_VALUE" guard went false, and the gate   |
+//| silently passed every time. Resolve the shift from the signal's   |
+//| own bar time instead. The indicator refreshes these buffers at    |
+//| the signal bar on each redraw, so this returns the CURRENT        |
+//| decayed values, not a snapshot from when the signal formed.       |
+//+------------------------------------------------------------------+
+double ReadSignalBuffer(int bufferIndex)
+{
+   if(g_sigBarTime == 0)
+      return ReadBuffer(bufferIndex);
+   int shift = iBarShift(Symbol(), Period(), g_sigBarTime, false);
+   if(shift < 0)
+      return EMPTY_VALUE;
+   return ReadBufferAt(bufferIndex, shift);
 }
 
 //+------------------------------------------------------------------+
@@ -687,6 +735,36 @@ double NegDCALotRatio(int index)
       case 2:  return 0.50;
       default: return 0.25;
    }
+}
+
+//+------------------------------------------------------------------+
+//| [REARM-FIX] Persistence for the last-traded signal bar time.      |
+//| Separate GV key from the DCA block — see g_lastTradedSigTime.     |
+//+------------------------------------------------------------------+
+string LastSigGVName()
+{
+   return "QE_LastSig_" + Symbol() + "_" + IntegerToString(InpMagicNumber);
+}
+
+void SaveLastTradedSigTime()
+{
+   GlobalVariableSet(LastSigGVName(), (double)g_lastTradedSigTime);
+}
+
+void LoadLastTradedSigTime()
+{
+   string nm = LastSigGVName();
+   if(GlobalVariableCheck(nm))
+      g_lastTradedSigTime = (datetime)GlobalVariableGet(nm);
+}
+
+//+------------------------------------------------------------------+
+//| True when this signal bar has already produced a filled order.    |
+//| Checked at every point where a signal gets armed.                 |
+//+------------------------------------------------------------------+
+bool IsSignalAlreadyTraded(datetime sigBarTime)
+{
+   return (g_lastTradedSigTime != 0 && sigBarTime == g_lastTradedSigTime);
 }
 
 //+------------------------------------------------------------------+
@@ -1823,10 +1901,15 @@ int OnInit()
    Print("[QuantEdge EA] AutoTrading=", InpEnableAutoTrading, " Magic=", InpMagicNumber);
    Print("[QuantEdge EA] MinRecLevel=", InpMinRecLevel, " AllowCaution=", InpAllowCaution,
          " MinConfidence=", InpMinConfidence, " MaxSurvivalFloor=", InpMaxSurvivalFloor,
-         " MaxSpread=", InpMaxSpreadPoints);
-   Print("[QuantEdge EA] SignalRetry=", InpUseSignalRetry, " RetryMaxBars=", InpRetryMaxBars);
-   Print("[QuantEdge EA] PriceLocSLSide=", InpUsePriceLocSLSide, " PriceLocTPSide=", InpUsePriceLocTPSide,
+         " MaxSpread=", InpMaxSpreadPoints, " MaxSpreadPctOfTP1=", InpMaxSpreadPctOfTP1);
+   Print("[QuantEdge EA] SignalRetry=", InpUseSignalRetry, " RetryMaxBars=", InpRetryMaxBars,
+         " InvalidateOnTP1=", InpInvalidateOnTP1);
+   Print("[QuantEdge EA] Gate10=", InpUseGate10PriceLoc,
+         " PriceLocSLSide=", InpUsePriceLocSLSide, " PriceLocTPSide=", InpUsePriceLocTPSide,
          " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
+   Print("[QuantEdge EA] Gate11EV=", InpUseGate11EV, " MinEV=", InpMinEV,
+         " Gate12FillRR=", InpUseGate12FillRR, " MinFillRR=", InpMinFillRR,
+         " StructuralSLTP=", InpUseStructuralSLTP);
    Print("[QuantEdge EA] SessionFilter=", InpUseSessionFilter, " DailyLossCap=", InpUseDailyLossCap);
    Print("[QuantEdge EA] TPMode=", EnumToString(InpTPMode),
          " TP1Ratio=", InpTP1LotRatio,
@@ -1843,6 +1926,16 @@ int OnInit()
    else
       Print("[QuantEdge EA] LIVE MODE — auto-trading enabled.");
 
+   // [GATE9-WARN] Gate 9 reads a GlobalVariable that the INDICATOR only
+   // publishes when its own InpUseEconCalendar is on — and that input ships
+   // off (Config.mqh). With the GV absent the EA's GlobalVariableCheck fails
+   // and g9_pass stays true, so enabling the gate here alone silently does
+   // nothing while looking like active protection. Say so once at startup.
+   if(InpUseEconCalGate && !GlobalVariableCheck("QE_EconBlackout_" + Symbol()))
+      Print("[QuantEdge EA] *** WARNING: Gate 9 enabled but GV 'QE_EconBlackout_",
+            Symbol(), "' is missing — the gate will pass everything. ",
+            "Enable InpUseEconCalendar on the indicator to make it effective. ***");
+
    QEEA_LoadPanelPosition();
    QEEA_CreatePanel();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
@@ -1856,6 +1949,10 @@ int OnInit()
             " TP1=", DoubleToString(g_dcaOriginalTP1, Digits));
 
    LoadRecoveryState();
+   LoadLastTradedSigTime();
+   if(g_lastTradedSigTime != 0)
+      Print("[QuantEdge EA] Last traded signal bar restored: ",
+            TimeToString(g_lastTradedSigTime), " (will not be re-armed)");
 
    // Scan for existing active signal on startup (within RetryMaxBars)
    if(!InpUseSignalRetry)
@@ -1878,7 +1975,8 @@ int OnInit()
       if(!IsTesting() &&
          ReadSignalFromGV(buyCase, sellCase, gvShift,
                           gvEntry, gvSL, gvTP1, gvTP2, gvTP3,
-                          gvRecLv, gvConf, gvEV, gvRisk, gvProbTP1))
+                          gvRecLv, gvConf, gvEV, gvRisk, gvProbTP1) &&
+         !IsSignalAlreadyTraded(iTime(Symbol(), Period(), gvShift)))
       {
          foundAtStartup = true;
          bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
@@ -1924,6 +2022,9 @@ int OnInit()
             bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
             bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
             if(!hasBuy && !hasSell) continue;
+            // [REARM-FIX] Skip a bar we have already traded — keep scanning
+            // back in case an older, untraded signal is still in the window.
+            if(IsSignalAlreadyTraded(iTime(Symbol(), Period(), i))) continue;
             foundAtStartup = true;
 
             double recLevel   = ReadBufferAt(BUF_REC_LEVEL, i);
@@ -2037,21 +2138,33 @@ bool IsSignalStillValid()
       return false;
    }
 
-   // Track TP1 hit — doesn't invalidate signal but blocks TP-side entry
+   // [TP1-FIX] Track TP1 hit. This used to only raise a flag and still
+   // return true — and the flag was read ONLY inside Gate 10, which ships
+   // disabled. The net effect was that a signal whose whole Entry->TP1 move
+   // had already played out stayed eligible, so the EA entered at market
+   // right as the momentum was spent, then pushed TP1 further out again.
+   // Invalidate outright instead; the flag is kept for Gate 10's logging.
    if(!g_sigTP1Hit && g_sigTP1 > 0)
    {
       bool tp1Hit = (g_sigDirection > 0) ? (mktNow >= g_sigTP1) : (mktNow <= g_sigTP1);
       if(tp1Hit)
       {
+         g_sigTP1Hit = true;
+         if(InpInvalidateOnTP1)
+         {
+            Print("[QuantEdge EA] Retry: signal invalidated — TP1 reached (",
+                  DoubleToString(g_sigTP1, Digits), ") before entry");
+            g_sigValid = false;
+            return false;
+         }
          Print("[QuantEdge EA] Retry: TP1 reached (",
                DoubleToString(g_sigTP1, Digits), ") — TP-side entry disabled");
-         g_sigTP1Hit = true;
       }
    }
 
    if(InpUseGate3Staleness)
    {
-      double survival = ReadBuffer(BUF_PROB_SURVIVAL);
+      double survival = ReadSignalBuffer(BUF_PROB_SURVIVAL);
       if(survival != EMPTY_VALUE && survival < InpMaxSurvivalFloor)
       {
          Print("[QuantEdge EA] Retry: signal invalidated — survival expired (",
@@ -2148,8 +2261,9 @@ bool TryExecuteSignal(bool isRetry)
    bool g2_pass = !InpUseGate2Confidence || ((int)MathRound(confidence) >= InpMinConfidence);
 
    // --- Gate 3: Staleness (re-read live survival for retry) ---
+   // [GATE3-FIX] Read at the signal's own bar — see ReadSignalBuffer().
    bool g3_pass = true;
-   double survival = ReadBuffer(BUF_PROB_SURVIVAL);
+   double survival = ReadSignalBuffer(BUF_PROB_SURVIVAL);
    if(InpUseGate3Staleness && survival != EMPTY_VALUE && survival < InpMaxSurvivalFloor)
       g3_pass = false;
 
@@ -2160,13 +2274,37 @@ bool TryExecuteSignal(bool isRetry)
             (g_dcaDirection > 0 ? "BUY" : "SELL"),
             ") — waiting for basket to close before accepting new signal.");
 
-   // --- Gate 5: Spread ---
+   // --- Gate 5: Spread (absolute points and/or % of the TP1 target) ---
+   // A fixed point cap says nothing about whether the spread is affordable:
+   // on M15 XAUUSD TP1 is roughly ATR*0.8 (~$6.4), so a $0.30-$0.80 rollover
+   // spread eats 5-12% of the target before slippage. The percentage check
+   // scales itself with ATR, so it does not need re-tuning per volatility
+   // regime the way the absolute cap does.
    bool g5_pass = true;
-   if(InpUseGate5Spread && InpMaxSpreadPoints > 0)
+   if(InpUseGate5Spread)
    {
-      double spread = MarketInfo(Symbol(), MODE_SPREAD);
-      if(spread > InpMaxSpreadPoints)
+      double spreadPts = MarketInfo(Symbol(), MODE_SPREAD);
+
+      if(InpMaxSpreadPoints > 0 && spreadPts > InpMaxSpreadPoints)
+      {
          g5_pass = false;
+         if(!isRetry)
+            Print("[QuantEdge EA] Gate 5 FAIL (absolute): spread=", DoubleToString(spreadPts, 0),
+                  " pts > ", InpMaxSpreadPoints, " pts");
+      }
+
+      double tp1DistG5 = MathAbs(tp1 - entry);
+      if(g5_pass && InpMaxSpreadPctOfTP1 > 0 && tp1DistG5 > 0)
+      {
+         double spreadPct = (spreadPts * Point) / tp1DistG5 * 100.0;
+         if(spreadPct > InpMaxSpreadPctOfTP1)
+         {
+            g5_pass = false;
+            if(!isRetry)
+               Print("[QuantEdge EA] Gate 5 FAIL (relative): spread=", DoubleToString(spreadPct, 1),
+                     "% of Entry->TP1 > ", DoubleToString(InpMaxSpreadPctOfTP1, 1), "%");
+         }
+      }
    }
 
    // --- Gate 6: Session Filter ---
@@ -2198,7 +2336,13 @@ bool TryExecuteSignal(bool isRetry)
    if(InpUseGate10PriceLoc)
    {
       double mktNow   = (direction > 0) ? Ask : Bid;
-      double probSL   = (probTP1 != EMPTY_VALUE) ? (100.0 - probTP1) : 100.0;
+      // [PROBSL-FIX] Read the indicator's own P(SL) instead of deriving it as
+      // 100 - P(TP1). Those are not complements: price can drift between the
+      // two levels and expire without touching either, so the old expression
+      // systematically overstated the SL risk and mis-scored this gate.
+      double probSLBuf = ReadSignalBuffer(BUF_PROB_SL);
+      double probSL   = (probSLBuf != EMPTY_VALUE && probSLBuf >= 0) ? probSLBuf
+                        : ((probTP1 != EMPTY_VALUE) ? (100.0 - probTP1) : 100.0);
       double distES   = MathAbs(entry - sl);
       double distET   = MathAbs(tp1 - entry);
 
@@ -2252,18 +2396,126 @@ bool TryExecuteSignal(bool isRetry)
                Print("[QuantEdge EA] Gate 10 FAIL: TP1 was already hit — TP-side entry disabled");
          }
       }
+      else
+      {
+         // [GATE10-FIX] Price is OUTSIDE the SL..TP1 band entirely — it has
+         // either blown through SL or run past TP1. Both branches above are
+         // false there, and without this else the gate kept its initial
+         // "pass", so the one filter meant to reject distant entries let
+         // through the most distant case of all.
+         g10_pass = false;
+         if(!isRetry)
+            Print("[QuantEdge EA] Gate 10 FAIL (outside SL-TP1 band): market=",
+                  DoubleToString(mktNow, Digits),
+                  " SL=", DoubleToString(sl, Digits),
+                  " Entry=", DoubleToString(entry, Digits),
+                  " TP1=", DoubleToString(tp1, Digits));
+      }
    }
 
-   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass && g7_pass && g8_pass && g9_pass && g10_pass;
+   // --- Gate 11: Expected Value ---
+   // The indicator computes EV per signal and the EA used to merely print it.
+   // Strict '<' so an EV of exactly 0 coming from the buffer-fallback path
+   // (see the buffersIncomplete block in OnTick) is not rejected as if the
+   // indicator had actually scored it at zero.
+   bool g11_pass = true;
+   if(InpUseGate11EV && ev != EMPTY_VALUE && ev < InpMinEV)
+   {
+      g11_pass = false;
+      if(!isRetry)
+         Print("[QuantEdge EA] Gate 11 FAIL: EV=", DoubleToString(ev, 2),
+               "R < min ", DoubleToString(InpMinEV, 2), "R");
+   }
+
+   //--- Resolve the SL/TP prices we would actually send ----------------
+   // [SLTP-STRUCT-FIX] Hoisted above the gate aggregation because Gate 12
+   // scores the R:R that remains at the real fill price, which needs the
+   // final SL.
+   //
+   // The old code shifted the whole SL/TP block by (market - entry) so the
+   // R distance stayed constant. But SL is not an arbitrary offset: it comes
+   // from an actual swing level (SLTP.mqh CalculateSLTP_*). Sliding it along
+   // with price lifts it off that structure, and after a few bars of retry
+   // the stop sits inside ordinary noise instead of below the swing that
+   // justified it. That shift also carried a systematic bias — BUY measured
+   // from Ask while the published entry is bid-based, so every BUY had a
+   // full spread added to its stop distance and none of the SELLs did.
+   //
+   // Keep the structural prices and let the lot size absorb the drift
+   // instead: entering later means a wider stop, hence a smaller position,
+   // so the risk actually taken matches the risk on paper.
+   double marketPrice = (direction > 0) ? Ask : Bid;
+
+   double adjSL, adjTP1, adjTP2, adjTP3;
+   if(InpUseStructuralSLTP)
+   {
+      adjSL  = NormalizeDouble(sl, Digits);
+      adjTP1 = NormalizeDouble(tp1, Digits);
+      adjTP2 = (tp2 != EMPTY_VALUE && tp2 > 0) ? NormalizeDouble(tp2, Digits) : 0;
+      adjTP3 = (tp3 != EMPTY_VALUE && tp3 > 0) ? NormalizeDouble(tp3, Digits) : 0;
+   }
+   else
+   {
+      double priceShift = marketPrice - entry;
+      adjSL  = NormalizeDouble(sl  + priceShift, Digits);
+      adjTP1 = NormalizeDouble(tp1 + priceShift, Digits);
+      adjTP2 = (tp2 != EMPTY_VALUE && tp2 > 0)
+               ? NormalizeDouble(tp2 + priceShift, Digits) : 0;
+      adjTP3 = (tp3 != EMPTY_VALUE && tp3 > 0)
+               ? NormalizeDouble(tp3 + priceShift, Digits) : 0;
+   }
+
+   double stoplevel = MarketInfo(Symbol(), MODE_STOPLEVEL) * Point;
+   if(direction > 0)
+   {
+      if(adjSL >= Bid - stoplevel)  adjSL  = NormalizeDouble(Bid - stoplevel - Point, Digits);
+      if(adjTP1 <= Ask + stoplevel) adjTP1 = NormalizeDouble(Ask + stoplevel + Point, Digits);
+      if(adjTP2 > 0 && adjTP2 <= Ask + stoplevel) adjTP2 = NormalizeDouble(Ask + stoplevel + Point, Digits);
+      if(adjTP3 > 0 && adjTP3 <= Ask + stoplevel) adjTP3 = NormalizeDouble(Ask + stoplevel + Point, Digits);
+   }
+   else
+   {
+      if(adjSL <= Ask + stoplevel)  adjSL  = NormalizeDouble(Ask + stoplevel + Point, Digits);
+      if(adjTP1 >= Bid - stoplevel) adjTP1 = NormalizeDouble(Bid - stoplevel - Point, Digits);
+      if(adjTP2 > 0 && adjTP2 >= Bid - stoplevel) adjTP2 = NormalizeDouble(Bid - stoplevel - Point, Digits);
+      if(adjTP3 > 0 && adjTP3 >= Bid - stoplevel) adjTP3 = NormalizeDouble(Bid - stoplevel - Point, Digits);
+   }
+
+   // --- Gate 12: remaining R:R at the fill price ---
+   // The companion to keeping SL structural. Drifting away from the signal
+   // shrinks the reward still on the table while the risk stays put, so
+   // measure the payoff that is actually left rather than guessing at a
+   // distance threshold.
+   bool g12_pass = true;
+   double fillRR = 0;
+   if(InpUseGate12FillRR)
+   {
+      double riskLeft   = MathAbs(marketPrice - adjSL);
+      double rewardLeft = MathAbs(adjTP1 - marketPrice);
+      fillRR = (riskLeft > 0) ? (rewardLeft / riskLeft) : 0;
+      if(riskLeft <= 0 || fillRR < InpMinFillRR)
+      {
+         g12_pass = false;
+         if(!isRetry)
+            Print("[QuantEdge EA] Gate 12 FAIL: remaining R:R=", DoubleToString(fillRR, 2),
+                  " < min ", DoubleToString(InpMinFillRR, 2),
+                  " (market=", DoubleToString(marketPrice, Digits),
+                  " SL=", DoubleToString(adjSL, Digits),
+                  " TP1=", DoubleToString(adjTP1, Digits), ")");
+      }
+   }
+
+   bool allPass = g1_pass && g2_pass && g3_pass && g4_pass && g5_pass && g6_pass
+                  && g7_pass && g8_pass && g9_pass && g10_pass && g11_pass && g12_pass;
 
    string dirStr  = (direction > 0) ? "BUY" : "SELL";
 
    {
-      string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s G10:%s",
+      string gateStr = StringFormat("G1:%s G2:%s G3:%s G4:%s G5:%s G6:%s G7:%s G8:%s G9:%s G10:%s G11:%s G12:%s",
          g1_pass?"PASS":"FAIL", g2_pass?"PASS":"FAIL", g3_pass?"PASS":"FAIL",
          g4_pass?"PASS":"FAIL", g5_pass?"PASS":"FAIL", g6_pass?"PASS":"FAIL",
          g7_pass?"PASS":"FAIL", g8_pass?"PASS":"FAIL", g9_pass?"PASS":"FAIL",
-         g10_pass?"PASS":"FAIL");
+         g10_pass?"PASS":"FAIL", g11_pass?"PASS":"FAIL", g12_pass?"PASS":"FAIL");
 
       // [GATE-LOG-FIX] A signal picked up via the tick-level retry path (e.g.
       // right after OnInit's startup rescan on EA reload/TF switch) is
@@ -2295,15 +2547,20 @@ bool TryExecuteSignal(bool isRetry)
    if(effectiveRisk <= 0 && InpDefaultRiskPct > 0)
       effectiveRisk = InpDefaultRiskPct;
 
-   double slDistance = MathAbs(entry - sl) / Point;
+   // [SLTP-STRUCT-FIX] Size off the distance we are ACTUALLY exposed to —
+   // fill price to the final stop — not the signal's original entry-to-SL
+   // span. With a structural stop those two diverge as soon as price drifts,
+   // and using the stale span would silently inflate the real risk on every
+   // late entry.
+   double slDistance = MathAbs(marketPrice - adjSL) / Point;
    double lot = CalculateLotFromRisk(effectiveRisk, slDistance);
    if(lot <= 0)
    {
       Print("[QuantEdge EA] Lot calculation returned 0 — cannot trade.",
             " effectiveRisk=", DoubleToString(effectiveRisk, 2),
             "% slDist=", DoubleToString(slDistance, 1),
-            " entry=", DoubleToString(entry, _Digits),
-            " sl=", DoubleToString(sl, _Digits),
+            " market=", DoubleToString(marketPrice, Digits),
+            " adjSL=", DoubleToString(adjSL, Digits),
             " tickVal=", DoubleToString(MarketInfo(Symbol(), MODE_TICKVALUE), 4),
             " balance=", DoubleToString(AccountBalance(), 2));
       return false;
@@ -2321,10 +2578,13 @@ bool TryExecuteSignal(bool isRetry)
                          (InpTPMode == TP_USE_TP2)  ? "TP2" :
                          (InpTPMode == TP_USE_TP3)  ? "TP3" : "Default";
       Print("[QuantEdge EA] Would ", dirStr, " ", DoubleToString(lot, 2), " lot [", tpModeStr, "] @ ",
-            DoubleToString(entry, Digits), " SL=", DoubleToString(sl, Digits),
-            " TP1=", DoubleToString(tp1, Digits),
-            " TP2=", DoubleToString(tp2, Digits),
-            " TP3=", DoubleToString(tp3, Digits),
+            DoubleToString(marketPrice, Digits),
+            " SL=", DoubleToString(adjSL, Digits),
+            " TP1=", DoubleToString(adjTP1, Digits),
+            " TP2=", DoubleToString(adjTP2, Digits),
+            " TP3=", DoubleToString(adjTP3, Digits),
+            " slDist=", DoubleToString(slDistance, 0), "pts",
+            " fillRR=", DoubleToString(fillRR, 2),
             " — auto-trading OFF.");
       return false;
    }
@@ -2333,37 +2593,20 @@ bool TryExecuteSignal(bool isRetry)
       Print("[QuantEdge EA] RETRY fill: cached signal Case=", caseNum, " ", dirStr,
             " gates now PASS — placing order.");
 
-   // --- Adjust SL/TP relative to current market price ---
-   double marketPrice = (direction > 0) ? Ask : Bid;
-   double priceShift  = marketPrice - entry;
-   double adjSL  = NormalizeDouble(sl  + priceShift, Digits);
-   double adjTP1 = NormalizeDouble(tp1 + priceShift, Digits);
-   double adjTP2 = (tp2 != EMPTY_VALUE && tp2 > 0)
-                   ? NormalizeDouble(tp2 + priceShift, Digits) : 0;
-   double adjTP3 = (tp3 != EMPTY_VALUE && tp3 > 0)
-                   ? NormalizeDouble(tp3 + priceShift, Digits) : 0;
-
-   double stoplevel = MarketInfo(Symbol(), MODE_STOPLEVEL) * Point;
-   if(direction > 0)
-   {
-      if(adjSL >= Bid - stoplevel)  adjSL  = NormalizeDouble(Bid - stoplevel - Point, Digits);
-      if(adjTP1 <= Ask + stoplevel) adjTP1 = NormalizeDouble(Ask + stoplevel + Point, Digits);
-      if(adjTP2 > 0 && adjTP2 <= Ask + stoplevel) adjTP2 = NormalizeDouble(Ask + stoplevel + Point, Digits);
-      if(adjTP3 > 0 && adjTP3 <= Ask + stoplevel) adjTP3 = NormalizeDouble(Ask + stoplevel + Point, Digits);
-   }
-   else
-   {
-      if(adjSL <= Ask + stoplevel)  adjSL  = NormalizeDouble(Ask + stoplevel + Point, Digits);
-      if(adjTP1 >= Bid - stoplevel) adjTP1 = NormalizeDouble(Bid - stoplevel - Point, Digits);
-      if(adjTP2 > 0 && adjTP2 >= Bid - stoplevel) adjTP2 = NormalizeDouble(Bid - stoplevel - Point, Digits);
-      if(adjTP3 > 0 && adjTP3 >= Bid - stoplevel) adjTP3 = NormalizeDouble(Bid - stoplevel - Point, Digits);
-   }
-
    bool   dcaGateActive = (InpUsePositiveDCA || InpUseNegativeDCA);
    double sendSL = dcaGateActive ? 0.0 : adjSL;
 
    // --- Place order(s) based on TP Mode ---
    string comment1 = StringFormat("QE C%d %s", caseNum, RecLevelName(recLevelInt));
+
+   // [FILL-FIX] Track whether any leg actually made it to the broker. The
+   // code below used to fall straight through to the DCA-state block after
+   // merely PRINTING a rejection, so a refused order still set
+   // g_dcaActive=true and returned true. The EA then believed it held a
+   // basket that did not exist: Gate 4 blocked every subsequent signal,
+   // ApplyDCABackstopSL() worked against phantom state, and the signal was
+   // marked consumed even though nothing was ever opened.
+   bool anyLegFilled = false;
 
    if(InpTPMode == TP_DYNAMIC)
    {
@@ -2393,10 +2636,12 @@ bool TryExecuteSignal(bool isRetry)
          }
 
          if(t1 < 0) Print("[QuantEdge EA] TP1 OrderSend failed: error ", GetLastError());
-         else       Print("[QuantEdge EA] TP1 placed: ticket=", t1, " ", dirStr, " ", DoubleToString(lot1, 2), " lot");
+         else     { Print("[QuantEdge EA] TP1 placed: ticket=", t1, " ", dirStr, " ", DoubleToString(lot1, 2), " lot");
+                    anyLegFilled = true; }
 
          if(t2 < 0) Print("[QuantEdge EA] TP2 OrderSend failed: error ", GetLastError());
-         else       Print("[QuantEdge EA] TP2 placed: ticket=", t2, " ", dirStr, " ", DoubleToString(lot2, 2), " lot (trailing)");
+         else     { Print("[QuantEdge EA] TP2 placed: ticket=", t2, " ", dirStr, " ", DoubleToString(lot2, 2), " lot (trailing)");
+                    anyLegFilled = true; }
       }
       else
       {
@@ -2409,8 +2654,11 @@ bool TryExecuteSignal(bool isRetry)
          if(ticket < 0)
             Print("[QuantEdge EA] OrderSend failed: error ", GetLastError());
          else
+         {
             Print("[QuantEdge EA] Order placed: ticket=", ticket, " ", dirStr, " ", DoubleToString(lot, 2),
                   " lot @ ", DoubleToString((direction > 0 ? Ask : Bid), Digits));
+            anyLegFilled = true;
+         }
       }
    }
    else
@@ -2432,9 +2680,21 @@ bool TryExecuteSignal(bool isRetry)
       if(ticket < 0)
          Print("[QuantEdge EA] OrderSend failed: error ", GetLastError());
       else
+      {
          Print("[QuantEdge EA] Order placed [", tpLabel, "]: ticket=", ticket, " ", dirStr, " ", DoubleToString(lot, 2),
                " lot @ ", DoubleToString((direction > 0 ? Ask : Bid), Digits),
                " TP=", DoubleToString(selectedTP, Digits));
+         anyLegFilled = true;
+      }
+   }
+
+   // [FILL-FIX] Nothing reached the broker — leave every bit of state alone
+   // (no DCA basket, signal NOT consumed) so the retry path can try again on
+   // the next tick instead of the signal vanishing into a phantom basket.
+   if(!anyLegFilled)
+   {
+      Print("[QuantEdge EA] No leg filled — DCA state not initialized, signal kept for retry.");
+      return false;
    }
 
    // --- Initialize DCA state after successful order placement ---
@@ -2465,6 +2725,11 @@ bool TryExecuteSignal(bool isRetry)
       Print("[QuantEdge EA] Recovery trade #", g_recoveryTradeCount,
             "/", InpRecoveryMaxTrades, " lot=", DoubleToString(lot, 2));
    }
+
+   // [REARM-FIX] Remember which signal bar this fill came from, so the stale
+   // GV bridge cannot re-arm the very same signal once the basket closes.
+   g_lastTradedSigTime = g_sigBarTime;
+   SaveLastTradedSigTime();
 
    g_sigValid = false;
    return true;
@@ -2585,6 +2850,24 @@ void OnTick()
       bool hasBuy  = (buyCase  != EMPTY_VALUE && buyCase  > 0);
       bool hasSell = (sellCase != EMPTY_VALUE && sellCase > 0);
 
+      // [REARM-FIX] The indicator's GVs outlive the trade they describe, so a
+      // signal we already filled would be re-detected here every new bar and
+      // re-entered as soon as Gate 4 freed up (basket closed). Reject it on
+      // its bar time before anything else touches g_sig*.
+      datetime foundBarTime = (foundShift > 0) ? iTime(Symbol(), Period(), foundShift) : 0;
+      if((hasBuy || hasSell) && IsSignalAlreadyTraded(foundBarTime))
+      {
+         static datetime s_lastSkipLogged = 0;
+         if(s_lastSkipLogged != foundBarTime)
+         {
+            s_lastSkipLogged = foundBarTime;
+            Print("[QuantEdge EA] Signal at shift=", foundShift,
+                  " already traded — skip re-arm (bar=", TimeToString(foundBarTime), ")");
+         }
+         hasBuy  = false;
+         hasSell = false;
+      }
+
       if(hasBuy || hasSell)
       {
          int    direction = hasBuy ? 1 : -1;
@@ -2668,18 +2951,20 @@ void OnTick()
          }
       }
 
-      // Re-read buffers if they were initially empty/fallback
+      // Re-read buffers if they were initially empty/fallback.
+      // [GATE3-FIX] At the signal's own bar, not a hardcoded shift=1 — these
+      // buffers only ever carry data there.
       if(g_sigRecLevel == (double)REC_WAIT && g_sigConfidence == 0 && g_sigEV == 0)
       {
-         double rl = ReadBuffer(BUF_REC_LEVEL);
-         double cf = ReadBuffer(BUF_REC_CONFIDENCE);
+         double rl = ReadSignalBuffer(BUF_REC_LEVEL);
+         double cf = ReadSignalBuffer(BUF_REC_CONFIDENCE);
          if(rl != EMPTY_VALUE && cf != EMPTY_VALUE)
          {
             g_sigRecLevel   = rl;
             g_sigConfidence = cf;
-            double ev2 = ReadBuffer(BUF_REC_EV);
-            double rk2 = ReadBuffer(BUF_REC_RISK);
-            double pt2 = ReadBuffer(BUF_PROB_TP1);
+            double ev2 = ReadSignalBuffer(BUF_REC_EV);
+            double rk2 = ReadSignalBuffer(BUF_REC_RISK);
+            double pt2 = ReadSignalBuffer(BUF_PROB_TP1);
             if(ev2 != EMPTY_VALUE) g_sigEV      = ev2;
             if(rk2 != EMPTY_VALUE) g_sigRiskPct  = rk2;
             if(pt2 != EMPTY_VALUE) g_sigProbTP1  = pt2;
@@ -2688,11 +2973,11 @@ void OnTick()
       // Re-read entry/sl/tp if they were fallback values
       if(g_sigSL == 0 || g_sigTP1 == 0)
       {
-         double en2 = ReadBuffer(BUF_ENTRY);
-         double sl3 = ReadBuffer(BUF_SL);
-         double t12 = ReadBuffer(BUF_TP1);
-         double t22 = ReadBuffer(BUF_TP2);
-         double t32 = ReadBuffer(BUF_TP3);
+         double en2 = ReadSignalBuffer(BUF_ENTRY);
+         double sl3 = ReadSignalBuffer(BUF_SL);
+         double t12 = ReadSignalBuffer(BUF_TP1);
+         double t22 = ReadSignalBuffer(BUF_TP2);
+         double t32 = ReadSignalBuffer(BUF_TP3);
          if(en2 != EMPTY_VALUE && en2 > 0) g_sigEntry = en2;
          if(sl3 != EMPTY_VALUE && sl3 > 0) g_sigSL    = sl3;
          if(t12 != EMPTY_VALUE && t12 > 0) g_sigTP1   = t12;

@@ -6,6 +6,39 @@
 
 ---
 
+## 0. Phiên 2026-09-24 — EA Market-Entry Quality
+
+**Phạm vi**: chỉ `Experts/QuantEdge_EA_Template.mq4` + `.mq5`. Không đụng indicator hay `Include/`.
+Build tag: `2026-09-24.1-entryqual`.
+
+**Tài liệu**: `document/analysis_EA_market_entry.md` — 7 bug, giải pháp, bảng default, kiểm chứng.
+
+| File | Thay đổi |
+|------|----------|
+| `QuantEdge_EA_Template.mq5` | A1–A7 + Gate 5 mở rộng/11/12 + đổi default (xong) |
+| `QuantEdge_EA_Template.mq4` | Mirror toàn bộ (xong) — `Digits`/`Point`/`MarketInfo`/`OrderSend` thay `_Digits`/`_Point`/`SymbolInfo*`/`CTrade` |
+| `PROJECT_STATUS.md` | Changelog V12.3 |
+
+**Bug nghiêm trọng nhất (A1)**: GV bridge của indicator chỉ bị xóa ở `OnDeinit`, và EA không lưu
+tín hiệu nào đã trade. Sau khi basket đóng ở TP1, `ClearDCAState()` giải phóng Gate 4, bar tiếp
+theo đọc lại đúng GV cũ → vào lại cùng tín hiệu ở giá đã chạy xa. `DrawSignalArrow()` dedup theo
+tên object nên chart chỉ hiện 1 mũi tên — không nhìn ra được.
+
+**Khác biệt nền tảng đã xử lý khi mirror**:
+- `IsTesting()` (MT4) vs `MQLInfoInteger(MQL_TESTER)` (MT5)
+- `OrderSend()` trả ticket `int` (thành công khi `>= 0`) vs `CTrade::Buy()` trả `bool`
+- `MarketInfo(MODE_STOPLEVEL/MODE_SPREAD)` vs `SymbolInfoInteger(SYMBOL_TRADE_STOPS_LEVEL/SYMBOL_SPREAD)`
+- mq4 không có `EnsurePositionTP()`/`AutoFixMissingTP()` — MT4 gửi TP thẳng trong `OrderSend`
+- `ReadBuffer(BUF_REC_LEVEL)` ở `OnInit` mq4 là health-check `ERR_INDICATOR_CANNOT_LOAD`, **giữ
+  nguyên** không đổi sang `ReadSignalBuffer()` (chạy trước khi có signal)
+
+**Lưu ý**: `priceShift` còn 5 lần xuất hiện ở mỗi file — nằm trong nhánh rollback
+`else` của `if(InpUseStructuralSLTP)`, không phải sót.
+
+**Chưa compile** — user tự build.
+
+---
+
 ## 1. Kiến trúc tổng quan
 
 ### Cấu trúc file chính
