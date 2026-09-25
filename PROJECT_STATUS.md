@@ -24,6 +24,26 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 
 ## 3. Changelog Các Phiên Gần Nhất
 
+### V12.4 — Backtest ≠ Live: point scale + opposite-close buffer (2026-09-25)
+
+**Build**: `2026-09-25.2-ptscale` (mq4 + mq5). Phân tích đầy đủ: `document/backtest_review_2024.md` §10.
+
+**Phát hiện**: tester chạy vàng 3 chữ số, live 2 chữ số → mọi input tính bằng point lệch 10×.
+Backtest 2024 đặt DCA cách $1.50, live cách $15; PosDCA (31% lợi nhuận backtest) gần như chết
+trên live. Toàn bộ số liệu backtest trước đó mô tả một EA khác với EA live.
+
+**Code**:
+- `[POINT-SCALE]` `InitPointScale()` / `ScaledPts()`: `InpDCAMinSpacingPts`, `InpMaxSpreadPoints`,
+  `InpSlippage`, `InpNegDCABEOffsetPip`, sàn TP 100 pt → tính theo point 2 chữ số, tự ×10 trên
+  feed 3/5 chữ số. **Live 2 chữ số không đổi hành vi.**
+- `[OPPCLOSE-FIX]` `OppositeCloseMinProfit()`: tín hiệu ngược chỉ đóng basket khi lời > 1 spread
+  × volume basket (trước đây `> 0` → live đóng âm −$0.54 do trượt giá giữa các lệnh đóng).
+
+**Tool**: `tools/dca_counterfactual.py` (replay basket với DCA giới hạn), `tools/make_presets.py`
+→ `presets/W1_baseline.set`, `presets/W2_S1B.set`.
+
+**Chưa làm**: default input **không đổi** — S1–S3 chưa qua W2. Chờ user chạy W1/W2.
+
 ### V12.3 — EA Market-Entry Quality (2026-09-24)
 
 **Bối cảnh**: Tín hiệu indicator chạy đúng nhưng một số lệnh market của EA mở ở vị trí vô lý so
