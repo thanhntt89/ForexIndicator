@@ -20,7 +20,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-25.1-coldstart"
+#define EA_BUILD_TAG "2026-09-25.2-ptscale"
 
 #include <Trade/Trade.mqh>
 
@@ -113,7 +113,7 @@ input string inp_grp_ea          = "========== EA Settings =========="; // ---
 input string InpIndicatorName    = "QuantEdge_RSI";     // Indicator name (compiled .ex5)
 input bool   InpEnableAutoTrading= true;                // Enable live order placement
 input ulong  InpMagicNumber      = 20260805;            // Magic number for order identification
-input ulong  InpSlippage         = 10;                  // Max slippage (points)
+input ulong  InpSlippage         = 10;                  // Max slippage (2-digit gold points, auto x10 on 3/5-digit feeds)
 // [ARROW-OWNERSHIP] Signal arrows belong to the indicator, not the EA.
 // The EA consumes signals; the indicator publishes and annotates them, and
 // its CreateSignalArrow() already handles anchoring, tooltips and click-to-
@@ -134,7 +134,7 @@ input int    InpMinConfidence    = 50;                  // Min confidence score 
 input bool   InpUseGate3Staleness  = true;              // Enable Gate 3: Staleness check
 input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
 input bool   InpUseGate5Spread     = true;              // Enable Gate 5: Spread check (absolute and/or % of TP1)
-input int    InpMaxSpreadPoints  = 40;                  // Max spread (points, 0=no absolute check)
+input int    InpMaxSpreadPoints  = 40;                  // Max spread (2-digit points, auto x10 on 3/5-digit; 0=no absolute check)
 input double InpMaxSpreadPctOfTP1 = 8.0;                // Max spread as % of Entry->TP1 distance (0=no check)
 input bool   InpUseGate11EV      = true;                // Enable Gate 11: Expected Value check
 input double InpMinEV            = 0.0;                 // Min EV in R-multiples (signal rejected below this)
@@ -215,7 +215,7 @@ input double InpNegDCAMaxDDPct    = 15.0;                // Hard drawdown cap (%
 input bool   InpNegDCABEClose     = true;                // Close negative DCA basket when price returns to avg entry (breakeven)
 input double InpNegDCABEOffsetPip = 5.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
 input double InpDCAProfitLockR    = 1.0;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
-input double InpDCAMinSpacingPts = 1500;                 // Min distance between DCA orders (points, 500=$5 XAUUSD)
+input double InpDCAMinSpacingPts = 1500;                 // Min distance between DCA orders (2-digit points: 1500=$15 XAUUSD on any feed)
 input int    InpDCAMinIntervalMin= 5;                   // Min time between DCA orders (minutes, 0=no check)
 input bool   InpUseDCABackstopSL  = false;               // Broker-side SL safety net for DCA basket (protects if EA goes offline) — opt-in
 input double InpDCABackstopBufferMult = 1.3;             // Backstop distance = DD-cap distance × this (wider than EA's own tick-cap so it doesn't fire under normal operation)
@@ -296,6 +296,14 @@ input bool   InpShowClosePanel   = true;                // Show close-order pane
 int      g_hIndicator = INVALID_HANDLE;
 int      g_hATR       = INVALID_HANDLE;
 datetime g_lastBarTime = 0;
+
+// [POINT-SCALE] Every *Pts / *Points input is written in 2-digit gold points
+// ($0.01). A 3-digit feed (common in tester data) makes _Point 10x smaller,
+// so the same input silently meant 1/10 of the dollar distance there -- the
+// 2024 backtest spaced DCA legs $1.50 apart while live spaced them $15.
+// Scale = 10 on 3/5-digit symbols, 1 on 2/4-digit ones.
+int      g_ptScale     = 1;
+ulong    g_slippagePts = 10;
 CTrade   g_trade;
 CTrade   g_tradeTP2;
 CTrade   g_tradeTP3;
@@ -689,6 +697,40 @@ double CalculateBasketAvgEntry(double &totalLotOut)
    totalLotOut = totalLots;
    if(totalLots <= 0) return 0;
    return weightedPrice / totalLots;
+}
+
+//+------------------------------------------------------------------+
+//| [POINT-SCALE] See g_ptScale.                                      |
+//+------------------------------------------------------------------+
+void InitPointScale()
+{
+   g_ptScale     = (_Digits == 3 || _Digits == 5) ? 10 : 1;
+   g_slippagePts = InpSlippage * (ulong)g_ptScale;
+}
+
+double ScaledPts(double pts)
+{
+   return pts * g_ptScale;
+}
+
+//+------------------------------------------------------------------+
+//| [OPPCLOSE-FIX] Profit a basket must show before an opposite       |
+//| signal may close it. The legs are closed one PositionClose() at a |
+//| time, so price keeps moving between the P/L check and the last    |
+//| fill; a bare "P/L > 0" went live as a -$0.54 close on a 3-leg     |
+//| basket that read +$2 at check time. One current spread across the |
+//| whole basket volume is the cost of that drift, in account money.  |
+//+------------------------------------------------------------------+
+double OppositeCloseMinProfit()
+{
+   double totalLot = 0;
+   CalculateBasketAvgEntry(totalLot);
+   double tickVal  = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_VALUE);
+   double tickSize = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_SIZE);
+   if(totalLot <= 0 || tickVal <= 0 || tickSize <= 0)
+      return 0;
+   double spreadPrice = SymbolInfoInteger(Symbol(), SYMBOL_SPREAD) * _Point;
+   return (spreadPrice / tickSize) * tickVal * totalLot;
 }
 
 //+------------------------------------------------------------------+
@@ -1110,7 +1152,7 @@ void AutoFixMissingTP()
       return;
 
    CTrade fixTrade;
-   fixTrade.SetDeviationInPoints(InpSlippage);
+   fixTrade.SetDeviationInPoints(g_slippagePts);
    SetTradeFillingMode(fixTrade);
 
    for(int i = PositionsTotal() - 1; i >= 0; i--)
@@ -1150,7 +1192,7 @@ bool IsDCASpacingOK(double currentPrice)
 {
    if(InpDCAMinSpacingPts <= 0)
       return true;
-   double minDist = InpDCAMinSpacingPts * _Point;
+   double minDist = ScaledPts(InpDCAMinSpacingPts) * _Point;
    for(int i = PositionsTotal() - 1; i >= 0; i--)
    {
       ulong ticket = PositionGetTicket(i);
@@ -1322,7 +1364,7 @@ void ManagePositiveDCA()
 
       CTrade dcaTrade;
       dcaTrade.SetExpertMagicNumber(dcaMagic);
-      dcaTrade.SetDeviationInPoints(InpSlippage);
+      dcaTrade.SetDeviationInPoints(g_slippagePts);
       SetTradeFillingMode(dcaTrade);
 
       bool result = (g_dcaDirection > 0)
@@ -1502,8 +1544,8 @@ void ManageNegativeDCA()
       if(avgEntry > 0)
       {
          double beTarget = (g_dcaDirection > 0)
-                           ? avgEntry + InpNegDCABEOffsetPip * _Point * 10
-                           : avgEntry - InpNegDCABEOffsetPip * _Point * 10;
+                           ? avgEntry + ScaledPts(InpNegDCABEOffsetPip * 10) * _Point
+                           : avgEntry - ScaledPts(InpNegDCABEOffsetPip * 10) * _Point;
          bool atBreakeven = (g_dcaDirection > 0) ? (bid >= beTarget) : (ask <= beTarget);
          if(atBreakeven)
          {
@@ -1584,7 +1626,7 @@ void ManageNegativeDCA()
 
       CTrade dcaTrade;
       dcaTrade.SetExpertMagicNumber(dcaMagic);
-      dcaTrade.SetDeviationInPoints(InpSlippage);
+      dcaTrade.SetDeviationInPoints(g_slippagePts);
       SetTradeFillingMode(dcaTrade);
 
       bool result = (g_dcaDirection > 0)
@@ -2059,6 +2101,11 @@ void ClosePositionsByCriteria(int criteria, bool confirm = true)
 int OnInit()
 {
    Print("[QuantEdge EA] Build=", EA_BUILD_TAG);
+   InitPointScale();
+   Print("[QuantEdge EA] Digits=", _Digits, " Point=", DoubleToString(_Point, _Digits),
+         " -> *Pts inputs scaled x", g_ptScale,
+         " (DCA spacing=", DoubleToString(ScaledPts(InpDCAMinSpacingPts) * _Point, 2),
+         " price units, slippage=", g_slippagePts, " pts)");
    QEEA_CleanupOrphanedIndicatorObjects();
    QEEA_CleanupLegacyArrows();
 
@@ -2075,13 +2122,13 @@ int OnInit()
    }
 
    g_trade.SetExpertMagicNumber(InpMagicNumber);
-   g_trade.SetDeviationInPoints(InpSlippage);
+   g_trade.SetDeviationInPoints(g_slippagePts);
    SetTradeFillingMode(g_trade);
    g_tradeTP2.SetExpertMagicNumber(InpMagicNumber + MAGIC_TP2_OFFSET);
-   g_tradeTP2.SetDeviationInPoints(InpSlippage);
+   g_tradeTP2.SetDeviationInPoints(g_slippagePts);
    SetTradeFillingMode(g_tradeTP2);
    g_tradeTP3.SetExpertMagicNumber(InpMagicNumber + MAGIC_TP3_OFFSET);
-   g_tradeTP3.SetDeviationInPoints(InpSlippage);
+   g_tradeTP3.SetDeviationInPoints(g_slippagePts);
    SetTradeFillingMode(g_tradeTP3);
 
    g_hATR = iATR(Symbol(), Period(), InpTrailATRPeriod);
@@ -2369,25 +2416,28 @@ bool TryExecuteSignal(bool isRetry)
    if(!isRetry && g_dcaActive && direction != g_dcaDirection)
    {
       double basketPnL = CalculateBasketPnL();
-      if(basketPnL > 0)
+      double minProfit = OppositeCloseMinProfit();
+      if(basketPnL > minProfit)
       {
          Print("[QuantEdge EA] Opposite-direction signal (new=", (direction > 0 ? "BUY" : "SELL"),
                ", basket=", (g_dcaDirection > 0 ? "BUY" : "SELL"), "), basket P/L=",
-               DoubleToString(basketPnL, 2), " > 0. CLOSING ENTIRE BASKET.");
+               DoubleToString(basketPnL, 2), " > min ", DoubleToString(minProfit, 2),
+               ". CLOSING ENTIRE BASKET.");
          CloseEntireBasket();
          ClearDCAState();
       }
       else
       {
          Print("[QuantEdge EA] Opposite-direction signal ignored — basket P/L=",
-               DoubleToString(basketPnL, 2), " <= 0, keeping basket open.");
+               DoubleToString(basketPnL, 2), " <= min ", DoubleToString(minProfit, 2),
+               " (one spread on basket volume), keeping basket open.");
       }
    }
 
    // --- Validate signal data (reject garbage from indicator buffers) ---
    {
       long   stopLevelPts = SymbolInfoInteger(Symbol(), SYMBOL_TRADE_STOPS_LEVEL);
-      double minTPDist = MathMax(stopLevelPts * _Point, 100 * _Point);
+      double minTPDist = MathMax(stopLevelPts * _Point, ScaledPts(100) * _Point);
 
       bool tpInvalid = (tp1 <= 0)
                      || (MathAbs(tp1 - entry) < minTPDist)
@@ -2477,12 +2527,13 @@ bool TryExecuteSignal(bool isRetry)
    {
       double spreadPts = (double)SymbolInfoInteger(Symbol(), SYMBOL_SPREAD);
 
-      if(InpMaxSpreadPoints > 0 && spreadPts > InpMaxSpreadPoints)
+      double maxSpreadPts = ScaledPts(InpMaxSpreadPoints);
+      if(InpMaxSpreadPoints > 0 && spreadPts > maxSpreadPts)
       {
          g5_pass = false;
          if(!isRetry)
             Print("[QuantEdge EA] Gate 5 FAIL (absolute): spread=", DoubleToString(spreadPts, 0),
-                  " pts > ", InpMaxSpreadPoints, " pts");
+                  " pts > ", DoubleToString(maxSpreadPts, 0), " pts");
       }
 
       double tp1Dist = MathAbs(tp1 - entry);
