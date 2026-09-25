@@ -501,6 +501,86 @@ giờ phải hiện `G6:PASS` trong khung giờ và `G10:PASS` ở bar có tín 
 
 ---
 
+## 3g. Backtest vẫn 0 lệnh — Gate 1 toán học không thể pass (build `.1-coldstart`)
+
+Sau `.6-backtest` vẫn không có lệnh nào. Lần này tao **tính ra bằng số** thay vì đoán, và kết
+quả là Gate 1 **về mặt toán học không thể pass** trong backtest — lỗi do tao đổi default ở
+`.1-entryqual`.
+
+### Cấu trúc điểm của `GetTradeRecommendation()`
+
+`Normalize.mqh:770` cộng 6 thành phần:
+
+| Thành phần | Thang | Cần gì |
+|-----------|-------|--------|
+| `evScore` | 0–50 | EV (luôn có) |
+| `dataScore` | 0–25 | **`probSamples > 0`** — tức outcome đã resolve |
+| `mtfScore` | 0–5 | MTF data |
+| `interScore` | 0–10 | **DXY/EURUSD feed** |
+| `wfScore` | −10..+5 | Walk-forward history |
+| `spreadPenalty` | −7..0 | — |
+
+Backtest mới chạy: `probSamples = 0` → `dataScore = 0` (mất 25 điểm), intermarket thường không
+có → `interScore = 0` (mất 10 điểm). Trần điểm còn **`evScore + 5 = 55`**.
+
+### Ngưỡng CAUTION = 35 điểm, nhưng M15 không bao giờ với tới
+
+M15 profile: `SL = ATR×1.0`, `TP1 = ATR×0.8` → `rr = 0.8`. Tính ngược:
+
+| win rate | EV | evScore | total (best case) | level |
+|----------|-----|---------|-------------------|-------|
+| 45% | −0.19R | 1 | 6 | AVOID |
+| 50% | −0.10R | 7 | 12 | AVOID |
+| 55% | −0.01R | 14 | 19 | WAIT |
+| 60% | +0.08R | 20 | 25 | WAIT |
+| **65%** | +0.17R | 26 | **31** | **WAIT** |
+
+**Không win rate nào đạt nổi 35.** Kể cả 65% — cao hơn nhiều so với thực tế — vẫn chỉ ra `WAIT`.
+
+Tao đổi `InpMinRecLevel` từ `REC_ANY` → `REC_CAUTION_ENTRY` ở `.1-entryqual`. Trên live có lịch
+sử thì `dataScore` bù vào nên vẫn qua được; backtest sạch thì **chặn 100%**.
+
+Với `rr = 1.0` cần win ≥ 65%; `rr = 1.23` cần win ≥ 55%. Nên ngay cả TF khác cũng rất chật.
+
+### Sửa: nới sàn Gate 1 khi chưa có dữ liệu
+
+Thêm `InpRecLevelMinSamples = 20`. Khi `BUF_PROB_SAMPLES < 20` (hoặc `EMPTY_VALUE`), sàn Gate 1
+tự hạ xuống `REC_WAIT` và in log nêu rõ lý do. Gate 11 (EV) lúc đó là thứ lọc chất lượng thật —
+nó đo đúng cái cần đo và **không cần lịch sử**.
+
+Khi tích đủ 20 sample resolved, sàn tự quay lại `InpMinRecLevel` mà không phải chỉnh gì.
+
+### Bug đi kèm — tester kế thừa GlobalVariable của terminal
+
+MT4/MT5 Strategy Tester **kế thừa GV từ terminal thật**. Một chart live chạy EA này sẽ rò state
+sang mọi backtest:
+
+- `g_lastTradedSigTime` được khôi phục → guard A1 chặn re-arm bar lịch sử
+- `g_dcaActive = true` → **Gate 4 từ chối mọi tín hiệu** với lý do "basket đang mở"
+- Recovery state làm lệch lot sizing
+
+Không thứ nào thuộc về run đang mô phỏng. Đã thêm reset sạch ở đầu `OnInit` khi ở tester.
+
+### Kiểm chứng
+
+`SETTINGS DUMP` giờ in `RecLevelMinSamples=20`. Trong log tester phải thấy:
+
+```
+[QuantEdge EA] Tester: cleared inherited DCA / recovery / last-signal state.
+[QuantEdge EA] Gate 1: cold start (samples=0 < 20) — floor relaxed to WAIT; Gate 11 (EV) screens quality.
+```
+
+Rồi `G1:PASS`. Nếu vẫn `SKIP`, đọc cột nào `FAIL` — mỗi gate có dòng `Gate N FAIL` riêng kèm số.
+
+### Lưu ý về kỳ vọng lợi nhuận
+
+Log `virtual_trades_XAUUSD_M5_2024.csv` (1528 tín hiệu) cho win rate TP1 chỉ **4.6%**, EV
+**−0.90R**. Nếu backtest chạy được mà thua lỗ, đó **không phải** lỗi gate — đó là tín hiệu chưa
+có edge ở cấu hình hiện tại. `DCA_Scalping_Strategy.md` §4.2 đã cảnh báo: `rr = 0.8` cần
+WR > 55.6% mới hoà vốn.
+
+---
+
 ## 4. Ngoài phạm vi (không sửa lần này)
 
 ### 4.1 Tham số DCA lệch với tài liệu chiến lược

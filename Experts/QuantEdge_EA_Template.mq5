@@ -20,7 +20,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-24.6-backtest"
+#define EA_BUILD_TAG "2026-09-25.1-coldstart"
 
 #include <Trade/Trade.mqh>
 
@@ -128,6 +128,7 @@ input string inp_grp_gates       = "========== Decision Gates =========="; // --
 input bool   InpUseGate1RecLevel = true;                // Enable Gate 1: Recommendation Level check
 input ENUM_REC_LEVEL InpMinRecLevel = REC_CAUTION_ENTRY;  // Min recommendation level (worst allowed)
 input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
+input int    InpRecLevelMinSamples = 20;                // Gate 1: resolved samples needed before the level floor is trusted
 input bool   InpUseGate2Confidence = true;              // Enable Gate 2: Confidence check
 input int    InpMinConfidence    = 50;                  // Min confidence score (0-100)
 input bool   InpUseGate3Staleness  = true;              // Enable Gate 3: Staleness check
@@ -2094,6 +2095,8 @@ int OnInit()
    Print("[QuantEdge EA] MinRecLevel=", InpMinRecLevel, " AllowCaution=", InpAllowCaution,
          " MinConfidence=", InpMinConfidence, " MaxSurvivalFloor=", InpMaxSurvivalFloor,
          " MaxSpread=", InpMaxSpreadPoints, " MaxSpreadPctOfTP1=", InpMaxSpreadPctOfTP1);
+   Print("[QuantEdge EA] RecLevelMinSamples=", InpRecLevelMinSamples,
+         " (below this, Gate 1 floor relaxes to WAIT — see cold-start note)");
    Print("[QuantEdge EA] Gate10=", InpUseGate10PriceLoc,
          " PriceLocSLSide=", InpUsePriceLocSLSide, " PriceLocTPSide=", InpUsePriceLocTPSide,
          " MaxPct=", InpPriceLocMaxPct, " MaxProbSL=", InpPriceLocMaxProbSL);
@@ -2134,6 +2137,21 @@ int OnInit()
    QEEA_LoadPanelPosition();
    QEEA_CreatePanel();
    ChartSetInteger(0, CHART_EVENT_MOUSE_MOVE, true);
+
+   // [TESTER-STATE-FIX] The tester INHERITS the terminal's GlobalVariables,
+   // so a live chart running this EA leaks its state into every backtest:
+   // a restored g_lastTradedSigTime blocks re-arming a historical bar, a
+   // restored g_dcaActive makes Gate 4 reject everything as "basket open",
+   // and recovery state skews lot sizing. None of it belongs to the run
+   // being simulated. Start every backtest from a clean slate.
+   if((bool)MQLInfoInteger(MQL_TESTER))
+   {
+      ClearDCAState();
+      ClearRecoveryState();
+      GlobalVariableDel(LastSigGVName());
+      g_lastTradedSigTime = 0;
+      Print("[QuantEdge EA] Tester: cleared inherited DCA / recovery / last-signal state.");
+   }
 
    // Restore DCA state (survives EA reload / chart change / terminal restart)
    LoadDCAState();
@@ -2396,11 +2414,36 @@ bool TryExecuteSignal(bool isRetry)
    }
 
    // --- Gate 1: Recommendation Level ---
+   // [RECLEVEL-COLDSTART-FIX] The level is scored out of components the EA
+   // has no control over, and two of them are simply unavailable without
+   // history: dataScore (0-25, needs resolved outcomes) and interScore
+   // (0-10, needs a DXY/EURUSD feed). In a fresh backtest both are zero, so
+   // the total caps at evScore+mtfScore — at most 55 — and with the M15
+   // profile's rr=0.8 the arithmetic never reaches CAUTION's 35 at ANY win
+   // rate: 65% wins still scores 31. Setting InpMinRecLevel=CAUTION_ENTRY in
+   // 0fe816a therefore rejected every signal in the tester, which is exactly
+   // the "no trades at all" symptom.
+   //
+   // Fall back to WAIT as the floor while the scoring inputs are cold, so
+   // Gate 11 (EV) is what actually screens quality. It measures the same
+   // thing directly and needs no history.
    bool g1_pass = true;
    if(InpUseGate1RecLevel && InpMinRecLevel != REC_ANY)
    {
+      int effectiveMin = InpMinRecLevel;
+      double smp = ReadSignalBuffer(BUF_PROB_SAMPLES);
+      bool coldStart = (smp == EMPTY_VALUE || smp < InpRecLevelMinSamples);
+      if(coldStart && effectiveMin < REC_WAIT)
+      {
+         effectiveMin = REC_WAIT;
+         if(!isRetry)
+            Print("[QuantEdge EA] Gate 1: cold start (samples=",
+                  (smp == EMPTY_VALUE ? "EMPTY" : DoubleToString(smp, 0)),
+                  " < ", InpRecLevelMinSamples, ") — floor relaxed to WAIT; Gate 11 (EV) screens quality.");
+      }
+
       g1_pass = false;
-      if(recLevelInt <= InpMinRecLevel)
+      if(recLevelInt <= effectiveMin)
          g1_pass = true;
       if(recLevelInt == REC_CAUTION_ENTRY && InpAllowCaution)
          g1_pass = true;
