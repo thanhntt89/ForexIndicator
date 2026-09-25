@@ -295,6 +295,52 @@ Negative DCA là cấu trúc **short-gamma**: thắng nhỏ đều đặn (break
 - **Asymmetry chi phí**: Một DD-cap cut ($500-$1,500) ăn hết 7-40 trade thắng ($38-77/trade)
 - **DCA không tạo edge**: Nó chỉ redistribute loss distribution — nhiều BE nhỏ đổi lấy ít loss lớn. Nếu signal không có edge dương, DCA chỉ trì hoãn thua lỗ
 
+#### ⚠️ Preset đang chạy thực tế KHÁC bảng khuyến nghị bên dưới
+
+> **Cập nhật 2026-09-25** — backtest XAUUSD M15 (2–12/2024) chạy bằng preset lệch hẳn khỏi
+> khuyến nghị v2.1. Đây là **cố ý**, không phải nhầm. Ghi lại ở đây để lần sau không ai
+> "sửa lại cho đúng doc" và vô tình đổi hành vi đã được đo.
+
+| Tham số | Doc v2.1 khuyến nghị | **Preset thực tế** | Hệ quả đã đo |
+|---------|---------------------|-------------------|--------------|
+| `InpNegDCAMaxOrders` | 3 | **10** | Basket sâu hơn → nhiều cơ hội hồi, nhưng đuôi lỗ dày hơn |
+| `InpNegDCAMaxDDPct` | 5% | **15%** | Mỗi DD-cap cut đắt gấp 3× |
+| `InpNegDCABEClose` | ON | **OFF** | **Cơ chế thoát breakeven bị tắt** — xem bên dưới |
+| `InpPosDCAATRMult` | 2.5 | **0.5** | Grid chặt gấp 5× → PosDCA thực sự trigger trên M15 |
+| `InpDCAMinSpacingPts` | 1500 | 1500 | Không đổi |
+
+**Điểm đáng lưu ý nhất — `InpNegDCABEClose = 0`:**
+
+Với BEClose tắt, một basket đang thua chỉ còn **hai** lối thoát
+(`ManageDCA()` trong `QuantEdge_EA_Template.mq4`):
+
+1. Giá quay về chạm `g_dcaOriginalTP1` → `CloseEntireBasket()`
+2. `CheckDrawdownCap()` cắt khi lỗ ≥ 15% balance
+
+Nghĩa là cơ chế "đóng basket khi giá về avg entry" — thứ làm DCA có ý nghĩa về mặt lý thuyết —
+đang không hoạt động. Điều này khớp chính xác với hình dạng equity curve quan sát được: đi lên
+mượt rồi thỉnh thoảng một vách dốc đứng. Các vách đó là DD-cap cut.
+
+Đây đúng là profile short-gamma mà §5.2 cảnh báo, chỉ là ở mức cực đoan hơn: không có van xả
+trung gian giữa "về TP1" và "cắt 15%".
+
+**Kết quả backtest với preset này** (vốn $1,000, spread cố định 50 point):
+
+| Chỉ số | Giá trị | Ghi chú |
+|--------|---------|---------|
+| Net profit | +$8,342 (+834%) | |
+| Profit Factor | 1.51 | |
+| Win rate | 71.82% | **per-LEG**, chưa quy về basket |
+| MaxDD | **38.12%** | Mọi circuit breaker đều tắt |
+| Recovery factor | **1.70** | Chuẩn quant ≥ 3.0 |
+| Lỗ lớn nhất 1 lệnh | −$353 | 35.3% vốn ban đầu |
+| Chuỗi lỗ tệ nhất | −$3,122 (20 lệnh) | 312% vốn ban đầu |
+
+> Con số này **chưa được kiểm chứng** và không đủ căn cứ để chạy live. Quy trình kiểm chứng
+> và tiêu chí PASS: xem `document/backtest_review_2024.md`.
+
+---
+
 #### Quy tắc
 
 | Tham số | Giá trị | Giải thích |
