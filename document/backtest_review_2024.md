@@ -988,3 +988,86 @@ lớn hơn chính hiệu ứng spread cần đo. Những kết luận về thứ
    Khoảng này bao trùm baseline, nên chỉ backtest thật mới quyết được.
 4. k=2 / S1-A vẫn là ứng viên, nhưng **chỉ quyết bằng run thật**. Không dùng counterfactual để chọn
    tham số nữa, vì §11.6 cho thấy sai số của nó ở mức 1 nửa năm lớn hơn khác biệt cần đo.
+
+### 11.7 Run #5 — run #4 + `InpBasketMaxLossR = 12` (build `rcap12`, 2026-09-29)
+
+> **Dữ liệu**: `logs/StrategyTester5.htm`. Diff Parameters với run #4: **chỉ** `InpBasketMaxLossR=12`.
+> Spread 400 ($0.40).
+
+#### Đây là một A/B sạch
+
+Khác với run #3 → #4, lần này path dependence gần như bằng 0: **339/339** basket của run #4 có mặt ở
+run #5 với cùng thời điểm mở và cùng hướng. Chỉ **4** basket đổi kết quả, cộng thêm 2 basket mới
+(+$21, mở được vì một basket bị cắt sớm hơn). Mọi khác biệt dưới đây là tác động của cap R, không
+phải nhiễu.
+
+| Basket | Run #4 (cap 15%) | Run #5 (cap 12R) | Chênh |
+|---|---|---|---:|
+| 2024-10-23 BUY | 3 leg, BE close **+$4.50** | cắt 12R **−$210.33** | **−$214.83** |
+| 2024-10-31 BUY | 4 leg, −$378.22 | 3 leg, −$197.04 | +$181.18 |
+| 2024-11-08 BUY | 4 leg, −$340.20 | 3 leg, −$275.16 | +$65.04 |
+| 2024-12-12 BUY | 4 leg, −$375.94 | 4 leg, −$359.62 | +$16.32 |
+| 2 basket mới | — | +$21.21 | +$21.21 |
+| **Tổng** | | | **+$68.93** |
+
+Cap R cắt đúng 3 basket thua (tiết kiệm $263), nhưng cũng cắt **1 basket lẽ ra thắng** (−$215). Đó
+chính là rủi ro mà cận bi quan của replay đã cảnh báo. 1R ngầm định của 4 lần cắt là $16–30, tức SL
+$5.5–10, khớp với ước lượng SL median $7.7 ở §11.6.
+
+#### Kết quả
+
+| Chỉ số | Run #4 | **Run #5** |
+|---|:---:|:---:|
+| Net | +$1,105 | **+$1,174** |
+| PF (basket) | 1.35 | **1.38** |
+| H1 PF / H2 PF | 1.48 / 1.25 | **1.48 / 1.30** |
+| Maximal DD (MT4, theo $) | $634 (25.5%) | **$464 (18.2%)** |
+| DD sâu nhất theo % (relative, MT4) | 29.05% | **29.05%** (không đổi) |
+| DD closed-balance theo % | 25.0% | 25.0% (không đổi) |
+| Recovery factor (basket / equity) | 1.97 / 1.74 | **3.09 / 2.53** |
+| z | 1.22 | 1.36 |
+
+#### Cap R chỉ có tác dụng ở nửa sau — vì sao
+
+Cả 4 basket đổi kết quả đều từ tháng 10 trở đi. H1 giống hệt run #4. Lý do: EA dùng cap **chặt hơn**,
+và ở balance $1.2–1.4k (tháng 3–6), 15% balance = $174–218, **nhỏ hơn** 12R ($200–360 ở lot 0.03).
+Cap R chỉ thắng khi balance đủ lớn để 15% vượt qua 12R, tức khoảng $2k trở lên.
+
+Hệ quả:
+- **Drawdown sâu nhất theo % không đổi**: 25–29% vào tháng 4/2024 (3 lần cắt 15% trong 12 ngày ở
+  balance $1.2–1.35k). Cap R không chạm tới đoạn này.
+- Cap R làm đúng việc được thiết kế cho nó: chặn lỗ basket **tăng theo balance** (G4). Basket
+  tệ nhất ở H2 giảm từ −$378 xuống −$360, và từ tháng 10 không còn lần cắt nào vượt 12R.
+- Đổi lại, tổng chênh lệch +$69 chỉ đến từ 4 basket, trong đó có 1 basket thắng bị cắt nhầm. **Chưa đủ để
+  kết luận 12R là mức tối ưu**, chỉ biết rằng nó không làm tệ đi.
+
+#### Đối chiếu tiêu chí PASS (§9)
+
+| # | Tiêu chí | Ngưỡng | Run #4 | Run #5 | Đạt |
+|---|---|---|---|---|:---:|
+| 1 | Edge basket-level | > 0 | +1.27 pp | +1.47 pp | ✓ |
+| 2 | Ý nghĩa thống kê | z ≥ 1.96 | 1.22 | 1.36 | ❌ |
+| 3 | PF ở spread thật | ≥ 1.3 | 1.35 | 1.38 | ✓ |
+| 4 | PF cả hai nửa năm | ≥ 1.2 | 1.48 / 1.25 | 1.48 / 1.30 | ✓ |
+| 5 | MaxDD | ≤ 20% | 25.5% | 18.2% theo $, nhưng **29% theo %** (tháng 4) | ❌ |
+| 6 | Recovery factor | ≥ 3.0 | 1.97 | 3.09 basket / 2.53 equity | ⚠️ |
+| 7 | Rủi ro thật @ $1k | ≤ 1% | 1R ≈ 2–3% vốn | như cũ; 12R = 20–36% vốn | ❌ |
+
+Tốt lên ở tiêu chí 6, còn 5 và 7 vẫn trượt vì **cùng một nguyên nhân**: lot 0.03 trên tài khoản $1k.
+1R ≈ $17–30 đã là 2–3% vốn, nên cap nào (15% hay 12R) cũng tương đương 6–12R ở đầu kỳ.
+
+#### Bước tiếp theo: run #6 = run #5 + `InpMinLotSize = 0.01`
+
+G4 từng đặt điều kiện: **đổi đơn vị cap trước, rồi mới hạ lot**. Cap R đã có, nên giờ hạ lot là
+an toàn:
+
+- Lot gốc lúc đó do risk quyết định (`CalculateLotFromRisk`), không bị sàn 0.03 kéo lên nữa. Ở $1–2k và
+  SL $5–10 thì phần lớn ra 0.01–0.02. Leg DCA = lot gốc × `NegDCALotRatio`, rồi áp sàn 0.01. Cấu trúc
+  basket theo giá không đổi.
+- 12R ở lot 0.01 = $65–120, nhỏ hơn 15% balance → **cap R sẽ là cap chạy thật trong cả năm**,
+  kể cả tháng 4. Cap 15% lùi về làm lưới an toàn.
+- 1R ≈ $6–10 = 0.6–1% vốn $1k → đạt tiêu chí 7 về mặt cấu trúc.
+- P/L tính bằng $ sẽ nhỏ đi khoảng 3 lần. So với run #5 phải đọc theo % và theo R, không theo $.
+- Đây là thay đổi một input, không cần code. Nó đổi đúng một hành vi theo giá: **cap R chạy cả năm
+  thay vì chỉ từ tháng 10**. Những basket tháng 3–6 trước đây bị cắt ở 15% sẽ được gồng tới 12R, nên
+  có thể hồi về BE hoặc lỗ sâu hơn trong đơn vị R. Run #6 đo đúng điều này.

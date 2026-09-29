@@ -36,6 +36,11 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
   (12R: PF bi quan 1.12, lạc quan 1.51, baseline 1.35). Run #5 = run #4 + build này là phép thử.
 - Chart đang chạy giữ input cũ trong `.chr` (tức 0 nếu đã attach bản `.1-rcap`). Chỉ chart attach mới
   mới nhận mặc định 12.
+- **Run #5** (`StrategyTester5.htm`, run #4 + 12R, A/B sạch: 339/339 basket khớp) — §11.7: PF 1.35 → **1.38**,
+  H2 1.25 → **1.30**, MaxDD theo $ $634 → **$464**, RF basket 1.97 → **3.09**. 4 basket đổi kết quả,
+  1 trong số đó là basket thắng bị cắt nhầm; tổng +$69. Cap R chỉ chạy từ tháng 10 vì ở balance < ~$2k thì 15%
+  chặt hơn 12R → **DD sâu nhất tháng 4 (25–29%) không đổi**. Còn trượt z (1.36), DD %, rủi ro @ $1k.
+- **Đề xuất run #6** = run #5 + `InpMinLotSize = 0.01` (chỉ đổi input): cap R chạy cả năm, 1R ≈ 1% vốn.
 
 ### Backtest #3 — default mới trên build ptscale (2026-09-29, không đổi code)
 
