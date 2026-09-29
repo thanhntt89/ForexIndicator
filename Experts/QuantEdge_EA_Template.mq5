@@ -20,7 +20,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-29.1-rcap"
+#define EA_BUILD_TAG "2026-09-29.2-rcap12"
 
 #include <Trade/Trade.mqh>
 
@@ -212,7 +212,7 @@ input int    InpNegDCAMaxOrders   = 10;                  // Max negative DCA ord
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
 input double InpNegDCAATRMult     = 2.5;                 // Neg DCA spacing = ATR × this multiplier
 input double InpNegDCAMaxDDPct    = 15.0;                // Hard drawdown cap (% of balance) — applies to ENTIRE basket whenever ANY DCA mode is active, close all if exceeded
-input double InpBasketMaxLossR    = 0;                   // Basket cap in R of the original leg (entry-SL x lot), 0=off; with the % cap above, the tighter one wins
+input double InpBasketMaxLossR    = 12.0;                // Basket cap in R of the original leg (entry-SL x lot), 0=off; with the % cap above, the tighter one wins
 input bool   InpNegDCABEClose     = true;               // Close negative DCA basket when price returns to avg entry (breakeven)
 input double InpNegDCABEOffsetPip = 5.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
 input double InpDCAProfitLockR    = 1.0;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires

@@ -26,14 +26,16 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 
 ### V12.5 — Basket cap theo R (2026-09-29)
 
-**Build**: `2026-09-29.1-rcap` (mq4 + mq5). Lý do: `document/backtest_review_2024.md` §11.6 (G4).
+**Build**: `2026-09-29.2-rcap12` (mq4 + mq5). Lý do: `document/backtest_review_2024.md` §11.6 (G4).
 
-- `[RCAP]` Input mới `InpBasketMaxLossR` (mặc định **0 = tắt**, hành vi không đổi). Cap lỗ basket =
+- `[RCAP]` Input mới `InpBasketMaxLossR`, **mặc định 12** (user chọn; `.1-rcap` là 0 = tắt). Cap lỗ basket =
   N × R của lệnh gốc (|entry − SL cấu trúc| × lot gốc). Khi bật cùng `InpNegDCAMaxDDPct`, **mức chặt
   hơn** được dùng. Hàm `BasketLossCapMoney()` dùng chung cho `CheckDrawdownCap()` và
   `ApplyDCABackstopSL()`. Log DD cap giờ ghi rõ cap đến từ % hay R.
-- **Chưa chọn N**: replay trên run #4 cho mọi N từ 10–15 một khoảng rộng quanh baseline (PF bi quan
-  1.01–1.14, lạc quan 1.42–1.61, baseline 1.35). Phải chạy thật.
+- **N = 12 chưa được kiểm chứng**: replay trên run #4 cho mọi N từ 10–15 một khoảng rộng quanh baseline
+  (12R: PF bi quan 1.12, lạc quan 1.51, baseline 1.35). Run #5 = run #4 + build này là phép thử.
+- Chart đang chạy giữ input cũ trong `.chr` (tức 0 nếu đã attach bản `.1-rcap`). Chỉ chart attach mới
+  mới nhận mặc định 12.
 
 ### Backtest #3 — default mới trên build ptscale (2026-09-29, không đổi code)
 

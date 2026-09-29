@@ -982,7 +982,7 @@ lớn hơn chính hiệu ứng spread cần đo. Những kết luận về thứ
 2. **Mọi run tiếp theo dùng spread 400.** Run #4 là baseline mới, thay run #3.
 3. Ưu tiên đổi thứ tự: **(a) cap theo đơn vị gắn với lot** lên đầu. G4 là phát hiện duy nhất mạnh lên
    qua cả hai run, và hai nửa năm cân bằng lại khi tính theo % balance.
-   ✅ **Đã code** (build `2026-09-29.1-rcap`): `InpBasketMaxLossR`, mặc định 0 = tắt. 13 lần thua của
+   ✅ **Đã code** (build `2026-09-29.2-rcap12`): `InpBasketMaxLossR`, mặc định **12** (user chọn). 13 lần thua của
    run #4 tương đương khoảng 3.5–24R (ước lượng SL từ tỉ lệ TP1/SL median 1.27 của report 3 chữ số cũ).
    Replay cho N = 10/12/15R ra PF bi quan 1.01/1.12/1.14, lạc quan 1.61/1.51/1.42, baseline 1.35.
    Khoảng này bao trùm baseline, nên chỉ backtest thật mới quyết được.
