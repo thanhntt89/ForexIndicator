@@ -24,6 +24,38 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 
 ## 3. Changelog Các Phiên Gần Nhất
 
+### V12.5 — Basket cap theo R (2026-09-29)
+
+**Build**: `2026-09-29.1-rcap` (mq4 + mq5). Lý do: `document/backtest_review_2024.md` §11.6 (G4).
+
+- `[RCAP]` Input mới `InpBasketMaxLossR` (mặc định **0 = tắt**, hành vi không đổi). Cap lỗ basket =
+  N × R của lệnh gốc (|entry − SL cấu trúc| × lot gốc). Khi bật cùng `InpNegDCAMaxDDPct`, **mức chặt
+  hơn** được dùng. Hàm `BasketLossCapMoney()` dùng chung cho `CheckDrawdownCap()` và
+  `ApplyDCABackstopSL()`. Log DD cap giờ ghi rõ cap đến từ % hay R.
+- **Chưa chọn N**: replay trên run #4 cho mọi N từ 10–15 một khoảng rộng quanh baseline (PF bi quan
+  1.01–1.14, lạc quan 1.42–1.61, baseline 1.35). Phải chạy thật.
+
+### Backtest #3 — default mới trên build ptscale (2026-09-29, không đổi code)
+
+Phân tích: `document/backtest_review_2024.md` §11. Report: `logs/StrategyTester3.htm` (spread $0.05).
+Build ptscale đã được xác nhận: DCA âm cách nhau $15 như live.
+
+- **So với baseline cũ**: MaxDD 37% → 25.6%, basket tệ nhất −$1,938 → −$542, net +$8,343 → +$1,781.
+  Edge không mạnh lên (z 1.75). **Vẫn chưa đạt live**: H2 PF 1.07 ở $0.05, ước lượng **0.96 ở $0.40**.
+- PosDCA 0 leg: không thể kích hoạt khi `InpPosDCAATRMult = 2.5`. DCA âm sâu nhất 4 leg.
+- Counterfactual ở spacing $15: **k=2 / stop cố định ~$300** là cấu hình duy nhất giữ H2 PF ≥ 1.2 ở
+  $0.40. Kết quả này in-sample, cần W3/W4.
+- Cap 15% balance + lot kẹt 0.03 → cùng một kiểu thua tốn $268 → $542 khi balance tăng (F2 lặp lại).
+  **Phải đổi đơn vị cap trước khi hạ lot.**
+- Tín hiệu SELL không có DCA: PF 0.53, t = −2.4. SELL "thắng 100%" là nhờ ôm lệnh.
+- 191/372 basket bị đóng bởi tín hiệu ngược. 89% trường hợp tín hiệu đó không vào lệnh vì bị gate chặn.
+- **Run #4** (`StrategyTester4.htm`, cùng input, spread 400 = $0.40) — §11.6: PF 1.35, **H1 1.48 / H2 1.25**,
+  12 cut, z 1.22, RF 1.97, DD 25.5% (relative 29%). Ước lượng "H2 0.96" ở trên là **sai**: chỉ 61% basket
+  trùng giữa hai run (path dependence), nên counterfactual không dùng để chọn tham số được nữa.
+  Kết quả mạnh lên: cap 15% × lot cố định (G4). Kết quả yếu đi: SELL (t −0.99), k=2.
+  H2 chỉ cần thêm 1–2 cut là PF < 1. **Baseline mới = run #4, mọi run sau dùng spread 400.**
+- **Chờ user**: W2; quyết thay đổi code, ưu tiên (a) cap lỗ basket theo đơn vị gắn với lot.
+
 ### V12.4 — Backtest ≠ Live: point scale + opposite-close buffer (2026-09-25)
 
 **Build**: `2026-09-25.2-ptscale` (mq4 + mq5). Phân tích đầy đủ: `document/backtest_review_2024.md` §10.

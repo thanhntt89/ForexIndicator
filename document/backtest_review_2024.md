@@ -9,6 +9,10 @@
 > số** trong khi live là 2 chữ số → mọi input tính bằng point lệch 10×, và PosDCA (31% lợi
 > nhuận backtest) gần như không chạy trên live. §1–§9 mô tả đúng report, nhưng report không mô
 > tả EA live. Giải pháp và kế hoạch kiểm chứng mới ở §10.3–§10.4.
+>
+> **§11 (2026-09-29)**: backtest đầu tiên trên build ptscale với default mới — rủi ro đuôi giảm
+> mạnh (MaxDD 25.6%, basket tệ nhất −$542). **§11.6**: chạy lại ở spread $0.40 → PF 1.35, H1 1.48 /
+> H2 1.25; ước lượng "H2 PF 0.96" ở §11.3 là **sai**. Vẫn chưa đạt live (z 1.22, RF 1.97, DD 29%).
 
 ---
 
@@ -698,3 +702,289 @@ Monte Carlo trên 2024 cho median +50% đến +120%/11 tháng ở $1,000. **Khô
 nhiều beta xu hướng. Nếu W2–W4 pass, kỳ vọng hợp lý là **PF 1.2–1.4, lợi nhuận 15–35%/năm, MaxDD
 10–20%**. Đó là một chiến lược bình thường, sống được. +834% với MaxDD 38% không phải một phiên
 bản tốt hơn của nó — đó là cùng một tín hiệu cộng với rủi ro ẩn và một tester chạy sai digits.
+
+---
+
+## 11. Backtest #3 — default mới trên build ptscale (2026-09-29)
+
+> **Dữ liệu**: `logs/StrategyTester3.htm` — XAUUSD M15, 2/2024–12/2024, MT4, Every tick, $1,000,
+> **spread 50 point trên vàng 3 chữ số = $0.05**.
+> **EA**: default trong code sau V12.3 + V12.4, không phải preset W1/W2. Build ptscale đã được xác
+> nhận: 110/110 khoảng cách DCA âm ≥ $15.00 (median $15.05), đúng như live.
+>
+> ```bash
+> python tools/basket_analyzer.py logs/StrategyTester3.htm --initial-deposit 1000
+> python tools/dca_counterfactual.py logs/StrategyTester3.htm --split 2024-08-01 --spreads 0,0.35
+> python logs/quant/exits.py logs/StrategyTester3.htm          # lối thoát, độ sâu, BUY/SELL
+> cd logs/quant && python cap_bounds.py ../StrategyTester3.htm  # stop cố định $, cận lạc quan/bi quan
+> ```
+
+### 11.1 Run này là gì, và không phải là gì
+
+Run này **không phải W1** (§10.4). Nó khác W1 ở ba điểm đổi kết quả:
+
+| | W1 (kế hoạch) | Run #3 |
+|---|---|---|
+| Spread | $0.40 | **$0.05** (rẻ hơn live 4–10 lần) |
+| Gates | preset cũ: G1 tắt; G5, G10, G12, session tắt | default V12.3: G1=CAUTION; G5, G10, G12, session 7–20h bật |
+| `InpNegDCABEClose` | false | **true** |
+
+Run này cho biết default hiện tại chạy thế nào trên một EA giống live, **ở spread lý tưởng**. Nó
+không trả lời W1 hay W2.
+
+### 11.2 Kết quả, so với baseline cùng spread 50
+
+| Chỉ số (basket-level) | Baseline #0 (3-digit, DCA $1.50) | Run #3 (ptscale, DCA $15) |
+|---|:---:|:---:|
+| Net profit | +$8,343 | **+$1,781** |
+| Baskets / legs | 403 / 1,586 | 372 / 482 |
+| Legs TB / basket | 3.94 | **1.30** |
+| Leg PosDCA | 682 | **0** |
+| WR / breakeven WR | 97.02% / 95.11% | 98.12% / 96.88% |
+| Edge margin | +1.91 pp | +1.23 pp |
+| z | 2.26 | **1.75** |
+| Profit factor | 1.67 | 1.68 |
+| MaxDD | 37.45% | **25.6%** |
+| Recovery factor | 1.73 | 1.93 |
+| Basket tệ nhất | −$1,938 | **−$542** |
+| DD-cap cut | 12 | 6 (+1 đóng do hết kỳ test) |
+
+Rủi ro đuôi giảm mạnh: basket tệ nhất chỉ còn khoảng 1/3.6 so với trước, MaxDD giảm 12 pp. **Edge thì không mạnh lên**: z vẫn dưới 1.96.
+Lợi nhuận giảm 4.7 lần vì PosDCA không chạy (G1) và lot kẹt ở 0.03.
+
+### 11.3 Phát hiện
+
+#### G1 — Dự đoán của §10 đúng: PosDCA 0 leg, DCA âm sâu nhất 4 leg
+
+0/482 leg là PosDCA. Với `InpPosDCAATRMult = 2.5`, leg DCA+1 cần giá đi thuận 2.5×ATR, nhưng
+`ManagePositiveDCA()` dừng khi giá qua 50% đường tới TP1 (≈ 0.4×ATR). Nên nó **không thể kích
+hoạt**, bất kể spacing là bao nhiêu (đã ghi ở mục "Ngoài phạm vi" của V12.3).
+
+DCA âm: 110 leg trên 79 basket, sâu nhất 4 leg. Spacing $15 cộng với mức giá đi ngược tối đa ~$66
+khiến `InpNegDCAMaxOrders = 10` chỉ còn là con số trên giấy.
+
+#### G2 — Toàn bộ lỗ đến từ basket có từ 2 leg DCA âm trở lên
+
+| Leg DCA âm | Baskets | Thắng / thua | Net |
+|:---:|---:|:---:|---:|
+| 0 | 293 | 293 / 0 | +$4,134 |
+| 1 | 57 | 57 / 0 | +$201 |
+| 2 | 16 | 14 / 2 | −$327 |
+| 3 | 3 | 1 / 2 | −$714 |
+| 4 | 3 | 0 / 3 | −$1,514 |
+
+Không được đọc hàng "0 leg" thành "không DCA thì luôn thắng". Khi bật DCA, lệnh gốc gửi đi **không
+có SL** (`sendSL = 0`), nên mọi lệnh đi sai đều biến thành basket DCA. Nhóm 0 leg vì thế chỉ gồm
+những lệnh đã thắng sẵn. Muốn biết DCA thêm hay bớt bao nhiêu thì phải dùng counterfactual (G3).
+
+#### G3 — Ở spacing $15, cấu hình ổn định nhất là 2 leg rồi cắt
+
+Counterfactual chính xác: basket đóng tại giá fill thật của leg k+1. "+$0.35" nghĩa là tổng spread
+$0.40.
+
+| k | Spread | PF | Net | MaxDD | RF | Tệ nhất | H1 PF | H2 PF (t) |
+|:---:|:---:|---:|---:|---:|---:|---:|---:|:---:|
+| 0 | +$0.35 | 1.04 | 132 | 544 | 0.24 | −58 | 0.93 | 1.16 (0.75) |
+| 1 | +$0.35 | 1.28 | 864 | 508 | 1.70 | −143 | 1.54 | 1.10 (0.33) |
+| **2** | $0.05 | 2.17 | 2,377 | 455 | 5.23 | −274 | 4.09 | 1.48 (1.07) |
+| **2** | **+$0.35** | **1.91** | 1,880 | 464 | 4.05 | −277 | 3.54 | **1.32 (0.72)** |
+| 3 | +$0.35 | 1.57 | 1,432 | 828 | 1.73 | −459 | 3.34 | 1.03 (0.07) |
+| 4 = thực tế | +$0.35 | 1.48 | 1,275 | 938 | 1.36 | −547 | 3.34 | **0.96 (−0.09)** |
+
+- ~~Default hiện tại ở spread gần thật cho **H2 PF 0.96, tức là thua**.~~ **Đính chính (§11.6)**:
+  chạy thật ở $0.40 cho H2 PF **1.25**. Hàng +$0.35 của bảng này giả định chuỗi lệnh không đổi khi
+  tăng spread — sai, chỉ 61% basket trùng giữa hai run.
+- k=2 là cấu hình **duy nhất** có H2 PF ≥ 1.2 ở spread $0.40.
+- Điều này không mâu thuẫn với §10 (khi đó chọn k=1). §10 chạy spacing $1.50, DCA-1 vào ở ~$3 từ entry.
+  Độ sâu k **không chuyển được** giữa các spacing khác nhau. Thứ chuyển được là **mức lỗ tối đa của
+  một basket**: k=2 ở spacing $15 nghĩa là cắt khi giá đi ngược ~$45, lỗ ~$270 ở lot 0.03.
+
+Kiểm tra chéo bằng stop cố định theo $ (`cap_bounds.py`). Cận bi quan giả định giá đi thêm một bậc
+$15 sau leg bất lợi cuối cùng quan sát được (đi xa hơn thì leg kế tiếp đã phải fill). Spread $0.40:
+
+| Stop basket | Cuts | PF lạc quan (H2) | PF bi quan (H2) |
+|---|:---:|:---:|:---:|
+| $150 cố định | 7–21 | 3.30 (2.24) | 1.19 (1.02) |
+| $200 cố định | 7–21 | 2.55 (1.75) | **0.90 (0.78)** |
+| **$300 cố định** | 5–6 | **2.06 (1.49)** | **1.78 (1.22)** |
+| $400 cố định | 4–5 | 1.70 (1.15) | 1.45 (0.93) |
+| 15% balance (thực tế) | 6 | 1.48 (0.96) | — |
+
+Mức $150–200 không đáng tin: nó rơi vào khoảng giữa hai lần fill DCA, nơi report không ghi lại
+đường giá, nên cận bi quan sụp. Mức $300 đứng vững ở cả hai cận, và trùng với k=2 (~$270). **Hai
+phương pháp độc lập cùng chỉ về một chỗ: cắt basket quanh mức leg DCA-3.**
+
+> **In-sample.** k=2 và $300 đều được chọn trên chính dữ liệu 2024. H2 t = 0.72 chưa có ý nghĩa
+> thống kê. Đây là ứng viên để chạy W3/W4, chưa phải kết luận.
+
+#### G4 — F2 lặp lại: lỗ tính theo % balance, lời tính theo lot cố định
+
+Lot 0.03 trên **482/482** leg. Mỗi lần cắt đúng 15.0–15.4% balance tại thời điểm đó:
+
+| Ngày cắt | Balance | Lỗ | Tương đương số basket thắng TB ($12.09) |
+|---|---:|---:|---:|
+| 2024-04-22 | $1,783 | −$268 | 22 |
+| 2024-05-22 | $2,008 | −$303 | 25 |
+| 2024-08-05 | $2,718 | −$418 | 35 |
+| 2024-10-31 | $3,604 | −$542 | 45 |
+| 2024-11-08 | $3,154 | −$474 | 39 |
+| 2024-12-12 | $3,322 | −$498 | 41 |
+
+Cả sáu lần là cùng một kiểu thua: BUY, 3–5 leg, giá đi ngược $45–66. Cái giá tăng gấp đôi chỉ vì
+balance lớn lên. Đây là lý do cùng một tín hiệu cho H1 PF 3.86 nhưng H2 PF 1.07.
+
+**Hệ quả cho S2**: phải đổi đơn vị của cap **trước** khi hạ lot về 0.01. Nếu không, hạ lot chia lời
+cho 3 trong khi lỗ vẫn là 15% balance, tức là tệ hơn hiện tại.
+
+#### G5 — SELL "thắng 100%" là nhờ ôm lệnh, không phải nhờ tín hiệu
+
+| | n | PF thực tế | k=0 PF (t) | k=0 H1 / H2 |
+|---|---:|:---:|:---:|:---:|
+| BUY | 287 | 1.35 (cả 6 lần cắt) | 1.52 (2.70) | 1.44 / 1.59 |
+| SELL | 85 | ∞ (0 thua) | **0.53 (−2.40)** | 0.61 / 0.33 |
+
+(k=0 = tín hiệu không DCA, cắt ở giá fill DCA-1 ≈ $15 bất lợi; spread $0.05)
+
+SELL không có lệnh thua nào chỉ vì mọi SELL đi sai đều được DCA/BE cứu trong một năm vàng tăng. Bản
+thân tín hiệu SELL âm và có ý nghĩa thống kê (t = −2.4), bằng chứng mạnh hơn F4. BUY có edge riêng ở
+cả hai nửa năm với stop $15, nhưng 2024 tăng 27%, nên phần này vẫn có thể là beta. S4 giữ nguyên:
+quyết định ở W3 (2023).
+
+#### G6 — Một nửa số basket bị đóng bởi tín hiệu ngược mà chính EA không vào lệnh
+
+| Lối thoát | Baskets | Net | TB |
+|---|---:|---:|---:|
+| TP1 | 102 | +$2,637 | +$25.85 |
+| Tín hiệu ngược (`OppositeCloseMinProfit`) | **191** | +$1,497 | +$7.84 |
+| BE close DCA âm | 72 | +$278 | +$3.87 |
+| DD cap 15% | 6 | −$2,502 | −$417 |
+| Hết kỳ test (`close at stop`) | 1 | −$130 | — |
+
+- `[OPPCLOSE-FIX]` hoạt động đúng: 0/191 lần đóng bị lỗ (thấp nhất +$0.18).
+- 170/191 lần (89%) **không có lệnh ngược nào mở theo sau** trong 45 phút. Tín hiệu ngược đóng basket
+  (bước này chạy trước mọi gate trong `TryExecuteSignal`), rồi chính nó bị gate từ chối. Có 34 lần
+  đóng rơi vào ngoài giờ 7–20h, trong khi basket chỉ mở trong 7–19h. Nói cách khác, một tín hiệu
+  không đủ chất lượng để vào lệnh vẫn đủ quyền đóng lệnh.
+- Mỗi lần đóng như vậy chỉ ăn được median 18% quãng đường tới TP1.
+- Report không đủ để kết luận việc này tốt hay xấu: không biết basket đó lẽ ra sẽ về TP hay đi vào
+  DCA sâu. Cần A/B.
+
+### 11.4 Đối chiếu tiêu chí PASS (§9)
+
+| # | Tiêu chí | Ngưỡng | Run #3 | Đạt |
+|---|---|---|---|:---:|
+| 1 | Edge basket-level | > 0 | +1.23 pp | ✓ |
+| 2 | Ý nghĩa thống kê | z ≥ 1.96 | 1.75 | ❌ |
+| 3 | PF basket ở spread thật | ≥ 1.3 | ~1.48 (ước lượng +$0.35) | ✓* |
+| 4 | PF cả hai nửa năm (W2) | ≥ 1.2 | H2 1.07 @ $0.05 (~~0.96 @ $0.40~~ → đo thật 1.25, §11.6) | ❌ |
+| 5 | MaxDD | ≤ 20% | 25.6% | ❌ |
+| 6 | Recovery factor | ≥ 3.0 | 1.93 | ❌ |
+| 7 | Rủi ro thật @ $1k | ≤ 1% | lot 0.03 cố định; basket tệ nhất = 54% vốn đầu | ❌ |
+
+\* ước lượng bậc một, chưa chạy thật.
+
+Tốt hơn baseline cũ ở **mọi chỉ số rủi ro**, nhưng vẫn **chưa đạt chuẩn live**. Điểm gãy vẫn là H2.
+
+### 11.5 Việc tiếp theo
+
+Phiên này không sửa code.
+
+1. **Chạy lại run #3 với spread 400** (= $0.40 trên symbol 3 chữ số), chỉ đổi đúng một input. Mục đích là xác
+   nhận con số H2 PF 0.96 đang là ước lượng.
+2. **W2 vẫn chạy như §10.4.** Run #3 không thay thế được nó.
+3. **Ứng viên mới, W2b** (từ G3), giữ spacing $15 như live: `InpNegDCAMaxOrders = 2`,
+   `InpUsePositiveDCA = false`, cộng thêm một lối thoát thua cố định. Lối thoát này **cần code**,
+   vì `InpNegDCAMaxDDPct` chỉ tính theo % balance.
+4. **Các thay đổi code cần user quyết (chưa làm)**:
+   - (a) Cap lỗ basket theo đơn vị gắn với lot, ví dụ $/lot hoặc bội số R của leg gốc, thay cho
+     hoặc bổ sung `InpNegDCAMaxDDPct`. Sửa G4 và là điều kiện để S2 không làm tệ hơn.
+   - (b) S1-A: đóng basket khi giá chạm mức leg k+1 (§10.3).
+   - (c) Input chỉ cho tín hiệu ngược đóng basket khi nó pass gate, để A/B G6.
+5. **W3/W4 (2023, 2025) vẫn là bằng chứng quyết định.** Mọi con số ở §11.3 là in-sample 2024.
+
+### 11.6 Run #4 — cùng run #3, spread 400 (= $0.40) (2026-09-29)
+
+> **Dữ liệu**: `logs/StrategyTester4.htm`. Khối Parameters **giống hệt** run #3 (đã diff: 0 khác
+> biệt). Chỉ đổi spread 50 → 400.
+
+#### Kết quả
+
+| Chỉ số (basket) | Run #3 ($0.05) | **Run #4 ($0.40)** | Ước lượng §11.3 cho $0.40 |
+|---|:---:|:---:|:---:|
+| Baskets | 372 | 339 | 372 |
+| Net | +$1,781 | **+$1,105** | +$1,275 |
+| PF | 1.68 | **1.35** | 1.48 |
+| H1 PF / H2 PF | 3.86 / 1.07 | **1.48 / 1.25** | 3.34 / **0.96** |
+| DD-cap cut | 6 | **12** | 6 |
+| Lỗ TB 1 cut | −$417 | −$252 | — |
+| Basket tệ nhất | −$542 | −$378 | −$547 |
+| MaxDD (closed / MT4) | 25.6% | 22.6% / 25.5%, relative **29.1%** | — |
+| Recovery factor | 1.93 | 1.97 | 1.36 |
+| z (basket WR vs breakeven) | 1.75 | **1.22** | — |
+
+#### Ước lượng của §11.3 sai — vì sao
+
+Counterfactual giữ nguyên chuỗi basket và chỉ trừ thêm spread. Trong thực tế, chuỗi lệnh **đổi
+hẳn**:
+
+- Chỉ **226/372** basket của run #3 có basket cùng hướng, lệch không quá 30 phút ở run #4.
+- 80/146 basket chỉ có ở run #3 bị mất vì lúc đó run #4 **đang bận** một basket khác (Gate 4 chặn).
+  Chỉ 24 basket mất vì Gate 5 chặn TP1 < $5 (mình dự đoán 27).
+- Spread đổi giá fill và thời điểm đóng, từ đó đổi basket nào đang mở khi tín hiệu tiếp theo tới.
+  Ví dụ 2024-11-08 BUY: run #3 đóng ở TP (+$26.50) trong 9 giờ, run #4 cùng tín hiệu nhưng fill cao
+  hơn $0.35, không kịp chạm TP, rồi bị kéo vào DD cap **−$340**. Ngược lại 2024-09-04 SELL: run #3
+  gồng 4 leg rồi thoát ở BE (+$6.57), run #4 chạm cap trước **−$298**.
+
+Hệ quả: **bảng k/spread trong §11.3 không đáng tin ở mức một nửa năm.** Độ nhiễu do path dependence
+lớn hơn chính hiệu ứng spread cần đo. Những kết luận về thứ tự tương đối (k=2 tốt hơn k≥3) vẫn cần
+được kiểm lại bằng run thật, không phải bằng replay.
+
+#### Những gì run #4 xác nhận, và những gì nó sửa
+
+| Phát hiện §11.3 | Sau run #4 |
+|---|---|
+| G1 PosDCA 0 leg | ✓ Vẫn 0/445 |
+| G2 lỗ chỉ đến từ basket ≥ 2 DCA âm | ✓ 13/13 lần thua là basket 3–4 leg |
+| G3 k=2 / ~$300 stop | **Yếu đi.** Counterfactual trên run #4: k=2 PF 1.49 (H1 1.48 / H2 1.50). $300 cố định PF 1.44, cận lạc quan và bi quan **trùng nhau** vì mọi cut đều ≥ $174. Vẫn hơn default, nhưng khoảng cách hẹp lại |
+| G4 cap 15% × lot cố định | ✓ **Rõ hơn**: 12 cut, mỗi cut 15.0–15.2% balance, lỗ tăng dần −$174 → −$378. Tính P/L theo % balance: H1 PF 1.58, H2 PF 1.38, khoảng cách hai nửa gần như biến mất |
+| G5 SELL không có edge | **Yếu đi.** k=0: SELL PF 0.74, t −0.99 (run #3: 0.53, t −2.40). Hướng vẫn âm nhưng không còn có ý nghĩa thống kê |
+| G6 đóng do tín hiệu ngược | ✓ 169/339, 0 lần lỗ |
+
+#### Đọc run #4
+
+- H1 PF sụp từ 3.86 xuống 1.48. **H1 đẹp của run #3 phần lớn nhờ spread rẻ**: 7 cut rơi vào H1 thay vì 2.
+  H2 cải thiện từ 1.07 lên 1.25 là do chuỗi lệnh đổi (hai nửa năm đều có 6–7 cut), không phải do
+  spread cao giúp gì.
+- Hai nửa năm giờ đã **cân bằng** (1.48 / 1.25). Đây là tín hiệu tốt hơn run #3, nơi H1 và H2 lệch
+  nhau 3.6 lần.
+- Nhưng **edge rất mỏng**: H2 lời gộp $2,236 / lỗ gộp $1,785. Thêm **1 cut $300 là PF 1.07, thêm 2 cut là
+  PF 0.94**. Hai kết quả §11.3 bị lật khi chỉ đổi spread cho thấy 1–2 cut chênh lệch hoàn toàn nằm
+  trong độ nhiễu.
+- z = 1.22, t = 1.13 → **không phân biệt được với may rủi.**
+
+#### Đối chiếu tiêu chí PASS (§9), run #4
+
+| # | Tiêu chí | Ngưỡng | Run #4 | Đạt |
+|---|---|---|---|:---:|
+| 1 | Edge basket-level | > 0 | +1.27 pp | ✓ |
+| 2 | Ý nghĩa thống kê | z ≥ 1.96 | **1.22** | ❌ |
+| 3 | PF basket ở spread thật | ≥ 1.3 | 1.35 | ✓ |
+| 4 | PF cả hai nửa năm | ≥ 1.2 | 1.48 / 1.25 | ✓ (sát ngưỡng, 1 cut là mất) |
+| 5 | MaxDD | ≤ 20% | 25.5% (relative 29.1%) | ❌ |
+| 6 | Recovery factor | ≥ 3.0 | 1.97 | ❌ |
+| 7 | Rủi ro thật @ $1k | ≤ 1% | cut đầu tiên = 15% balance | ❌ |
+
+**4/7 FAIL.** Tiêu chí 4 lần đầu tiên đạt, nhưng mong manh.
+
+#### Cập nhật §11.5
+
+1. ~~Chạy lại với spread 400~~ ✅ xong.
+2. **Mọi run tiếp theo dùng spread 400.** Run #4 là baseline mới, thay run #3.
+3. Ưu tiên đổi thứ tự: **(a) cap theo đơn vị gắn với lot** lên đầu. G4 là phát hiện duy nhất mạnh lên
+   qua cả hai run, và hai nửa năm cân bằng lại khi tính theo % balance.
+   ✅ **Đã code** (build `2026-09-29.1-rcap`): `InpBasketMaxLossR`, mặc định 0 = tắt. 13 lần thua của
+   run #4 tương đương khoảng 3.5–24R (ước lượng SL từ tỉ lệ TP1/SL median 1.27 của report 3 chữ số cũ).
+   Replay cho N = 10/12/15R ra PF bi quan 1.01/1.12/1.14, lạc quan 1.61/1.51/1.42, baseline 1.35.
+   Khoảng này bao trùm baseline, nên chỉ backtest thật mới quyết được.
+4. k=2 / S1-A vẫn là ứng viên, nhưng **chỉ quyết bằng run thật**. Không dùng counterfactual để chọn
+   tham số nữa, vì §11.6 cho thấy sai số của nó ở mức 1 nửa năm lớn hơn khác biệt cần đo.

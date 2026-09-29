@@ -20,7 +20,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-25.2-ptscale"
+#define EA_BUILD_TAG "2026-09-29.1-rcap"
 
 #include <Trade/Trade.mqh>
 
@@ -212,7 +212,8 @@ input int    InpNegDCAMaxOrders   = 10;                  // Max negative DCA ord
 input double InpNegDCATriggerPct  = 50.0;                // Trigger when price moves this % toward SL
 input double InpNegDCAATRMult     = 2.5;                 // Neg DCA spacing = ATR × this multiplier
 input double InpNegDCAMaxDDPct    = 15.0;                // Hard drawdown cap (% of balance) — applies to ENTIRE basket whenever ANY DCA mode is active, close all if exceeded
-input bool   InpNegDCABEClose     = true;                // Close negative DCA basket when price returns to avg entry (breakeven)
+input double InpBasketMaxLossR    = 0;                   // Basket cap in R of the original leg (entry-SL x lot), 0=off; with the % cap above, the tighter one wins
+input bool   InpNegDCABEClose     = true;               // Close negative DCA basket when price returns to avg entry (breakeven)
 input double InpNegDCABEOffsetPip = 5.0;                 // Breakeven offset in pips (0=exact breakeven, >0=require profit)
 input double InpDCAProfitLockR    = 1.0;                 // Min basket profit (in R, vs original entry→SL risk) required before entry-return close fires
 input double InpDCAMinSpacingPts = 1500;                 // Min distance between DCA orders (2-digit points: 1500=$15 XAUUSD on any feed)
@@ -714,6 +715,45 @@ double ScaledPts(double pts)
 }
 
 //+------------------------------------------------------------------+
+//| [RCAP] Basket loss, in account money, at which the whole basket   |
+//| is cut. InpNegDCAMaxDDPct grows with BALANCE while every leg is   |
+//| pinned at InpMinLotSize, so the same losing basket cost $174 at a |
+//| $1.2k balance and $378 at $2.5k (backtest_review_2024.md 11.6).   |
+//| InpBasketMaxLossR states the cap in R of the original leg -- the  |
+//| unit the basket earns in -- and the tighter of the two applies.   |
+//+------------------------------------------------------------------+
+double BasketLossCapMoney(string &source)
+{
+   double cap = 0;
+   source = "";
+
+   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
+   if(InpNegDCAMaxDDPct > 0 && balance > 0)
+   {
+      cap    = balance * InpNegDCAMaxDDPct / 100.0;
+      source = DoubleToString(InpNegDCAMaxDDPct, 1) + "% of balance";
+   }
+
+   if(InpBasketMaxLossR > 0 && g_dcaOriginalSL > 0 && g_dcaOriginalLot > 0)
+   {
+      double slDist   = MathAbs(g_dcaOriginalEntry - g_dcaOriginalSL);
+      double tickVal  = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_VALUE);
+      double tickSize = SymbolInfoDouble(Symbol(), SYMBOL_TRADE_TICK_SIZE);
+      if(slDist > 0 && tickVal > 0 && tickSize > 0)
+      {
+         double oneR = (slDist / tickSize) * tickVal * g_dcaOriginalLot;
+         double capR = oneR * InpBasketMaxLossR;
+         if(cap <= 0 || capR < cap)
+         {
+            cap    = capR;
+            source = DoubleToString(InpBasketMaxLossR, 1) + "R (1R=" + DoubleToString(oneR, 2) + ")";
+         }
+      }
+   }
+   return cap;
+}
+
+//+------------------------------------------------------------------+
 //| [OPPCLOSE-FIX] Profit a basket must show before an opposite       |
 //| signal may close it. The legs are closed one PositionClose() at a |
 //| time, so price keeps moving between the P/L check and the last    |
@@ -744,11 +784,10 @@ void ApplyDCABackstopSL()
 {
    if(!InpUseDCABackstopSL || !g_dcaActive)
       return;
-   if(InpNegDCAMaxDDPct <= 0)
-      return;
 
-   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-   if(balance <= 0)
+   string capSource;
+   double ddCapDollars = BasketLossCapMoney(capSource);
+   if(ddCapDollars <= 0)
       return;
 
    double totalLot = 0;
@@ -760,7 +799,6 @@ void ApplyDCABackstopSL()
    if(tickVal <= 0)
       return;
 
-   double ddCapDollars   = balance * InpNegDCAMaxDDPct / 100.0;
    double distancePoints = ddCapDollars / (totalLot * tickVal);
    double distancePrice  = distancePoints * _Point * InpDCABackstopBufferMult;
 
@@ -1441,19 +1479,16 @@ void CloseEntireBasket()
 //+------------------------------------------------------------------+
 bool CheckDrawdownCap()
 {
-   if(InpNegDCAMaxDDPct <= 0)
-      return false;
-
-   double balance = AccountInfoDouble(ACCOUNT_BALANCE);
-   if(balance <= 0)
+   string capSource;
+   double maxLoss = BasketLossCapMoney(capSource);
+   if(maxLoss <= 0)
       return false;
 
    double basketPnL = CalculateBasketPnL();
-   double maxLoss    = balance * InpNegDCAMaxDDPct / 100.0;
    if(basketPnL < 0 && MathAbs(basketPnL) >= maxLoss)
    {
       Print("[QuantEdge EA] EXIT: DRAWDOWN CAP — basket P/L=", DoubleToString(basketPnL, 2),
-            " exceeds ", DoubleToString(InpNegDCAMaxDDPct, 1), "% of balance (",
+            " exceeds ", capSource, " (",
             DoubleToString(maxLoss, 2), "). Closing entire basket.");
       g_recoveryPreLossEq = AccountInfoDouble(ACCOUNT_EQUITY);
       CloseEntireBasket();
@@ -2161,6 +2196,8 @@ int OnInit()
          " Trailing=", InpUseTrailing);
    Print("[QuantEdge EA] PositiveDCA=", InpUsePositiveDCA, " PosDCA_ATR=", InpPosDCAATRMult,
          " NegativeDCA=", InpUseNegativeDCA, " NegDCA_ATR=", InpNegDCAATRMult);
+   Print("[QuantEdge EA] BasketCap: MaxDDPct=", InpNegDCAMaxDDPct,
+         " MaxLossR=", InpBasketMaxLossR, " (tighter wins, 0=off)");
    Print("[QuantEdge EA] ===================");
 
    if(!InpEnableAutoTrading)
