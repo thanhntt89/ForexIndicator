@@ -140,7 +140,7 @@ input string inp_grp_g3          = "========== Gate 3: Staleness =========="; //
 input bool   InpUseGate3Staleness  = true;              // [G3] Enable staleness check
 input double InpMaxSurvivalFloor = 0.15;                // [G3] Signal expired when survival < this
 
-input string inp_grp_g4          = "========== Gate 4: No Duplicate (always on) =========="; // ---
+input string inp_grp_g4          = "========== Gate 4: One basket at a time =========="; // --- built-in, no setting
 
 input string inp_grp_g5          = "========== Gate 5: Spread =========="; // ---
 input bool   InpUseGate5Spread     = true;              // [G5] Enable spread check (absolute and/or % of TP1)

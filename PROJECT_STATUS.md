@@ -75,6 +75,11 @@ và cấu hình tester cũ vẫn load được vì MT4/MT5 khớp input theo tê
   Phát hiện mới: 12R **cắt nhầm 3 SELL có SL $1.4–3.5** (12R ≈ 1 bậc DCA $15, nên bị cắt ngay khi DCA-1 vào).
   Ở $0.40 thì Gate 5 chặn phần lớn loại tín hiệu này. Ứng viên code: sàn giá cho cap R.
 - **Chờ user**: run #6b = run #5 + lot 0.01, spread 400, MinRecLevel 2.
+- **Run #7** (`StrategyTester7.htm`) = run #6 + lot 0.01, **vẫn spread $0.05** — §11.9: 383/383 basket khớp run #6,
+  mọi lần cắt là 12R. PF **2.11**, H1/H2 **2.95/1.64**, DD **9.8%**, basket tệ nhất **15% vốn** (trước 46%), z 3.19.
+  H2 1.64 phụ thuộc **một** basket (5/8/2024 thoát BE thay vì bị cắt), nếu bỏ nó thì H2 còn 1.25. Beta chỉ còn ~14% lợi nhuận.
+  **Tín hiệu thuần vẫn âm** (−$0.53/basket). Edge nếu có là của cấu trúc DCA+BE, không phải của RSI.
+- **Tiếp**: run #8 = run #7 + spread 400; nếu dương → cùng input trên 2023/2025, bật `InpResearchLog`.
 
 ### Backtest #3 — default mới trên build ptscale (2026-09-29, không đổi code)
 

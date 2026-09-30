@@ -1149,7 +1149,9 @@ các lệnh khác.
   3.86 → 1.48. Áp một cách thô chi phí +$0.35/oz lên run #6 (giữ nguyên chuỗi lệnh, cách mà §11.6
   đã cho thấy là không đáng tin) ra PF ~1.68, H2 ~1.11. Không dùng con số này để kết luận. Nó chỉ nhắc
   rằng z = 2.78 ở $0.05 **không** chuyển thẳng sang $0.40.
-- Cap 15% chỉ còn chạy **1 lần** (2024-04-22, balance $1,784). 9/10 lần cắt còn lại là cap R.
+- Cap 15% chạy **2 lần** (2024-04-22 ở balance $1,784 và 2024-08-05 ở $2,780), cap R chạy 7 lần, 1 basket
+  đóng do hết kỳ test. *(Đính chính 2026-09-30: bản trước ghi "1 lần, 9/10 là cap R" vì lệnh lọc output
+  dừng sớm.)*
 
 #### Việc tiếp theo
 
@@ -1157,6 +1159,77 @@ các lệnh khác.
    `InpMinRecLevel = 2`. Khuyến nghị: load từ report #5 để tránh lệch input.
 2. Cân nhắc code **sàn giá cho cap R** (ở trên). Chỉ quan trọng khi Gate 5 không chặn tín hiệu TP1
    hẹp, tức là khi spread rẻ, hoặc trên live khi spread thấp.
+
+### 11.9 Run #7 — run #6 + `InpMinLotSize = 0.01` (2026-09-30)
+
+> **Dữ liệu**: `logs/StrategyTester7.htm`. Diff Parameters với run #5: **chỉ** `InpMinLotSize` 0.03 → 0.01.
+> Vì run #5 và run #6 có cùng input, run #7 so thẳng được với **run #6**. Hai run khác nhau đúng lot
+> sàn, cùng spread 50 = **$0.05**, không phải $0.40 như đề xuất ở §11.8. Report không có `InpResearchLog`,
+> nên đây là build trước commit `3820a9e`.
+
+#### Lot 0.01 có đúng như dự tính không
+
+- 487/488 leg ở 0.01 (1 leg 0.02). Lot tính theo risk chỉ vượt sàn 0.01 một lần.
+- **383/383** basket trùng thời điểm mở và hướng với run #6. 381 basket cho đúng P/L của run #6 chia 3.
+  Như vậy lot nhỏ không làm đổi tín hiệu hay lệnh.
+- Mọi lần cắt giờ đều là **cap 12R** (đúng dự tính của §11.7). Không còn lần nào cắt ở 15% balance.
+
+#### 2 basket đổi kết quả
+
+| Basket | Run #6 (lot 0.03) | Run #7 (lot 0.01) | Nguyên nhân |
+|---|---|---|---|
+| 2024-04-22 BUY | 3 leg, cắt ở 15% = −$267.63 (tương đương −$89 ở 0.01) | 4 leg, cắt 12R = **−$140.72** | 12R ($141) **rộng hơn** 15% cũ theo đơn vị lot → gồng thêm leg DCA-4, lỗ sâu hơn |
+| 2024-08-05 BUY | 4 leg, cắt ở 15% = −$417.78 (tương đương −$139 ở 0.01) | 4 leg, đóng BE **+$2.14** | 12R ($166) rộng hơn mức lỗ thật lúc đó ($90) → không bị cắt, giá hồi về BE |
+
+Cả hai là cùng một cơ chế: cap 12R ở lot 0.01 **rộng hơn** cap 15% cũ. Một lần có lợi (+$141), một lần
+có hại (−$52). Tổng +$89, trong đó gần như toàn bộ đến từ **một** basket, ngày 5/8/2024, khi giá hồi về
+sau khi basket đã âm $90.
+
+#### Kết quả
+
+| Chỉ số | Run #6 (lot 0.03) | Run #6 ÷ 3 | **Run #7 (lot 0.01)** |
+|---|:---:|:---:|:---:|
+| Net | +$2,145 | +$715 | **+$789** |
+| PF (basket) | 1.91 | 1.91 | **2.11** |
+| H1 PF / H2 PF | 4.03 / 1.25 | — | **2.95 / 1.64** |
+| MaxDD closed-balance | 16.1% | — | **9.8%** |
+| Recovery factor | 3.88 | — | **4.28** |
+| Basket tệ nhất | −$463 (46% vốn) | — | **−$154 (15.4% vốn)** |
+| z / t | 2.78 / 2.37 | — | **3.19 / 2.72** |
+| Lần thua / breakeven | 10 / — | — | **9 / 18.9** |
+
+Nếu basket 5/8 bị cắt như run #6: net +$647, PF 1.76, **H2 1.25**, z 2.32. Vậy phần H2 tăng lên 1.64
+là do **một** basket.
+
+#### Phần xu hướng
+
+- Beta: EA trung bình chỉ còn net long **0.19 oz**, lời từ việc vàng tăng khoảng **$110 / $789** (14%, so với ~40% ở
+  run #5). Đây là cải thiện thật: lot nhỏ hơn nên beta nhỏ hơn.
+- Toàn bộ EA, trung hòa xu hướng: +$2.06/basket, CI 90% **+0.94 … +3.04**, P(≤ 0) ≈ 0%. Block bootstrap:
+  P(mean ≤ 0) = 0.2%.
+- **Chỉ tín hiệu (k=0)**, trung hòa xu hướng: **−$0.53**/basket (P ≤ 0 = 82%). SELL không DCA: PF 0.55.
+  **Vẫn âm, như 4 run trước.**
+- Mua 0.01 lot rồi giữ cả kỳ: +$572.
+
+#### Đọc run #7
+
+1. **Lot 0.01 cải thiện rủi ro rõ rệt**: basket tệ nhất từ 46% xuống 15% vốn, MaxDD từ 16% xuống 10%. Đây
+   là điều đã dự tính ở §11.7 và giờ đo được thật.
+2. **z = 3.19 vẫn đo ở spread $0.05.** Run #4 cho thấy chuyển sang $0.40 thì PF 1.68 → 1.35. Chi phí
+   spread theo lot không đổi, nên cú sụt dự kiến tương tự. Mình **không** ước lượng con số này bằng
+   replay (§11.6).
+3. **Edge của EA đến từ cấu trúc thoát lệnh, không phải từ tín hiệu.** Tín hiệu thuần vẫn âm ở cả 5 run.
+   Phần dương chỉ xuất hiện khi có DCA + BE, tức là nhờ việc giá vàng M15 hay quay đầu trong khoảng $15–45.
+   Điều đó *có thể* là một đặc tính thật của vàng M15 (mean reversion ngắn hạn), nhưng mới chỉ thấy
+   trên **một năm có trend tăng**. Muốn kiểm chứng phải chạy thêm 2023 và 2025.
+4. 3 basket SELL có SL hẹp (7/3, 8/23, 10/1) vẫn bị cap R cắt nhầm: −$110, bằng 15% lợi nhuận. Sàn giá cho
+   cap R (§11.8) vẫn là một ứng viên.
+
+#### Việc tiếp theo
+
+1. **Run #8 = run #7, chỉ đổi spread thành 400.** Đây là phép thử quyết định cho cấu hình hiện tại.
+2. Nếu run #8 vẫn dương: chạy **cùng input đó trên 2023 và 2025** (W3/W4, §10.4). Không chỉnh thêm gì.
+3. Bật `InpResearchLog = true` trong các run đó (build `3820a9e`) để có dữ liệu cho `tools/signal_edge.py`.
 
 ---
 
