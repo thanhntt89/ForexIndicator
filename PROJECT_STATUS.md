@@ -80,6 +80,17 @@ và cấu hình tester cũ vẫn load được vì MT4/MT5 khớp input theo tê
   H2 1.64 phụ thuộc **một** basket (5/8/2024 thoát BE thay vì bị cắt), nếu bỏ nó thì H2 còn 1.25. Beta chỉ còn ~14% lợi nhuận.
   **Tín hiệu thuần vẫn âm** (−$0.53/basket). Edge nếu có là của cấu trúc DCA+BE, không phải của RSI.
 - **Tiếp**: run #8 = run #7 + spread 400; nếu dương → cùng input trên 2023/2025, bật `InpResearchLog`.
+- **Run #8/#9** (§11.10) là **chạy lại** run #6/#5 (lot 0.03, trùng từng dòng lệnh), không phải run đã đề
+  xuất. Chỉ xác nhận thêm: `InpMinRecLevel` 2 vs 6 không đổi lệnh nào trong tester.
+  **Run cần có giờ gọi là run #10**: cấu hình run #9 + `InpMinLotSize = 0.01` + `InpResearchLog = true`
+  (compile bản mới nhất), lưu `StrategyTester10.htm`.
+- **§13 Đánh giá quant + kế hoạch live cent 10k** (user: mục tiêu live tài khoản cent 10,000 USC ≈ $100 thật):
+  skew −7.5 (Sharpe 2.8 đánh giá quá cao), **Deflated Sharpe 66–77% ($0.05) / 25–40% ($0.40)**, MinTRL 0.8–2 năm
+  → chỉ forward-test bằng tiền nhỏ, không scale. Tìm thấy **3 sai khác backtest/live**: (1) session filter lệch
+  2–3 giờ (`InpTesterGMTOffset=0` trong khi server UTC+2/+3; giờ server 07–09 chiếm 34% lợi nhuận run #7, live không
+  giao dịch giờ đó); (2) tester không tính swap; (3) Gate 1 chỉ có tác dụng trên live. **Preset `presets/R10_cent10k.set`**
+  (lot 0.1 cố định = run #7 ×10, MinRecLevel 3, TesterGMTOffset 2, backstop SL, research log) dùng cho cả
+  backtest (deposit 10000, spread 400) lẫn live. Có lộ trình 5 bước và quy tắc dừng (DD > 25%, ≥ 7 thua / 100 basket).
 
 ### Backtest #3 — default mới trên build ptscale (2026-09-29, không đổi code)
 

@@ -1231,6 +1231,115 @@ là do **một** basket.
 2. Nếu run #8 vẫn dương: chạy **cùng input đó trên 2023 và 2025** (W3/W4, §10.4). Không chỉnh thêm gì.
 3. Bật `InpResearchLog = true` trong các run đó (build `3820a9e`) để có dữ liệu cho `tools/signal_edge.py`.
 
+### 11.10 Run #8 và #9 — chạy lại run #6 và #5 (2026-09-30)
+
+> `logs/StrategyTester8.htm`, `logs/StrategyTester9.htm`. Build sắp xếp gate (`02848f3`): có nhóm
+> `inp_grp_g1…` nhưng chưa có `InpResearchLog`, nên không có research log.
+
+- **Run #8**: Parameters giống hệt run #6 (lot 0.03, spread $0.05, `InpMinRecLevel=6`). 974/974 dòng lệnh
+  trùng từng dòng.
+- **Run #9**: giống run #5, chỉ khác `InpMinRecLevel` 2 → 6 (lot 0.03, spread $0.40). 890/890 dòng lệnh trùng.
+- Thông tin mới duy nhất: **trong tester, `InpMinRecLevel` = 2 hay 6 không đổi bất kỳ lệnh nào**. Lần này
+  biến được tách riêng (run #3 → #6 còn lẫn cap 12R). Gate 1 không kiểm chứng được bằng backtest; trên
+  live, indicator có lịch sử outcome nên gate có thể chặn khác.
+- Run cần có (lot 0.01 + spread $0.40, research log bật) **vẫn chưa có**. Lấy cấu hình run #9, đổi
+  `InpMinLotSize = 0.01`, compile bản mới nhất, bật `InpResearchLog`, lưu thành `StrategyTester10.htm`.
+  Sau khi compile phải kiểm tra lại tab Inputs: giữa run #7 và run #8, lot đã bị trả về 0.03.
+  *(Preset `R10_lot001_spread040.set` ghi ở đây đã được thay bằng `presets/R10_cent10k.set`, xem §13.)*
+
+---
+
+## 13. Đánh giá theo quant + kế hoạch live cent $10k (2026-09-30)
+
+> Mục tiêu của user: chạy live trên tài khoản cent 10,000 USC (≈ $100 tiền thật). Các chỉ số tính trên
+> run #5 (default, lot 0.03, $0.40), #6 (lot 0.03, $0.05), #7 (lot 0.01, $0.05). Chưa có run nào gộp
+> lot 0.01 + $0.40.
+
+### 13.1 Bảng điểm quant
+
+| Chỉ số | Run #5 | Run #6 | Run #7 | Chuẩn |
+|---|:---:|:---:|:---:|:---:|
+| Sharpe (ngày, năm hóa) | 1.28 | 2.41 | 2.78 | > 1 tốt, nhưng xem skew |
+| Sortino | 1.42 | 2.70 | 3.13 | |
+| Skew / kurtosis mỗi basket | −4.6 / 25 | −7.1 / 60 | −7.5 / 69 | ≈ 0 / 3 là bình thường |
+| Lần thua tệ nhất (số lần thắng TB) | 27 | 38 | 38 | |
+| PSR (Sharpe > 0) | 86.5% | 95.0% | 96.1% | ≥ 95% |
+| **Deflated Sharpe** (N=10 / 30 thử) | **40% / 25%** | 71% / 58% | **77% / 66%** | ≥ 95% |
+| MinTRL (95%) | 755 basket ≈ 2.0 năm | 384 ≈ 0.9 năm | 333 ≈ 0.8 năm | |
+| MC 1 năm P(DD > 20%) | 91% | 79% | **13%** | |
+| MC 1 năm P(lỗ cả năm) | 6.6% | 0.7% | 0.3% | |
+| Thời gian dưới đỉnh dài nhất | 55 ngày | 40 ngày | 40 ngày | |
+
+Đọc bảng:
+
+1. **Skew −7.5 nghĩa là Sharpe ≈ 2.8 đang đánh giá quá cao.** Đây là profile bán quyền chọn: 97% lần thắng nhỏ,
+   thỉnh thoảng một lần thua bằng 38 lần thắng. Sharpe coi hai chiều biến động như nhau nên không bắt được
+   rủi ro đuôi này. Bảng dùng PSR/DSR vì chúng có hiệu chỉnh cho skew và kurtosis.
+2. **Deflated Sharpe < 95% ở mọi run.** Từ §8 đến nay đã thử ít nhất 10–30 cấu hình (k, cap, lot, spread,
+   các gate). Sau khi trừ hiệu ứng "chọn cái tốt nhất trong nhiều lần thử", xác suất edge thật chỉ còn
+   66–77% ở spread $0.05, và **25–40% ở spread thật $0.40**.
+3. **MinTRL**: cần 0.8–2 năm giao dịch live hoặc forward-test mới có thể xác nhận edge ở mức 95%. Đây
+   là giới hạn thống kê, không có cách làm nhanh hơn.
+4. Rủi ro đuôi chỉ về mức chấp nhận được khi **lot ở sàn** (run #7): P(DD > 20%) còn 13%, so với 79–91% ở
+   lot 0.03.
+5. Tín hiệu thuần vẫn âm (§12.1). Phần dương đến từ cấu trúc DCA + BE (mean reversion ngắn hạn của vàng),
+   mới thấy trên một năm có trend.
+
+**Kết luận**: đủ điều kiện **forward-test bằng tiền nhỏ, xem như học phí**. **Chưa** đủ điều kiện scale vốn.
+
+### 13.2 Ba sai khác giữa backtest và live đã tìm thấy
+
+| # | Sai khác | Ảnh hưởng | Xử lý |
+|---|---|---|---|
+| 1 | **Session filter lệch giờ**: tester đặt `InpTesterGMTOffset = 0`, trong khi server là UTC+2/+3 (đo được: giao dịch dừng từ 00:00 và mở lại lúc 01:00 giờ server) | Mọi backtest lọc phiên sớm 2–3 giờ so với live. Live không bao giờ vào lệnh ở server 07–09 (UTC 04–06), mà các giờ này chiếm **134/383 basket, +$269 = 34% lợi nhuận run #7** (ở run #5 thì −13%) | Preset R10 đặt `InpTesterGMTOffset = 2`: đúng tuyệt đối vào mùa đông, lệch 1 giờ vào mùa hè (tester không mô phỏng được DST). Live dùng `TimeGMT()` nên không bị ảnh hưởng |
+| 2 | **Swap không được tính**: balance mỗi dòng đóng lệnh chênh với profit tối đa $0.01 | Run #7 có 96/488 leg qua đêm, 1.40 lot-đêm/năm. Ở swap $5–40/lot/đêm, chi phí bằng 1–7% lợi nhuận | Nhỏ, nhưng phải trừ khi so live với backtest |
+| 3 | **Gate 1 (`InpMinRecLevel`) không có tác dụng trong tester** (§11.10): chưa có outcome nên floor tự hạ về WAIT | Trên live, indicator đã tích lũy outcome, nên `InpMinRecLevel = 2` (CAUTION) có thể chặn tín hiệu mà tester luôn cho qua | Preset R10 đặt `InpMinRecLevel = 3` (WAIT), đúng bằng floor tester đã thực sự dùng, để live lọc giống backtest |
+
+### 13.3 Cấu hình R10: một file cho cả backtest và live
+
+`presets/R10_cent10k.set`, sinh từ Parameters của run #9 (default + 12R), chỉ đổi:
+
+| Input | Giá trị | Lý do |
+|---|---|---|
+| `InpMinLotSize` = `InpMaxLotSize` | **0.1** | Lot cố định. 0.1 lot trên 10,000 USC tương đương run #7 (0.01 lot trên $1,000) nhân 10: mọi leg ở sàn, cap 15% và 12R cùng nhân theo, **tỉ lệ % giống hệt run #7** |
+| `InpMinRecLevel` | 3 (WAIT) | Sai khác #3 |
+| `InpTesterGMTOffset` | 2 | Sai khác #1 (chỉ ảnh hưởng tester) |
+| `InpUseDCABackstopSL` | true | SL phía broker ở 1.3 × cap basket, phòng khi EA/VPS mất kết nối |
+| `InpResearchLog` | true | Có dữ liệu cho `signal_edge.py` |
+
+Đơn vị kiểm tra: 0.1 lot vàng trên tài khoản cent = 10 oz = 10 USC mỗi $1 giá, bằng 0.1 USD thật mỗi $1 giá.
+Tương đương về kinh tế với 0.001 lot trên tài khoản USD.
+
+### 13.4 Lộ trình go-live
+
+| Bước | Việc | Qua bước khi |
+|---|---|---|
+| **0** | Backtest R10: nạp preset, **Initial deposit 10000**, spread **400**, 2024.02–12, XAUUSD M15 | PF ≥ 1.25 **cả hai** nửa năm; relative DD ≤ 20%. Trượt → không live, quay lại §12.2 |
+| **0b** | Cùng file, chạy **2023** và **2025**, không chỉnh gì | PF ≥ 1.15, không nửa năm nào < 1.0 |
+| **1** | Trên broker cent: đọc thông số symbol (`XAUUSDc`): Digits, Point, lot min/step, contract size, stops level, **swap long/short**, spread thường và spread lúc rollover. Compile, xác nhận Journal in `Build=2026-09-30.2-research` và `Digits=... scaled x...` đúng | Thông số khớp với giả định (0.1 lot = 10 USC/$1, spread ≤ 40–50 cent) |
+| **2** | Live, lot 0.1 cố định, VPS, 1 chart XAUUSDc M15 + indicator + EA với preset R10 | Theo dõi hằng tuần bằng `basket_analyzer.py` trên report Account History |
+| **3** | Sau **≥ 100 basket** (~3 tháng): so live với backtest | Tỉ lệ thua, spread, slippage nằm trong khoảng của backtest (§13.5) |
+| **4** | Sau **≥ 330 basket** (~10–12 tháng, MinTRL) | Chỉ lúc này mới xét tăng vốn hoặc chuyển sang tài khoản USD |
+
+### 13.5 Quy tắc dừng (đặt trước, không đổi giữa chừng)
+
+Dựa trên phân phối của run #7 (block bootstrap, 20,000 đường):
+
+| Dấu hiệu | Ngưỡng | Ý nghĩa |
+|---|---|---|
+| Max DD tính từ đỉnh | **> 25%** (P = 4% nếu backtest đúng) | **Dừng**, không nạp thêm, phân tích lại |
+| Max DD | > 20% (P = 12%) | Cảnh báo: rà soát spread/slippage thật |
+| Số basket thua trong 100 basket đầu | **≥ 7** (P = 1%; backtest: 2.35/100, breakeven 4.8/100) | **Dừng**: tỉ lệ thua không còn như backtest |
+| Số basket thua trong 100 basket đầu | ≥ 5 (P = 9%) | Cảnh báo |
+| Một basket lỗ | > 12R | Lỗi cap / broker, **dừng ngay** để kiểm tra |
+| Spread TB lúc vào lệnh | > $0.40 | Backtest đã quá lạc quan so với live |
+
+Không bật Recovery Mode, không tăng lot sau chuỗi thua, không tắt cap để "gồng".
+
+**Kỳ vọng trung thực**: backtest run #7 cho khoảng +80%/năm, nhưng đó là ở spread $0.05, trên 2024, trong
+số nhiều cấu hình đã thử, và 34% lợi nhuận nằm ở khung giờ live sẽ không giao dịch. Live nhiều khả năng
+thấp hơn đáng kể. Với ~$100 tiền thật, mục tiêu của 6–12 tháng đầu là **đo edge**, không phải kiếm lời.
+
 ---
 
 ## 12. Đánh giá độc lập: EA có edge thật không? (2026-09-30)
