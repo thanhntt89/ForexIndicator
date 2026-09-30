@@ -141,7 +141,7 @@ double BufferTP3[];                // 25: take profit 3 price
 // against the FIRST line printed on chart load — settles "is this terminal
 // actually running the code I just edited" without guessing, same purpose
 // as QuantEdge_EA_Template's EA_BUILD_TAG.
-#define IND_BUILD_TAG "2026-09-08.1-paneldrag-investigation"
+#define IND_BUILD_TAG "2026-10-01.1-arrowprune"
 
 int OnInit()
 {

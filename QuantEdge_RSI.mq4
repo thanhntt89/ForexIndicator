@@ -125,7 +125,7 @@ double BufferTP3[];                // 25: take profit 3 price
 // against the FIRST line printed on chart load — settles "is this terminal
 // actually running the code I just edited" without guessing, same purpose
 // as QuantEdge_EA_Template's EA_BUILD_TAG.
-#define IND_BUILD_TAG "2026-09-08.1-paneldrag-investigation"
+#define IND_BUILD_TAG "2026-10-01.1-arrowprune"
 
 int OnInit()
 {
@@ -362,8 +362,16 @@ int OnCalculate(const int rates_total,
       ArrayResize(g_rawRSI, rates_total);
       for(int k = oldSize; k < rates_total; k++)
          g_rawRSI[k] = EMPTY_VALUE;
+      // [ARROW-PRUNE-FIX] `time[]`, not the predefined `Time[]`: OnCalculate
+      // set time[] to forward order above, but Time[] is always a series
+      // (index 0 = newest), so Time[rates_total-1-InpMaxBars] was a bar
+      // InpMaxBars from the OLDEST end. That made the prune a no-op on any
+      // normal chart -- arrows past InpMaxBars were never removed -- and on
+      // a chart holding InpMaxBars bars or fewer the index clamped to 0, the
+      // NEWEST bar, and every arrow went on each new bar. The mq5 twin
+      // already uses time[].
       int cutoffIdx = MathMax(0, rates_total - 1 - InpMaxBars);
-      CleanupOldArrows(Time[cutoffIdx]);
+      CleanupOldArrows(time[cutoffIdx]);
    }
    else if(ArraySize(g_rawRSI) != rates_total)
       ArrayResize(g_rawRSI, rates_total);

@@ -444,6 +444,73 @@ Cả hai nền tảng dùng chung `Config.mqh` + `ArrowManager.mqh` nên không 
 
 ---
 
+## 3e-bis. Mũi tên lại mất trên MT4 M15 (2026-10-01, indicator `2026-10-01.1-arrowprune`)
+
+**Triệu chứng**: EA MQL4 chạy live trên XAUUSD M15, chart không có mũi tên tín hiệu nào. Các chấm
+nhỏ xanh/đỏ/vàng trên nến là marker lệnh mà MT4 tự vẽ khi `OrderSend`/`OrderClose` (màu
+`clrLime`/`clrRed`/`clrYellow`), không phải mũi tên của indicator. Chart không có indicator standalone
+(không có cửa sổ phụ RSI), nên instance duy nhất là bản EA nạp qua `iCustom` với `InpEAMode = true`.
+
+### Code: không có đường xóa nào giải thích được việc mất toàn bộ
+
+Rà mọi chỗ tạo/xóa `QE_Arrow_` trong EA mode, với một `.ex4` build từ `4c81b78` trở đi:
+
+| Hàm | Trong EA mode |
+|---|---|
+| `CreateSignalArrow()` | Vẽ (`InpArrowsInEAMode` mặc định `true`; `iCustom` chỉ truyền 8 input đầu nên nó luôn nhận default) |
+| Xóa ở `fullRecalc` | Bỏ qua (`if(!InpEAMode)`) |
+| `DeleteOppositeArrows()` | Return ngay |
+| `DeleteArrowForSignal()` | Không có chỗ gọi |
+| `OnDeinit` | Xóa hết, nhưng lần nạp lại chạy `fullRecalc` và vẽ lại mọi tín hiệu trong `InpMaxBars` bar |
+| `CleanupOldArrows()` | Xem bug bên dưới: gần như không xóa gì |
+| EA | Chỉ xóa `QE_Line_`, `QE_Zone_`, `QEEA_Arr_` |
+
+### Bug thật nhưng không phải nguyên nhân: prune dùng sai mảng thời gian
+
+`QuantEdge_RSI.mq4:366` (nhánh có bar mới):
+
+```cpp
+int cutoffIdx = MathMax(0, rates_total - 1 - InpMaxBars);
+CleanupOldArrows(Time[cutoffIdx]);   // Time[] là series: index 0 = bar MỚI NHẤT
+```
+
+`time[]` đã được đặt về thứ tự xuôi, còn `Time[]` luôn là series. Nên `Time[rates_total-1-500]` là bar
+cách bar **cũ nhất** 500 bar:
+- Chart bình thường: mốc cắt nằm rất xa trong quá khứ → prune **không xóa gì**, mũi tên cũ hơn
+  `InpMaxBars` tích tụ mãi (ngược với thiết kế).
+- Chart có ≤ `InpMaxBars` bar: `cutoffIdx` = 0 → mốc là bar **mới nhất** → mọi bar mới xóa sạch mũi tên,
+  và nhánh incremental không vẽ lại tín hiệu cũ. Hiếm trên live.
+
+Bản mq5 (`QuantEdge_RSI.mq5:424`) đã dùng `time[]`. Đã sửa mq4 cho khớp. **Tác dụng phụ**: MT4 giờ sẽ xóa
+mũi tên cũ hơn 500 bar (~5 ngày M15), giống MT5. Trước đây MT4 giữ lại vô hạn.
+
+### Nguyên nhân khả dĩ nhất: `.ex4` của indicator trên terminal là bản cũ
+
+Chỉ có một thay đổi quyết định việc bản EA mode có vẽ mũi tên hay không: `4c81b78` (2026-09-24). Trước
+commit đó `CreateSignalArrow()` return ngay khi `InpEAMode = true`. Từ `45c0ac0` (cùng ngày), EA thôi tự
+vẽ. Nếu terminal chạy EA mới nhưng `QuantEdge_RSI.ex4` build **trước** `4c81b78`, thì **không có gì vẽ
+mũi tên**. Kết quả đúng như ảnh chụp. Khả năng này cao vì:
+- EA nạp indicator qua `iCustom` từ file `.ex4` riêng trong `MQL4\Indicators`. Compile EA **không**
+  compile indicator.
+- Các lần gần đây đều chỉ yêu cầu compile EA.
+- Build tag indicator đứng yên ở `2026-09-08.1-...` từ trước các fix mũi tên, nên log **không thể** cho biết
+  indicator cũ hay mới. Đã bump lên `2026-10-01.1-arrowprune`.
+
+Chưa xác nhận được bằng log vì máy phân tích không có terminal MT4.
+
+### Cách kiểm tra (theo thứ tự)
+
+1. Compile **`QuantEdge_RSI.mq4`** (indicator, không phải EA). Nếu `Include\QuantEdge` của terminal là bản
+   copy (không phải junction do `make.ps1` tạo), phải cập nhật nó trước, vì compile từ Include cũ sẽ ra
+   binary cũ. Đặt `.ex4` vào `MQL4\Indicators` của đúng terminal.
+2. Gỡ EA khỏi chart rồi gắn lại (để `iCustom` nạp lại indicator).
+3. Tab Experts phải có **`[QuantEdge] Build=2026-10-01.1-arrowprune`**. Không có → terminal vẫn nạp
+   bản cũ.
+4. Nếu build đúng mà vẫn không thấy mũi tên: Ctrl+B → danh sách object, tìm `QE_Arrow_`.
+   Có object → vấn đề hiển thị. Không có → gửi log tab Experts ngay sau khi gắn EA.
+
+---
+
 ## 3f. Backtest không vào lệnh nào — 2 bug (build `.6-backtest`)
 
 ### Bug 1 — Gate 10 từ chối đúng entry tốt nhất (do tao gây ra ở `.1-entryqual`)
