@@ -21,7 +21,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-30.1-gateorder"
+#define EA_BUILD_TAG "2026-09-30.2-research"
 
 // [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
 // the EA is a separate compiled program with no shared include, so these
@@ -281,6 +281,12 @@ input string inp_grp_panel       = "========== Close Panel =========="; // ---
 input bool   InpShowClosePanel   = true;                // Show close-order panel on chart
 
 //+------------------------------------------------------------------+
+//| INPUT GROUP: Research Log                                          |
+//+------------------------------------------------------------------+
+input string inp_grp_research    = "========== Research Log =========="; // ---
+input bool   InpResearchLog      = false;               // One CSV row per closed bar -> Common\Files\QuantEdge_Research (tools/signal_edge.py)
+
+//+------------------------------------------------------------------+
 //| Close panel object-name constants                                 |
 //+------------------------------------------------------------------+
 #define QEEA_PREFIX          "QEEA_"
@@ -434,6 +440,100 @@ double ReadSignalBuffer(int bufferIndex)
    if(shift < 0)
       return EMPTY_VALUE;
    return ReadBufferAt(bufferIndex, shift);
+}
+
+//+------------------------------------------------------------------+
+//| [RESEARCH-LOG] Per-bar dataset for offline signal research        |
+//| (tools/signal_edge.py). The indicator's own CSV logger is off in  |
+//| the tester by design, so a backtest left no record of the signals |
+//| it saw -- only of the trades DCA made out of them. This writes    |
+//| every closed bar: OHLC, the bid/ask the EA could fill at on the   |
+//| next bar's first tick, and the indicator's signal/scoring buffers |
+//| for that bar exactly as the EA read them at decision time. So the |
+//| file has no look-ahead and holds every signal, traded or not.     |
+//| Common\Files, so the data outlives the tester run.                |
+//+------------------------------------------------------------------+
+#define RESEARCH_FOLDER "QuantEdge_Research"
+int  g_researchFH     = INVALID_HANDLE;
+bool g_researchTried  = false;
+int  g_researchBufs[] = {BUF_ENTRY, BUF_SL, BUF_TP1, BUF_TP2, BUF_TP3,
+                         BUF_REC_LEVEL, BUF_REC_CONFIDENCE, BUF_REC_EV, BUF_REC_RISK,
+                         BUF_PROB_TP1, BUF_PROB_SL, BUF_PROB_SAMPLES};
+
+void ResearchLogOpen()
+{
+   g_researchTried = true;
+   if(IsOptimization())
+      return;
+
+   string tf = EnumToString((ENUM_TIMEFRAMES)Period());
+   StringReplace(tf, "PERIOD_", "");
+   string day = TimeToString(TimeCurrent(), TIME_DATE);
+   StringReplace(day, ".", "");
+   string name = RESEARCH_FOLDER + "\\bars_" + Symbol() + "_" + tf + "_" + day + ".csv";
+
+   string where = TerminalInfoString(TERMINAL_COMMONDATA_PATH) + "\\Files\\";
+   FolderCreate(RESEARCH_FOLDER, FILE_COMMON);
+   g_researchFH = FileOpen(name, FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
+   if(g_researchFH == INVALID_HANDLE)
+   {
+      where = "(local Files sandbox) ";
+      FolderCreate(RESEARCH_FOLDER);
+      g_researchFH = FileOpen(name, FILE_WRITE|FILE_TXT|FILE_ANSI);
+   }
+   if(g_researchFH == INVALID_HANDLE)
+   {
+      Print("[QuantEdge EA] Research log: cannot open ", name, " — error ", GetLastError());
+      return;
+   }
+   FileWriteString(g_researchFH, "BAR_TIME,OPEN,HIGH,LOW,CLOSE,TICK_TIME,BID,ASK,BUY_CASE,SELL_CASE"
+                   ",ENTRY,SL,TP1,TP2,TP3,REC_LEVEL,CONFIDENCE,EV,RISK_PCT,PROB_TP1,PROB_SL,PROB_N\n");
+   Print("[QuantEdge EA] Research log -> ", where, name);
+}
+
+// Call once per new bar: logs the bar that just closed (shift 1).
+void ResearchLogBar()
+{
+   if(!InpResearchLog)
+      return;
+   if(g_researchFH == INVALID_HANDLE)
+   {
+      if(g_researchTried)
+         return;
+      ResearchLogOpen();
+      if(g_researchFH == INVALID_HANDLE)
+         return;
+   }
+
+   string row = TimeToString(iTime(Symbol(), Period(), 1), TIME_DATE|TIME_MINUTES)
+              + "," + DoubleToString(iOpen(Symbol(), Period(), 1), Digits)
+              + "," + DoubleToString(iHigh(Symbol(), Period(), 1), Digits)
+              + "," + DoubleToString(iLow(Symbol(), Period(), 1), Digits)
+              + "," + DoubleToString(iClose(Symbol(), Period(), 1), Digits)
+              + "," + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS)
+              + "," + DoubleToString(Bid, Digits)
+              + "," + DoubleToString(Ask, Digits);
+
+   // The scoring buffers are only read on a signal bar; every other bar
+   // leaves those columns empty.
+   double bc = ReadBufferAt(BUF_BUY_SIGNAL, 1);
+   double sc = ReadBufferAt(BUF_SELL_SIGNAL, 1);
+   bool hasBuy  = (bc != EMPTY_VALUE && bc > 0);
+   bool hasSell = (sc != EMPTY_VALUE && sc > 0);
+   row += "," + (hasBuy  ? IntegerToString((int)bc) : "0")
+        + "," + (hasSell ? IntegerToString((int)sc) : "0");
+   for(int k = 0; k < ArraySize(g_researchBufs); k++)
+   {
+      row += ",";
+      if(!hasBuy && !hasSell)
+         continue;
+      double v = ReadBufferAt(g_researchBufs[k], 1);
+      if(v != EMPTY_VALUE)
+         row += DoubleToString(v, (k < 5) ? Digits : 4);
+   }
+   FileWriteString(g_researchFH, row + "\n");
+   if(!IsTesting())
+      FileFlush(g_researchFH);
 }
 
 //+------------------------------------------------------------------+
@@ -2937,6 +3037,7 @@ void OnTick()
    if(isNewBar)
    {
       g_lastBarTime = currentBarTime;
+      ResearchLogBar();
 
       int scanLimit = (InpRetryMaxBars > 0) ? InpRetryMaxBars : 5;
       int foundShift = -1;
@@ -3144,6 +3245,11 @@ void OnDeinit(const int reason)
    QEEA_CleanupLegacyArrows();
    GlobalVariableDel("QE_BrierMinN_"  + Symbol());
    GlobalVariableDel("QE_BrierFloor_" + Symbol());
+   if(g_researchFH != INVALID_HANDLE)
+   {
+      FileClose(g_researchFH);
+      g_researchFH = INVALID_HANDLE;
+   }
    Print("[QuantEdge EA] Deinit, reason=", reason);
 }
 

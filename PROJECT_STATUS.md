@@ -24,6 +24,22 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 
 ## 3. Changelog Các Phiên Gần Nhất
 
+### Đánh giá edge độc lập + research log (2026-09-30)
+
+**Build**: `2026-09-30.2-research` (mq4 + mq5). Chi tiết: `document/backtest_review_2024.md` §12.
+
+- **Kết luận**: chưa có bằng chứng EA có edge thật. Tín hiệu thuần trung hòa xu hướng âm ở cả 4 run;
+  random walk với đúng cấu trúc TP/DCA/BE/cap đã cho WR ~90%; ~40% lợi nhuận run #5 là beta vàng +29%;
+  mua 0.03 lot rồi giữ (+$1,747) hơn EA. **Không tăng vốn.**
+- `[RESEARCH-LOG]` Input `InpResearchLog` (mặc định tắt): mỗi nến đóng ghi một dòng (OHLC, bid/ask
+  khớp được, và buffer tín hiệu/scoring đúng như EA đọc) vào `Common\Files\QuantEdge_Research\`.
+  Không đổi hành vi giao dịch.
+- `tools/signal_edge.py`: so tín hiệu với vào lệnh ngẫu nhiên cùng hướng, cùng giờ, cách 2–12 ngày
+  (lợi nhuận sau 15m–1d theo ATR, và SL/TP1 theo R); kiểm tra PROB_TP1/EV; `--selftest` đã PASS
+  (không báo nhầm trend thành edge, bắt được edge cài sẵn).
+- **Chờ user**: chạy EA với `InpResearchLog = true` trên XAUUSD M15 2015–2025 (ưu tiên MT5 real ticks),
+  rồi chạy tool.
+
 ### EA input sắp theo thứ tự gate (2026-09-30)
 
 **Build**: `2026-09-30.1-gateorder` (mq4 + mq5). Chỉ đổi **vị trí và nhóm** của input, không đổi tên,

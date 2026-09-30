@@ -1157,3 +1157,91 @@ các lệnh khác.
    `InpMinRecLevel = 2`. Khuyến nghị: load từ report #5 để tránh lệch input.
 2. Cân nhắc code **sàn giá cho cap R** (ở trên). Chỉ quan trọng khi Gate 5 không chặn tín hiệu TP1
    hẹp, tức là khi spread rẻ, hoặc trên live khi spread thấp.
+
+---
+
+## 12. Đánh giá độc lập: EA có edge thật không? (2026-09-30)
+
+> Phần này nhìn lại toàn bộ §8–§11, kể cả những chỗ tham số được chọn trên chính dữ liệu 2024 (12R,
+> k=2). Tính trên run #3–#6. Phần phân tích xu hướng và beta chạy bằng script ad-hoc, chưa có tool
+> lưu lại. Phần đo tín hiệu thuần sẽ làm bằng `tools/signal_edge.py` (§12.3).
+
+### 12.1 Kết luận: chưa có bằng chứng
+
+| Kiểm tra | Kết quả | Ý nghĩa |
+|---|---|---|
+| Chỉ tín hiệu (k=0: không DCA, cắt ở bậc DCA-1 $15), trung hòa xu hướng (TB của BUY và SELL) | −$0.5 → −$1.8/basket, **âm ở cả 4 run** | Tín hiệu không dự báo được hướng giá |
+| Random walk không drift, đúng cấu trúc TP1 / DCA $15 / BE / cap 12R của EA | WR **89–90%**, EV −$1.3 ($0) / −$3.5 ($0.40) mỗi basket | WR 96% chủ yếu là **cấu trúc**, không phải kỹ năng |
+| Beta xu hướng (EA giữ net long TB 0.81 oz × vàng +29%) | ≈ **$470 / $1,174** của run #5 | ~40% lợi nhuận là giữ lệnh mua trong năm vàng tăng |
+| Phần còn lại sau khi trung hòa xu hướng (run #5) | +$2.8/basket, CI 90%: −$3.3 … +$8.1 | P(≤ 0) ≈ 21% |
+| Toàn bộ EA (block bootstrap, khối 10) | P(mean ≤ 0) = 6–9% | Chưa đạt ngưỡng 5% |
+| Độ mong manh (run #5) | 14 basket thua; breakeven ở 19.3 | Chỉ cần thêm 5 lần thua |
+| Mua 0.03 lot rồi giữ cả kỳ | +$1,747 (chưa trừ swap) | **Hơn** EA (+$1,105 / +$1,174 ở $0.40) |
+
+Cấu trúc DCA + BE + TP chỉ **đổi hình dạng** phân phối (nhiều lần lời nhỏ, ít lần lỗ lớn), không đổi
+kỳ vọng. Nó chỉ có lợi khi giá thật sự hay quay đầu trong biên độ $15–45. Điều đó có thể đúng, nhưng
+dữ liệu chưa chứng minh được. Các lần cắt nặng nhất rơi vào những đợt trend mạnh (5/8/2024, sau bầu cử
+Mỹ 11/2024), đúng loại rủi ro mà cấu trúc này yếu nhất.
+
+"Chưa có bằng chứng" không có nghĩa là chắc chắn không có edge: 1 năm, 1 xu hướng, ~340 basket thì
+chưa đủ để kết luận theo chiều nào. **Không tăng vốn dựa trên các run này.**
+
+### 12.2 Công cụ cần thêm, theo thứ tự
+
+Thêm indicator dạng momentum (MACD, Stochastic, CCI) vào RSI chỉ làm tăng overfit, vì chúng tương
+quan cao với nhau. Thứ còn thiếu trước hết là công cụ đo, rồi mới đến bộ lọc có cơ sở vững:
+
+1. **Research log trong tester + đo tín hiệu thuần** (§12.3). Làm trước tiên, vì các bước sau đều cần.
+2. **Lọc theo xu hướng khung lớn**: chỉ vào lệnh cùng hướng D1 (time-series momentum, Moskowitz, Ooi
+   và Pedersen 2012). Dữ liệu 2024 nghiêng về hướng này (BUY dương, SELL âm), nhưng phải kiểm lại trên 2023.
+3. **Lọc chế độ thị trường** (Efficiency Ratio/ADX): RSI đảo chiều + DCA chỉ sống được khi thị trường
+   đi ngang. Gate 8 đã có code nhưng đang tắt và chưa được đo.
+4. **Sizing theo biến động** (lot theo ATR, rủi ro cố định %): hiện bị chặn bởi lot sàn 0.03 → run #6b.
+5. **Lịch tin lịch sử** cho Gate 9: MT4 không có calendar API, nên hiện không backtest được.
+6. **Đa dạng hóa** nhiều symbol/TF (IR ≈ IC × √N) sau khi tín hiệu đã chứng minh được edge.
+
+Pipeline XGBoost/meta-labeling chỉ có ý nghĩa khi có hàng nghìn tín hiệu, tức là sau bước 1.
+
+### 12.3 Research log + `tools/signal_edge.py`
+
+**Vì sao cần**: logger CSV của indicator tắt trong tester (`SignalLogger.mqh:334`) để giữ tester nhanh
+và không ghi đè dữ liệu live. Nên backtest không để lại bản ghi tín hiệu nào, chỉ có các lệnh mà DCA
+tạo ra từ chúng. Tín hiệu bị gate chặn thì mất hẳn.
+
+**EA** (build `2026-09-30.2-research`, mq4 + mq5): input `InpResearchLog` (mặc định **tắt**) ghi mỗi
+nến đã đóng một dòng vào `<Common>\Files\QuantEdge_Research\bars_<SYMBOL>_<TF>_<ngày bắt đầu>.csv`:
+
+- OHLC của nến, bid/ask ở tick đầu nến kế tiếp (giá EA có thể khớp lệnh).
+- Case BUY/SELL, cùng ENTRY/SL/TP1–3, REC_LEVEL, CONFIDENCE, EV, RISK, PROB_TP1/SL/N trên nến có tín hiệu.
+  Đây đúng là các giá trị EA đọc lúc ra quyết định, nên **không dùng dữ liệu tương lai**. File có đủ
+  mọi tín hiệu, kể cả tín hiệu bị gate chặn.
+- Không đổi hành vi giao dịch. Tắt trong optimization. Không cần sửa indicator.
+
+**Tool**: so mỗi tín hiệu với **vào lệnh ngẫu nhiên cùng hướng, cùng giờ (±1h), cách 2–12 ngày quanh
+tín hiệu** (pool đối xứng triệt tiêu xu hướng cục bộ; bỏ 2 ngày gần nhất để không trùng đường giá
+của chính tín hiệu). Hai phép đo:
+
+1. Lợi nhuận sau 15m / 1h / 4h / 1d, tính theo ATR, đã trừ spread.
+2. Kết quả chạm SL/TP1 của chính tín hiệu, tính theo R, và đem so với vào lệnh ngẫu nhiên có cùng
+   khoảng SL/TP.
+
+Sau đó tool kiểm tra PROB_TP1/EV có xếp hạng tín hiệu tốt hơn chính hình học SL/TP không (Brier, AUC),
+tách theo case / rec level / giờ / năm, và báo ngưỡng Bonferroni cho số phép thử. Sai số được cluster
+theo tuần.
+
+`python tools/signal_edge.py --selftest` kiểm chứng chính phương pháp trên dữ liệu giả:
+
+- Trend +46–65%, **không** có edge: BUY lời thô +1.3–2.1 ATR/ngày, nhưng tool báo excess |t| < 1.6 → không báo nhầm.
+- Edge cài sẵn: t 3.3–5.3 ở cả hai phép đo, AUC 0.56–0.60, còn hình học SL/TP ≈ 0.5 → phát hiện được.
+
+**Cách chạy** (khuyến nghị MT5, "Every tick based on real ticks" để có spread thay đổi thật; MT4 thì
+dùng spread 400 cố định và thêm `--spread 0.40`):
+
+1. Compile EA. Bật `InpResearchLog = true`, giữ nguyên các input khác. Chạy dài nhất có thể:
+   **2015 → 2025**, XAUUSD M15.
+2. Log EA in đường dẫn file ngay khi bắt đầu chạy.
+3. `python tools/signal_edge.py "<đường dẫn>\bars_XAUUSD_M15_2015xxxx.csv" --dump logs/signals.csv`
+
+**Đọc kết quả**: cần excess dương **ở hầu hết các năm** và t > 1.96 trên toàn mẫu. Một ô trong bảng
+breakdown chỉ đáng tin nếu vượt ngưỡng Bonferroni mà tool in ra. Nếu tín hiệu không vượt được vào lệnh
+ngẫu nhiên, mọi tối ưu EA phía sau (DCA, cap, gate) chỉ là sắp xếp lại cùng một kỳ vọng.
