@@ -41,6 +41,12 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
   1 trong số đó là basket thắng bị cắt nhầm; tổng +$69. Cap R chỉ chạy từ tháng 10 vì ở balance < ~$2k thì 15%
   chặt hơn 12R → **DD sâu nhất tháng 4 (25–29%) không đổi**. Còn trượt z (1.36), DD %, rủi ro @ $1k.
 - **Đề xuất run #6** = run #5 + `InpMinLotSize = 0.01` (chỉ đổi input): cap R chạy cả năm, 1R ≈ 1% vốn.
+- **Run #6 thực tế** (`StrategyTester6.htm`) **không khớp đề xuất**: spread 50 ($0.05), lot 0.03,
+  `InpMinRecLevel=6`. Đọc như run #3 + 12R (Gate 1 ANY không đổi gì trong tester, 370/372 basket khớp) — §11.8:
+  PF 1.68 → **1.91**, H2 1.07 → **1.25**, DD 25.6% → **16.1%**, RF 1.93 → **3.88**, **z 2.78**, tất cả **ở spread $0.05**.
+  Phát hiện mới: 12R **cắt nhầm 3 SELL có SL $1.4–3.5** (12R ≈ 1 bậc DCA $15, nên bị cắt ngay khi DCA-1 vào).
+  Ở $0.40 thì Gate 5 chặn phần lớn loại tín hiệu này. Ứng viên code: sàn giá cho cap R.
+- **Chờ user**: run #6b = run #5 + lot 0.01, spread 400, MinRecLevel 2.
 
 ### Backtest #3 — default mới trên build ptscale (2026-09-29, không đổi code)
 

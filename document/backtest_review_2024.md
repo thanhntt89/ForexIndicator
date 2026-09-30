@@ -1071,3 +1071,89 @@ an toàn:
 - Đây là thay đổi một input, không cần code. Nó đổi đúng một hành vi theo giá: **cap R chạy cả năm
   thay vì chỉ từ tháng 10**. Những basket tháng 3–6 trước đây bị cắt ở 15% sẽ được gồng tới 12R, nên
   có thể hồi về BE hoặc lỗ sâu hơn trong đơn vị R. Run #6 đo đúng điều này.
+
+### 11.8 Run #6 — không phải run đã đề xuất (2026-09-30)
+
+> **Dữ liệu**: `logs/StrategyTester6.htm`. So với §11.7 đề xuất (run #5 + lot 0.01), run này khác
+> ở **3 chỗ**:
+>
+> | Input | Đề xuất | Run #6 |
+> |---|---|---|
+> | Spread | 400 ($0.40) | **Current (50) = $0.05** |
+> | `InpMinLotSize` | 0.01 | **0.03** (487/487 leg ở 0.03) |
+> | `InpMinRecLevel` | 2 (CAUTION) | **6 (`REC_ANY`)** |
+>
+> Nên run #6 **không** trả lời câu hỏi lot 0.01. Diff Parameters với run #3 thì chỉ khác
+> `InpMinRecLevel` (2 → 6) và `InpBasketMaxLossR` (tắt → 12), cùng spread $0.05. Mình đọc run #6 như
+> một so sánh với run #3.
+
+#### `InpMinRecLevel = 6` gần như không đổi gì trong tester
+
+370/372 basket của run #3 xuất hiện lại ở run #6 với cùng thời điểm mở và cùng hướng. 13 basket mới
+đều mở trong lúc run #3 **đang bận** một basket khác (Gate 4). Không có basket nào đến từ tín hiệu mà
+Gate 1 trước đây chặn. Điều này khớp với `[RECLEVEL-COLDSTART-FIX]`: trong tester không có dữ liệu
+outcome, nên floor của Gate 1 đã tự hạ xuống WAIT. Chuyển sang `ANY` chỉ còn mở thêm AVOID/
+COUNTER_TREND, và loại tín hiệu này không xuất hiện ở đây.
+
+→ Khác biệt giữa run #3 và run #6 **gần như hoàn toàn là tác động của cap 12R** (2 basket khác lệch
+$0.03–0.27 do giá fill thay đổi theo tick).
+
+#### Kết quả, so với run #3 (cùng spread $0.05)
+
+| Chỉ số | Run #3 | **Run #6** |
+|---|:---:|:---:|
+| Baskets | 372 | 383 |
+| Net | +$1,781 | **+$2,145** |
+| PF (basket) | 1.68 | **1.91** |
+| H1 PF / H2 PF | 3.86 / 1.07 | **4.03 / 1.25** |
+| MaxDD closed-balance | 25.6% | **16.1%** |
+| MT4 Maximal / Relative DD | $995 (27.6%) / 27.6% | **$624 (18.2%) / 18.4%** |
+| Recovery factor (basket) | 1.93 | **3.88** |
+| Basket tệ nhất | −$542 | −$463 |
+| z / t | 1.75 / 1.61 | **2.78 / 2.37** |
+
+#### 9 basket đổi kết quả do cap 12R
+
+| Basket | Run #3 | Run #6 | Chênh |
+|---|---|---|---:|
+| 2024-10-31 BUY | 5 leg, −$541.50 | 3 leg, −$223.68 | **+$317.82** |
+| 2024-12-12 BUY | 5 leg, −$498.42 | 4 leg, −$329.42 | **+$169.00** |
+| 2024-05-22 BUY | 4 leg, −$302.73 | 3 leg, −$242.67 | +$60.06 |
+| 2024-11-08 BUY | 5 leg, −$473.64 | 5 leg, −$463.14 | +$10.50 |
+| 2024-07-03 SELL | 3 leg, **+$6.03** | 2 leg, **−$49.41** | −$55.44 |
+| 2024-08-23 SELL | 3 leg, **+$4.68** | 2 leg, **−$104.82** | −$109.50 |
+| 2024-10-01 SELL | 3 leg, **+$4.56** | 2 leg, **−$126.42** | −$130.98 |
+| 2 basket lệch fill | | | +$0.30 |
+| 13 mới − 2 mất | | | +$102.01 |
+| **Tổng** | | | **+$363.85** |
+
+Phát hiện mới: **cap R cắt nhầm 3 basket SELL có SL rất hẹp.** 1R ngầm định của chúng chỉ $4–11,
+tức SL $1.4–3.5 và TP1 $2.8–5.3. 12R của lệnh SL $1.4 là giá đi ngược khoảng $16, **ngang một bậc DCA
+$15**. Nên basket bị cắt ngay khi leg DCA-1 vừa vào, trong khi ở run #3 chúng gồng 3 leg và hồi về
+BE. Cả 3 basket đều là SELL từ tín hiệu TP1 dưới $5.3.
+
+Ở spread $0.40 (run #5), Gate 5 tương đối (`InpMaxSpreadPctOfTP1 = 8`) chặn TP1 dưới $5, nên 2/3 tín hiệu này
+không bao giờ được vào lệnh. Đây là lý do run #5 chỉ có 1 lần cắt nhầm: cap R và Gate 5 đang ngầm
+bảo vệ nhau.
+
+**Rủi ro cấu trúc**: cap tính theo R không có sàn. Khi SL cấu trúc hẹp hơn khoảng spacing DCA / 12,
+cap R sẽ cắt **trước hoặc ngay khi** DCA kịp vào. Cách sửa (chưa làm):
+`cap = max(N × R, sàn theo giá)`, ví dụ sàn = 2 bậc DCA. Làm vậy thì những lệnh SL hẹp được gồng như
+các lệnh khác.
+
+#### Đọc run #6
+
+- **Cap 12R giúp rõ ràng ở spread rẻ**: +$364, recovery factor 1.93 → 3.88, H2 PF 1.07 → 1.25, và
+  lần đầu tiên **z = 2.78 > 1.96**.
+- **Nhưng đây là spread $0.05.** Run #4 cho thấy chuyển sang $0.40 thì PF 1.68 → 1.35 và H1 sụp
+  3.86 → 1.48. Áp một cách thô chi phí +$0.35/oz lên run #6 (giữ nguyên chuỗi lệnh, cách mà §11.6
+  đã cho thấy là không đáng tin) ra PF ~1.68, H2 ~1.11. Không dùng con số này để kết luận. Nó chỉ nhắc
+  rằng z = 2.78 ở $0.05 **không** chuyển thẳng sang $0.40.
+- Cap 15% chỉ còn chạy **1 lần** (2024-04-22, balance $1,784). 9/10 lần cắt còn lại là cap R.
+
+#### Việc tiếp theo
+
+1. **Run #6 đúng như dự định** (gọi là run #6b): run #5 + `InpMinLotSize = 0.01`, spread **400**,
+   `InpMinRecLevel = 2`. Khuyến nghị: load từ report #5 để tránh lệch input.
+2. Cân nhắc code **sàn giá cho cap R** (ở trên). Chỉ quan trọng khi Gate 5 không chặn tín hiệu TP1
+   hẹp, tức là khi spread rẻ, hoặc trên live khi spread thấp.
