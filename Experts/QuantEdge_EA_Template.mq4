@@ -21,7 +21,7 @@
 // FIRST line printed on chart load — repeatedly "the fix isn't showing up"
 // reports turned out to be testing against a not-yet-recompiled binary, with
 // no way to tell from the log alone. This settles it at a glance.
-#define EA_BUILD_TAG "2026-09-29.2-rcap12"
+#define EA_BUILD_TAG "2026-09-30.1-gateorder"
 
 // [ORPHAN-CLEANUP] Indicator-owned object prefixes (mirrors Config.mqh —
 // the EA is a separate compiled program with no shared include, so these
@@ -113,68 +113,79 @@ input int    InpSlippage         = 10;                   // Max slippage (2-digi
 // InpEAMode=false to see its arrows.
 
 //+------------------------------------------------------------------+
-//| INPUT GROUP: Decision Gates                                       |
+//| INPUT GROUP: Decision Gates, in evaluation order G1 -> G12        |
+//| Numbers match the "G1:PASS ... G12:PASS" line in the Experts log; |
+//| every gate must pass before an order is placed.                   |
 //+------------------------------------------------------------------+
-input string inp_grp_gates       = "========== Decision Gates =========="; // ---
-input bool   InpUseGate1RecLevel = true;                // Enable Gate 1: Recommendation Level check
-input ENUM_REC_LEVEL InpMinRecLevel = REC_CAUTION_ENTRY;  // Min recommendation level (worst allowed)
-input bool   InpAllowCaution     = true;                // Allow CAUTION_ENTRY level trades
-input int    InpRecLevelMinSamples = 20;                // Gate 1: resolved samples needed before the level floor is trusted
-input bool   InpUseGate2Confidence = true;              // Enable Gate 2: Confidence check
-input int    InpMinConfidence    = 50;                  // Min confidence score (0-100)
-input bool   InpUseGate3Staleness  = true;              // Enable Gate 3: Staleness check
-input double InpMaxSurvivalFloor = 0.15;                // Signal expired when survival < this
-input bool   InpUseGate5Spread     = true;              // Enable Gate 5: Spread check (absolute and/or % of TP1)
-input int    InpMaxSpreadPoints  = 40;                  // Max spread (2-digit points, auto x10 on 3/5-digit; 0=no absolute check)
-input double InpMaxSpreadPctOfTP1 = 8.0;                // Max spread as % of Entry->TP1 distance (0=no check)
-input bool   InpUseGate11EV      = true;                // Enable Gate 11: Expected Value check
-input double InpMinEV            = 0.0;                 // Min EV in R-multiples (signal rejected below this)
-input bool   InpUseGate12FillRR  = true;                // Enable Gate 12: remaining R:R at fill price
-input double InpMinFillRR        = 0.5;                 // Min (TP1-market)/(market-SL) required to fill
+input string inp_grp_g1          = "========== Gate 1: Recommendation Level =========="; // ---
+input bool   InpUseGate1RecLevel = true;                // [G1] Enable recommendation-level check
+input ENUM_REC_LEVEL InpMinRecLevel = REC_CAUTION_ENTRY;  // [G1] Min recommendation level (worst allowed)
+input bool   InpAllowCaution     = true;                // [G1] Allow CAUTION_ENTRY level trades
+input int    InpRecLevelMinSamples = 20;                // [G1] Resolved samples needed before the level floor is trusted
+
+input string inp_grp_g2          = "========== Gate 2: Confidence =========="; // ---
+input bool   InpUseGate2Confidence = true;              // [G2] Enable confidence check
+input int    InpMinConfidence    = 50;                  // [G2] Min confidence score (0-100)
+
+input string inp_grp_g3          = "========== Gate 3: Staleness =========="; // ---
+input bool   InpUseGate3Staleness  = true;              // [G3] Enable staleness check
+input double InpMaxSurvivalFloor = 0.15;                // [G3] Signal expired when survival < this
+
+input string inp_grp_g4          = "========== Gate 4: No Duplicate (always on) =========="; // ---
+
+input string inp_grp_g5          = "========== Gate 5: Spread =========="; // ---
+input bool   InpUseGate5Spread     = true;              // [G5] Enable spread check (absolute and/or % of TP1)
+input int    InpMaxSpreadPoints  = 40;                  // [G5] Max spread (2-digit points, auto x10 on 3/5-digit; 0=no absolute check)
+input double InpMaxSpreadPctOfTP1 = 8.0;                // [G5] Max spread as % of Entry->TP1 distance (0=no check)
+
+input string inp_grp_g6          = "========== Gate 6: Session Filter =========="; // ---
+input bool   InpUseSessionFilter = true;                // [G6] Enable session filter
+input int    InpTesterGMTOffset  = 0;                   // [G6] [Backtest only] Server-time to GMT offset in hours
+input int    InpSessionStartHour = 7;                   // [G6] Session start hour (GMT)
+input int    InpSessionEndHour   = 20;                  // [G6] Session end hour (GMT)
+
+input string inp_grp_g7          = "========== Gate 7: Daily/Weekly/Monthly Loss =========="; // ---
+input bool   InpUseDailyLossCap  = false;               // [G7] Enable daily loss cap
+input int    InpMaxDailyLosses   = 0;                   // [G7] Max consecutive losses per day (0=no limit)
+input double InpMaxDailyLossPct  = 0.0;                 // [G7] Max daily loss % of balance (0=no limit)
+input bool   InpUseWeeklyDDStop  = false;               // [G7b] Enable weekly DD stop
+input double InpMaxWeeklyDDPct   = 10.0;                // [G7b] Max weekly loss % of balance (0=no limit)
+input bool   InpUseMonthlyDDStop = false;               // [G7c] Enable monthly DD stop
+input double InpMaxMonthlyDDPct  = 15.0;                // [G7c] Max monthly loss % of balance (0=no limit)
+
+// Gates 8 and 9 mirror the indicator's own flags: the indicator publishes
+// the gate state via GlobalVariable and the EA only reads it. Default OFF.
+// MT4 has no calendar API -- the indicator always publishes 0 (clear) for
+// QE_EconBlackout_<symbol>, so Gate 9 always passes on MT4.
+input string inp_grp_g8          = "========== Gate 8: ADX Trend Strength =========="; // ---
+input bool   InpUseADXGate       = false;               // [G8] Enable ADX trend-strength gate (reads indicator GV)
+
+input string inp_grp_g9          = "========== Gate 9: Economic Calendar =========="; // ---
+input bool   InpUseEconCalGate   = false;               // [G9] Enable economic calendar blackout gate (reads indicator GV)
+
+input string inp_grp_g10         = "========== Gate 10: Price Location =========="; // ---
+input bool   InpUseGate10PriceLoc  = true;              // [G10] Enable price-location filter (master switch)
+input bool   InpUsePriceLocSLSide  = true;              // [G10] Case 1: allow entry when price between SL-Entry (probSL<max, within max%)
+input bool   InpUsePriceLocTPSide  = true;              // [G10] Case 2: allow entry when price between Entry-TP1 (probSL<max, within max%)
+input double InpPriceLocMaxPct     = 25.0;              // [G10] Max % distance from reference edge (0-100)
+input double InpPriceLocMaxProbSL  = 50.0;              // [G10] Max prob SL % allowed (0-100)
+
+input string inp_grp_g11         = "========== Gate 11: Expected Value =========="; // ---
+input bool   InpUseGate11EV      = true;                // [G11] Enable expected-value check
+input double InpMinEV            = 0.0;                 // [G11] Min EV in R-multiples (signal rejected below this)
+
+input string inp_grp_g12         = "========== Gate 12: Fill R:R =========="; // ---
+input bool   InpUseGate12FillRR  = true;                // [G12] Enable remaining R:R check at the fill price
+input double InpMinFillRR        = 0.5;                 // [G12] Min (TP1-market)/(market-SL) required to fill
 
 //+------------------------------------------------------------------+
-//| INPUT GROUP: Session Filter                                        |
-//+------------------------------------------------------------------+
-input string inp_grp_session     = "========== Session Filter =========="; // ---
-input bool   InpUseSessionFilter = true;                // Enable session filter (Gate 6)
-input int    InpTesterGMTOffset  = 0;                   // [Backtest only] Server-time to GMT offset in hours
-input int    InpSessionStartHour = 7;                   // Session start hour (GMT)
-input int    InpSessionEndHour   = 20;                  // Session end hour (GMT)
-
-//+------------------------------------------------------------------+
-//| INPUT GROUP: Daily Loss Cap                                        |
-//+------------------------------------------------------------------+
-input string inp_grp_daily       = "========== Daily / Weekly / Monthly Loss Cap =========="; // ---
-input bool   InpUseDailyLossCap  = false;               // Enable daily loss cap (Gate 7)
-input int    InpMaxDailyLosses   = 0;                   // Max consecutive losses per day (0=no limit)
-input double InpMaxDailyLossPct  = 0.0;                 // Max daily loss % of balance (0=no limit)
-input bool   InpUseWeeklyDDStop  = false;               // Enable weekly DD stop (Gate 7b)
-input double InpMaxWeeklyDDPct   = 10.0;                // Max weekly loss % of balance (0=no limit)
-input bool   InpUseMonthlyDDStop = false;               // Enable monthly DD stop (Gate 7c)
-input double InpMaxMonthlyDDPct  = 15.0;                // Max monthly loss % of balance (0=no limit)
-
-//+------------------------------------------------------------------+
-//| INPUT GROUP: Advanced Gates (ADX / Economic Calendar)              |
-//| Mirror the indicator's own flags — the indicator publishes gate    |
-//| state via GlobalVariable; the EA just reads it. Default OFF.       |
-//| Note: MT4 has no calendar API — indicator always publishes 0       |
-//| (clear) for QE_EconBlackout_<symbol>, so Gate 9 always passes.     |
+//| INPUT GROUP: Signal Retry -- how long a detected signal keeps     |
+//| being re-run through the gates above before it is dropped.        |
 //+------------------------------------------------------------------+
 input string inp_grp_retry        = "========== Signal Retry =========="; // ---
 input bool   InpUseSignalRetry    = true;               // Retry cached signal every tick while still valid
 input int    InpRetryMaxBars      = 2;                  // Max bars to keep retrying after signal appeared
 input bool   InpInvalidateOnTP1   = true;               // Drop the cached signal once price has reached TP1
-
-input string inp_grp_priceloc     = "========== Price Location Gate (10) =========="; // ---
-input bool   InpUseGate10PriceLoc  = true;              // Enable Gate 10: Price Location filter (master switch)
-input bool   InpUsePriceLocSLSide  = true;              // Case 1: Allow entry when price between SL-Entry (probSL<max, within max%)
-input bool   InpUsePriceLocTPSide  = true;              // Case 2: Allow entry when price between Entry-TP1 (probSL<max, within max%)
-input double InpPriceLocMaxPct     = 25.0;              // Max % distance from reference edge (0-100)
-input double InpPriceLocMaxProbSL  = 50.0;              // Max prob SL % allowed (0-100)
-
-input string inp_grp_advgates    = "========== Advanced Gates =========="; // ---
-input bool   InpUseADXGate       = false;               // Enable ADX trend-strength gate (Gate 8)
-input bool   InpUseEconCalGate   = false;               // Enable economic calendar blackout gate (Gate 9)
 
 //+------------------------------------------------------------------+
 //| TP Mode selector                                                   |

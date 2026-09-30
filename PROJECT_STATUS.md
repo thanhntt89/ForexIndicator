@@ -24,6 +24,18 @@ Dự án đã được cấu trúc lại hoàn chỉnh để hỗ trợ song son
 
 ## 3. Changelog Các Phiên Gần Nhất
 
+### EA input sắp theo thứ tự gate (2026-09-30)
+
+**Build**: `2026-09-30.1-gateorder` (mq4 + mq5). Chỉ đổi **vị trí và nhóm** của input, không đổi tên,
+kiểu hay giá trị mặc định (đã kiểm tra: 79/79 input giống HEAD, hai file cùng thứ tự). File `.set`
+và cấu hình tester cũ vẫn load được vì MT4/MT5 khớp input theo tên.
+
+- Mỗi gate có một nhóm riêng `inp_grp_g1` … `inp_grp_g12`, xếp đúng thứ tự `TryExecuteSignal()`
+  đánh giá, và trùng với dòng log `G1:PASS … G12:PASS`. Gate 4 không có input, chỉ để nhãn.
+- Các input Session (G6), Loss Cap (G7), ADX (G8), Econ (G9) và Price Location (G10) trước đây nằm
+  rải rác ở nhóm khác, giờ về đúng chỗ. Comment từng input có tiền tố `[Gn]`.
+- Signal Retry tách thành nhóm riêng ngay sau G12. Các nhóm từ Trade Management trở xuống giữ nguyên.
+
 ### V12.5 — Basket cap theo R (2026-09-29)
 
 **Build**: `2026-09-29.2-rcap12` (mq4 + mq5). Lý do: `document/backtest_review_2024.md` §11.6 (G4).
